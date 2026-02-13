@@ -1,0 +1,4 @@
+cat > requirements.txt <<'EOF'
+PyYAML
+pandas
+EOF
