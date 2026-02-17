@@ -74,6 +74,8 @@ setup(
             'generate_sdf = lrs_halmstad.generate_sdf:main',            
             'command = lrs_halmstad.command:main',            
              'contract_check = lrs_halmstad.contract_check:main',
+             'follow_uav = lrs_halmstad.follow_uav:main',
+
               # optional later:
               # 'metrics_node = lrs_halmstad.metrics_node:main',
         ],

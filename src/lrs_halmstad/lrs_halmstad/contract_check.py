@@ -15,8 +15,7 @@ REQUIRED_SERVICES = [
 REQUIRED_TOPICS = [
     "/clock",
     "/a201_0000/platform/odom",
-    "/a201_0000/platform/odom/filtered",
-    "/a201_0000/platform/cmd_vel",
+    "/a201_0000/cmd_vel",
     "/a201_0000/tf",
     "/a201_0000/tf_static",
     # event topic is added dynamically in check()

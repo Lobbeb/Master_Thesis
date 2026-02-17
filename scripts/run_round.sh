@@ -60,9 +60,11 @@ TOPICS=(
   "/a201_0000/platform/odom"
   "/a201_0000/platform/odom/filtered"
   "/a201_0000/platform/cmd_vel"
+  "/a201_0000/cmd_vel"
   "/a201_0000/tf"
   "/a201_0000/tf_static"
   "$EVENT_TOPIC"
+  "/${UAV}/pose_cmd"
 )
 
 # If we publish markers to /coord/events_raw, also record the impaired output /coord/events
@@ -103,15 +105,39 @@ sleep 1.0 # Give rosbag a moment to start and create the bag directory
 # Event markers
 pub_evt "ROUND_START"
 
-# UAV grid survey
+# UAV phase (Stage 1 default: grid sweep). Stage 2: follow+leash if CONDITION=follow.
 pub_evt "UAV_PHASE_START"
 
-# Export for embedded Python blocks
-export UAV="$UAV"
-export WORLD="$WORLD"
-export RUN_DIR="$RUN_DIR"
+if [ "$CONDITION" = "follow" ]; then
+  echo "[run_round] CONDITION=follow -> starting follow_uav (background) during UGV phase"
+  # We start the follower now but keep it running through the UGV phase.
+  ros2 run lrs_halmstad follow_uav --ros-args \
+    -p use_sim_time:=true \
+    -p world:="$WORLD" \
+    -p uav_name:="$UAV" \
+    -p ugv_odom_topic:=/a201_0000/platform/odom \
+    -p tick_hz:=5.0 \
+    -p d_target:=5.0 \
+    -p d_max:=15.0 \
+    -p z_alt:=10.0 \
+    -p pose_timeout_s:=0.75 \
+    -p min_cmd_period_s:=0.10 \
+    -p smooth_alpha:=1.0 \
+    -p event_topic:="$EVENT_TOPIC" \
+    > "$RUN_DIR/follow_uav.log" 2>&1 &
+  FOLLOW_PID=$!
 
-python3 - << 'PY'
+  # End UAV phase marker here; follower continues until we stop it after UGV phase.
+  pub_evt "UAV_PHASE_END"
+
+else
+  echo "[run_round] CONDITION=$CONDITION -> running Stage 1 UAV sweep"
+  # Export for embedded Python blocks
+  export UAV="$UAV"
+  export WORLD="$WORLD"
+  export RUN_DIR="$RUN_DIR"
+
+  python3 - << 'PY'
 import os, yaml, subprocess
 from pathlib import Path
 
@@ -148,9 +174,9 @@ rc = subprocess.call(cmd)
 raise SystemExit(rc)
 PY
 
+  pub_evt "UAV_PHASE_END"
+fi
 
-
-pub_evt "UAV_PHASE_END"
 
 # UGV movement
 pub_evt "UGV_PHASE_START"
@@ -170,7 +196,7 @@ speed_turn = float(defaults.get("ugv_turn_speed", 0.5))
 t_turn = float(defaults.get("ugv_turn_time_s", 3.14))
 cycles = int(defaults.get("ugv_cycles", 10))
 
-topic = "/a201_0000/platform/cmd_vel"
+topic = "/a201_0000/cmd_vel"
 msg_fwd = (
     "{twist: {linear: {x: " + str(speed_fwd) + ", y: 0.0, z: 0.0}, "
     "angular: {x: 0.0, y: 0.0, z: 0.0}}}"
@@ -205,7 +231,11 @@ PY
 
 pub_evt "UGV_PHASE_END"
 pub_evt "ROUND_END"
-
+if [ "${FOLLOW_PID:-}" != "" ]; then
+  echo "[run_round] Stopping follow_uav (pid=$FOLLOW_PID)"
+  kill "$FOLLOW_PID" 2>/dev/null || true
+  wait "$FOLLOW_PID" 2>/dev/null || true
+fi
 # Stop bag (cleanup trap also covers this, but do it explicitly)
 kill "$BAG_PID" 2>/dev/null || true
 wait "$BAG_PID" 2>/dev/null || true
