@@ -12,7 +12,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 
 
-world_arg = DeclareLaunchArgument('world', default_value='warehouse',
+world_arg = DeclareLaunchArgument('world', default_value='orchard',
                       choices=[
                           'construction',
                           'office',
