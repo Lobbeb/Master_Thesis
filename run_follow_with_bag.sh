@@ -127,6 +127,16 @@ case "$UAV_BACKEND" in
     ;;
 esac
 
+EFFECTIVE_LEADER_PERCEPTION_ENABLE="$(get_launch_assignment_value "leader_perception_enable" "$LEADER_PERCEPTION_ENABLE")"
+EFFECTIVE_START_LEADER_ESTIMATOR="$(get_launch_assignment_value "start_leader_estimator" "$START_LEADER_ESTIMATOR")"
+EFFECTIVE_SHUTDOWN_WHEN_UGV_DONE="$(get_launch_assignment_value "shutdown_when_ugv_done" "$SHUTDOWN_WHEN_UGV_DONE")"
+EFFECTIVE_YOLO_WEIGHTS="$(get_launch_assignment_value "yolo_weights" "$YOLO_WEIGHTS")"
+EFFECTIVE_YOLO_DEVICE="$(get_launch_assignment_value "yolo_device" "$YOLO_DEVICE")"
+EFFECTIVE_CONTROLLER_CMD_TOPIC="$(get_launch_assignment_value "controller_cmd_topic" "/${UAV_NAME}/psdk_ros2/flight_control_setpoint_ENUposition_yaw")"
+EFFECTIVE_CONTROLLER_PAN_TOPIC="$(get_launch_assignment_value "controller_pan_topic" "/${UAV_NAME}/update_pan")"
+EFFECTIVE_CONTROLLER_TILT_TOPIC="$(get_launch_assignment_value "controller_tilt_topic" "/${UAV_NAME}/update_tilt")"
+INTENT_TOPIC="/${UAV_NAME}/pose_cmd"
+
 acquire_mode_lock() {
   if ! is_truthy "$MODE_LOCK_ENABLE"; then
     return
@@ -340,11 +350,25 @@ unset _bag_topics_unique
   echo "ugv_namespace: \"$UGV_NAMESPACE\""
   echo "ugv_cmd_topic: \"$UGV_CMD_TOPIC\""
   echo "ugv_odom_topic: \"$UGV_ODOM_TOPIC\""
-  echo "leader_perception_enable: \"$LEADER_PERCEPTION_ENABLE\""
-  echo "start_leader_estimator: \"$START_LEADER_ESTIMATOR\""
-  echo "shutdown_when_ugv_done: \"$SHUTDOWN_WHEN_UGV_DONE\""
-  echo "yolo_weights: \"${YOLO_WEIGHTS}\""
-  echo "yolo_device: \"$YOLO_DEVICE\""
+  echo "leader_perception_enable: \"$EFFECTIVE_LEADER_PERCEPTION_ENABLE\""
+  echo "start_leader_estimator: \"$EFFECTIVE_START_LEADER_ESTIMATOR\""
+  echo "shutdown_when_ugv_done: \"$EFFECTIVE_SHUTDOWN_WHEN_UGV_DONE\""
+  echo "yolo_weights: \"${EFFECTIVE_YOLO_WEIGHTS}\""
+  echo "yolo_device: \"$EFFECTIVE_YOLO_DEVICE\""
+  echo "control_chain:"
+  echo "  profile: \"planner_to_backend_v1\""
+  echo "  manual_uav_cmd_allowed: \"false\""
+  echo "  planner_node: \"follow_uav\""
+  echo "  intent_topic: \"$INTENT_TOPIC\""
+  echo "  leader_input_type: \"$LEADER_MODE\""
+  echo "  backend: \"$UAV_BACKEND\""
+  if [[ "$UAV_BACKEND" == "controller" ]]; then
+    echo "  adapter_cmd_topic: \"$EFFECTIVE_CONTROLLER_CMD_TOPIC\""
+    echo "  adapter_pan_topic: \"$EFFECTIVE_CONTROLLER_PAN_TOPIC\""
+    echo "  adapter_tilt_topic: \"$EFFECTIVE_CONTROLLER_TILT_TOPIC\""
+  else
+    echo "  adapter_service: \"/world/$(gazebo_world_name "$WORLD")/set_pose\""
+  fi
   echo "bag_storage: \"$BAG_STORAGE\""
   echo "bag_output_dir: \"$BAG_DIR\""
   echo "preflight:"

@@ -181,6 +181,18 @@ def generate_launch_description():
         ],
     )
 
+    control_chain_log = LogInfo(
+        msg=[
+            '[run_round_follow_motion] Control chain: leader_mode=',
+            LaunchConfiguration('leader_mode'),
+            ' -> follow_uav intent=/',
+            LaunchConfiguration('uav_name'),
+            '/pose_cmd -> backend=',
+            LaunchConfiguration('uav_backend'),
+            ' (no manual UAV command path in this launch)',
+        ],
+    )
+
     shutdown_on_ugv_done = RegisterEventHandler(
         OnProcessExit(
             target_action=ugv_node,
@@ -228,6 +240,7 @@ def generate_launch_description():
         event_topic_arg,
         ugv_start_delay_arg,
         shutdown_when_ugv_done_arg,
+        control_chain_log,
         estimator_node,
         follow_node,
         simulator_backend_node,

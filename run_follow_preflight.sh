@@ -146,6 +146,7 @@ PREFLIGHT_SET_POSE_TIMEOUT_S="${PREFLIGHT_SET_POSE_TIMEOUT_S:-$PREFLIGHT_TIMEOUT
 PREFLIGHT_UAV_TOPICS_TIMEOUT_S="${PREFLIGHT_UAV_TOPICS_TIMEOUT_S:-$PREFLIGHT_TIMEOUT_S}"
 PREFLIGHT_REQUIRE_UAV_CAMERA_TOPICS="${PREFLIGHT_REQUIRE_UAV_CAMERA_TOPICS:-true}"
 PREFLIGHT_FORBID_CONTROLLER_TOPIC_PUBLISHERS="${PREFLIGHT_FORBID_CONTROLLER_TOPIC_PUBLISHERS:-true}"
+PREFLIGHT_FORBID_INTENT_TOPIC_PUBLISHERS="${PREFLIGHT_FORBID_INTENT_TOPIC_PUBLISHERS:-true}"
 STATE_DIR="${STATE_DIR:-/tmp/halmstad_ws}"
 MODE_FILE="$STATE_DIR/run_mode.lock"
 
@@ -236,11 +237,33 @@ if is_truthy "$PREFLIGHT_REQUIRE_UAV_CAMERA_TOPICS"; then
 fi
 
 if [[ "$UAV_BACKEND" == "controller" ]] && is_truthy "$PREFLIGHT_FORBID_CONTROLLER_TOPIC_PUBLISHERS"; then
-  CTRL_TOPIC="/${UAV_NAME}/psdk_ros2/flight_control_setpoint_ENUposition_yaw"
-  if has_publishers "$CTRL_TOPIC"; then
-    echo "[run_follow_preflight] controller backend conflict: topic already has publishers: $CTRL_TOPIC"
+  CTRL_TOPICS=(
+    "/${UAV_NAME}/psdk_ros2/flight_control_setpoint_ENUposition_yaw"
+    "/${UAV_NAME}/update_pan"
+    "/${UAV_NAME}/update_tilt"
+  )
+  CTRL_CONFLICTS=()
+  for _topic in "${CTRL_TOPICS[@]}"; do
+    if has_publishers "$_topic"; then
+      CTRL_CONFLICTS+=("$_topic")
+    fi
+  done
+  if [[ "${#CTRL_CONFLICTS[@]}" -gt 0 ]]; then
+    echo "[run_follow_preflight] controller backend conflict: command topics already have publishers:"
+    for _topic in "${CTRL_CONFLICTS[@]}"; do
+      echo "  - $_topic"
+    done
     echo "[run_follow_preflight] stop any external UAV controller before running follow controller backend"
     exit 12
+  fi
+fi
+
+if is_truthy "$PREFLIGHT_FORBID_INTENT_TOPIC_PUBLISHERS"; then
+  INTENT_TOPIC="/${UAV_NAME}/pose_cmd"
+  if has_publishers "$INTENT_TOPIC"; then
+    echo "[run_follow_preflight] intent conflict: topic already has publishers: $INTENT_TOPIC"
+    echo "[run_follow_preflight] stop any previous follow/manual intent publisher before starting this run"
+    exit 13
   fi
 fi
 

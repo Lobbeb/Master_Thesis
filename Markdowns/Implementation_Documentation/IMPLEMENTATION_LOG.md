@@ -1,5 +1,159 @@
 # IMPLEMENTATION LOG
 
+## 2026-03-04 - Follow+leash stabilization micro-tuning (5 params)
+
+### What changed
+Applied a small, conservative stability tuning pass to reduce zigzag/overshoot while preserving the same follow+leash architecture and control chain.  
+Tweaks were limited to five parameters in `run_round_follow_defaults.yaml`: lower trajectory aggressiveness and slightly stronger controller deadband/rate limiting.
+
+Changed parameters:
+- `traj_pos_gain`: `2.0 -> 1.7`
+- `traj_max_speed_mps`: `1.5 -> 1.2`
+- `traj_max_accel_mps2`: `3.0 -> 2.0`
+- `controller_profile_cmd_xy_deadband_m`: `0.05 -> 0.08`
+- `controller_profile_min_cmd_period_s`: `0.12 -> 0.15`
+
+### Affected mode(s)
+- Mode 1 (set_pose): affected (slightly calmer trajectory shaping)
+- Mode 2 (controller backend): affected (slightly calmer trajectory shaping + stronger anti-jitter profile)
+
+### How to verify
+1. Static checks (already run):
+```bash
+cd ~/halmstad_ws
+bash -n run_follow_preflight.sh
+bash -n run_follow_with_bag.sh
+python3 -m py_compile src/lrs_halmstad/launch/run_round_follow_motion.launch.py
+```
+Expected output:
+- no syntax errors
+
+2. Quick runtime sanity check (optional):
+```bash
+cd ~/halmstad_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+source src/lrs_halmstad/clearpath/setup.bash
+
+bash run_follow_with_bag.sh run_tune_setpose orchard dji0 odom \
+  uav_backend:=setpose \
+  leader_perception_enable:=true \
+  start_leader_estimator:=true \
+  yolo_weights:=/home/william/halmstad_ws/models/yolov5n.pt \
+  yolo_device:=cpu
+
+bash run_follow_with_bag.sh run_tune_controller orchard dji0 odom \
+  uav_backend:=controller \
+  leader_perception_enable:=true \
+  start_leader_estimator:=true \
+  yolo_weights:=/home/william/halmstad_ws/models/yolov5n.pt \
+  yolo_device:=cpu
+```
+Expected output:
+- Same command chain behavior as before.
+- Slightly reduced command jitter/oscillation, especially in controller backend.
+
+### Topics/services changed (required/optional updates)
+- No topic/service/interface changes.
+- Parameter-only tuning update.
+
+### Files changed in this implementation block
+- `src/lrs_halmstad/config/run_round_follow_defaults.yaml`
+- `Markdowns/Implementation_Documentation/IMPLEMENTATION_LOG.md`
+
+## 2026-03-03 - Control-chain freeze (planner intent -> backend adapter, no manual run path)
+
+### What changed
+Froze the run harness control chain so experiment runs are explicitly planner-driven: leader input goes into `follow_uav`, which publishes canonical intent on `/<uav>/pose_cmd`, and backend adapters execute that intent via either `set_pose` service or controller command topics.  
+Added preflight guardrails to reject conflicting publishers on controller command topics and on `/<uav>/pose_cmd`, preventing mixed/manual command sources from silently affecting runs.  
+Extended `meta.yaml` run metadata with a `control_chain` block and fixed effective launch-arg capture so recorded metadata reflects actual runtime values (including extra launch overrides).
+
+### Affected mode(s)
+- Mode 1 (set_pose): affected (explicit control-chain metadata + intent conflict guard)
+- Mode 2 (controller backend): affected (explicit control-chain metadata + stronger publisher conflict guard)
+
+### How to verify
+1. Static checks (already run):
+```bash
+cd ~/halmstad_ws
+bash -n run_follow_preflight.sh
+bash -n run_follow_with_bag.sh
+python3 -m py_compile src/lrs_halmstad/launch/run_round_follow_motion.launch.py
+```
+Expected output:
+- no syntax errors
+
+2. Runtime smoke check (setpose backend):
+```bash
+cd ~/halmstad_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+source src/lrs_halmstad/clearpath/setup.bash
+
+bash run_follow_with_bag.sh run_chain_setpose orchard dji0 odom \
+  uav_backend:=setpose \
+  leader_perception_enable:=true \
+  start_leader_estimator:=true \
+  yolo_weights:=/home/william/halmstad_ws/models/yolov5n.pt \
+  yolo_device:=cpu
+```
+Expected output:
+- launch log prints control-chain line from `run_round_follow_motion.launch.py`
+- run completes with artifacts in `runs/run_chain_setpose/`
+- `meta.yaml` contains:
+  - `control_chain.profile: planner_to_backend_v1`
+  - `control_chain.intent_topic: /dji0/pose_cmd`
+  - `control_chain.backend: setpose`
+
+3. Runtime smoke check (controller backend):
+```bash
+cd ~/halmstad_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+source src/lrs_halmstad/clearpath/setup.bash
+
+bash run_follow_with_bag.sh run_chain_controller orchard dji0 odom \
+  uav_backend:=controller \
+  leader_perception_enable:=true \
+  start_leader_estimator:=true \
+  yolo_weights:=/home/william/halmstad_ws/models/yolov5n.pt \
+  yolo_device:=cpu
+```
+Expected output:
+- launch log prints same control-chain line with `backend=controller`
+- preflight blocks start if controller command topics already have publishers
+- run artifacts in `runs/run_chain_controller/` include `meta.yaml` with controller adapter topics in `control_chain`
+
+4. Conflict guard check (optional):
+```bash
+cd ~/halmstad_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+source src/lrs_halmstad/clearpath/setup.bash
+
+# start a temporary publisher on /dji0/pose_cmd in another terminal, then:
+bash run_follow_preflight.sh /a201_0000/platform/odom /a201_0000/controller_manager platform_velocity_controller orchard dji0 setpose
+```
+Expected output:
+- preflight fails with `intent conflict: topic already has publishers: /dji0/pose_cmd`
+
+### Topics/services changed (required/optional updates)
+- No message type changes.
+- New enforced run contract checks:
+  - `/<uav>/pose_cmd` must not already have external publishers when follow run starts
+  - in controller backend mode, these must not already have external publishers:
+    - `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
+    - `/<uav>/update_pan`
+    - `/<uav>/update_tilt`
+- Metadata schema addition:
+  - `control_chain` block in run `meta.yaml`
+
+### Files changed in this implementation block
+- `run_follow_preflight.sh`
+- `run_follow_with_bag.sh`
+- `src/lrs_halmstad/launch/run_round_follow_motion.launch.py`
+- `Markdowns/Implementation_Documentation/IMPLEMENTATION_LOG.md`
+
 ## 2026-03-03 - Robust bag shutdown + controller backend smoothing guard
 
 ### What changed

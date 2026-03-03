@@ -39,9 +39,9 @@ follow_uav:
     controller_profile_enable: true
     controller_profile_smooth_alpha: 0.85
     controller_profile_max_step_m_per_tick: 0.30
-    controller_profile_cmd_xy_deadband_m: 0.05
+    controller_profile_cmd_xy_deadband_m: 0.08
     controller_profile_yaw_deadband_rad: 0.08
-    controller_profile_min_cmd_period_s: 0.12
+    controller_profile_min_cmd_period_s: 0.15
     leader_input_type: odom
     leader_pose_topic: /coord/leader_estimate
     tick_hz: 5.0
@@ -69,9 +69,9 @@ follow_uav:
     traj_enable: true
     traj_rel_frame_enable: true
     traj_rel_smooth_alpha: 0.35
-    traj_pos_gain: 2.0
-    traj_max_speed_mps: 1.5
-    traj_max_accel_mps2: 3.0
+    traj_pos_gain: 1.7
+    traj_max_speed_mps: 1.2
+    traj_max_accel_mps2: 2.0
     traj_quality_min_scale: 0.35
     traj_reset_on_yaw_jump_rad: 0.7
     yaw_deadband_rad: 0.05
