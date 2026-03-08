@@ -68,7 +68,7 @@ def generate_launch_description():
     camera_yaw_offset_deg_arg = DeclareLaunchArgument('camera_yaw_offset_deg', default_value='0.0')
     camera_pan_sign_arg = DeclareLaunchArgument('camera_pan_sign', default_value='1.0')
     start_uav_simulator_arg = DeclareLaunchArgument('start_uav_simulator', default_value='true')
-    uav_camera_mode_arg = DeclareLaunchArgument('uav_camera_mode', default_value='integrated_joint')
+    uav_camera_mode_arg = DeclareLaunchArgument('uav_camera_mode', default_value='detached_model')
     ugv_mode_arg = DeclareLaunchArgument(
         'ugv_mode',
         default_value='nav2',

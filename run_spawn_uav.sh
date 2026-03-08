@@ -112,6 +112,20 @@ fi
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
+    camera:=*)
+      camera_mode="${arg#camera:=}"
+      case "$camera_mode" in
+        attached|integrated|integrated_joint)
+          ARGS+=("uav_camera_mode:=integrated_joint")
+          ;;
+        detached|detached_model)
+          ARGS+=("uav_camera_mode:=detached_model")
+          ;;
+        *)
+          ARGS+=("uav_camera_mode:=$camera_mode")
+          ;;
+      esac
+      ;;
     name:=*)
       ARGS+=("uav_name:=${arg#name:=}")
       ;;

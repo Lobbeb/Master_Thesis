@@ -13,7 +13,7 @@ Current tested baseline:
 
 Current important notes:
 - the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
-- attached camera mode is the current default
+- detached camera mode is the current default
 - Gazebo sim time is guarded by `clock_guard`, and `/clock` should have exactly one publisher
 
 The rest of this README contains older reference material and may be stale compared with the two files above.

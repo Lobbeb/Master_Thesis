@@ -44,22 +44,21 @@ Important hindsight:
 ### Camera Baseline
 
 Current 1-to-1 default:
-- attached camera
-- `uav_camera_mode:=integrated_joint`
-- mount pitch `45 deg`
-- `pan_enable: false`
+- detached camera model
+- `uav_camera_mode:=detached_model`
+- `pan_enable: true`
 - `tilt_enable: true`
-- `default_tilt_deg: 0.0`
+- `default_pan_deg: 0.0`
+- `default_tilt_deg: -45.0`
 
 Interpretation:
-- the fixed mount angle gives the initial `-45 deg` look
-- gimbal tilt is still active and compensates vertical geometry on top of that
-- horizontal framing is still body-yaw-only because pan is disabled
+- detached camera motion is now the validated visible-camera path in Gazebo
+- pan and tilt both track the shared offset leader look target
+- attached/integrated mode remains available only as an override path
 
 Important consequence:
-- tilt can improve vertical centering
-- tilt will not fix a left/right image offset
-- if horizontal centering is still imperfect, the next control lever is pan or image-space feedback, not more tilt
+- `camera:=attached` is now an opt-in override, not the baseline
+- if camera framing regresses again, compare the detached model against `/dji0/camera/target/*` before retuning follow math
 
 ### Clock / Sim Time
 
@@ -118,13 +117,12 @@ Manual checks:
 ### Remaining Limitation
 
 Current remaining camera limitation:
-- with pan disabled, the attached camera follows UAV body yaw only in the horizontal plane
-- this means the UGV can still be slightly off-center left/right even when the tracking path itself is now correct
+- attached/integrated camera mode is still available, but it is no longer the validated default path
+- if you switch back to attached mode, treat it as an override path that may differ visually from detached
 
 Most likely next task:
-- improve horizontal framing while keeping the attached camera baseline
-- preferred directions are attached-gimbal pan if available, or image-space feedback
-- more tilt tuning will only affect vertical framing
+- keep tuning follow geometry and camera targeting around the detached baseline
+- only revisit attached mode if you explicitly want to debug that path again
 
 Things that should not be "fixed back":
 - do not switch follow back to raw `/platform/odom` or `/platform/odom/filtered`

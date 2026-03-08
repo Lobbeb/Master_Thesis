@@ -21,6 +21,20 @@ fi
 
 for arg in "$@"; do
   case "$arg" in
+    camera:=*)
+      camera_mode="${arg#camera:=}"
+      case "$camera_mode" in
+        attached|integrated|integrated_joint)
+          EXTRA_ARGS+=("uav_camera_mode:=integrated_joint")
+          ;;
+        detached|detached_model)
+          EXTRA_ARGS+=("uav_camera_mode:=detached_model")
+          ;;
+        *)
+          EXTRA_ARGS+=("uav_camera_mode:=$camera_mode")
+          ;;
+      esac
+      ;;
     weights:=*)
       EXTRA_ARGS+=("yolo_weights:=${arg#weights:=}")
       ;;

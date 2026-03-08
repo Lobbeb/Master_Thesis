@@ -49,6 +49,27 @@ def rotate_body_offset(x_body: float, y_body: float, yaw: float) -> Tuple[float,
     return (c * x_body - s * y_body, s * x_body + c * y_body)
 
 
+def compute_leader_look_target(
+    leader_x: float,
+    leader_y: float,
+    leader_yaw: float,
+    leader_z: float,
+    leader_look_target_x_m: float = 0.0,
+    leader_look_target_y_m: float = 0.0,
+    leader_look_target_z_m: float = 0.0,
+) -> Tuple[float, float, float]:
+    offset_x, offset_y = rotate_body_offset(
+        leader_look_target_x_m,
+        leader_look_target_y_m,
+        leader_yaw,
+    )
+    return (
+        leader_x + offset_x,
+        leader_y + offset_y,
+        leader_z + leader_look_target_z_m,
+    )
+
+
 def camera_xy_from_uav_pose(
     uav_x: float,
     uav_y: float,

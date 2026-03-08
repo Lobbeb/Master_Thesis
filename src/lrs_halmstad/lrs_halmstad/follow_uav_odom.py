@@ -17,10 +17,39 @@ from lrs_halmstad.follow_math import (
     Pose2D,
     camera_xy_from_uav_pose,
     clamp_point_to_radius,
+    compute_leader_look_target,
     solve_yaw_to_target,
     wrap_pi,
     yaw_from_quat,
 )
+
+
+def compute_rate_limited_axis_value(
+    current_value: float,
+    target_value: float,
+    *,
+    tick_hz: float,
+    max_speed_per_s: float,
+    gain: float,
+    snap_tolerance: float = 0.01,
+) -> float:
+    if tick_hz <= 0.0:
+        return float(target_value)
+
+    error = float(target_value) - float(current_value)
+    if abs(error) <= max(0.0, float(snap_tolerance)):
+        return float(target_value)
+
+    axis_speed_per_s = min(
+        max(float(max_speed_per_s), 0.0),
+        max(float(gain), 0.0) * abs(error),
+    )
+    step_limit = axis_speed_per_s / float(tick_hz) if axis_speed_per_s > 0.0 else 0.0
+    if step_limit <= 0.0:
+        return float(current_value)
+    if abs(error) <= step_limit:
+        return float(target_value)
+    return float(current_value) + math.copysign(step_limit, error)
 
 
 class FollowUavOdom(Node):
@@ -52,6 +81,8 @@ class FollowUavOdom(Node):
         self.declare_parameter("smooth_alpha", 1.0)
         self.declare_parameter("follow_speed_mps", 1.0)
         self.declare_parameter("follow_speed_gain", 2.0)
+        self.declare_parameter("follow_z_speed_mps", 1.0)
+        self.declare_parameter("follow_z_speed_gain", 2.0)
         self.declare_parameter("cmd_xy_deadband_m", 0.02)
         self.declare_parameter("follow_yaw_rate_rad_s", 1.0)
         self.declare_parameter("follow_yaw_rate_gain", 2.0)
@@ -65,6 +96,8 @@ class FollowUavOdom(Node):
         self.declare_parameter("camera_x_offset_m", 0.0)
         self.declare_parameter("camera_y_offset_m", 0.0)
         self.declare_parameter("camera_z_offset_m", 0.27)
+        self.declare_parameter("leader_look_target_x_m", 0.0)
+        self.declare_parameter("leader_look_target_y_m", 0.0)
 
         self.world = str(self.get_parameter("world").value)
         self.uav_name = str(self.get_parameter("uav_name").value)
@@ -90,6 +123,8 @@ class FollowUavOdom(Node):
         self.smooth_alpha = float(self.get_parameter("smooth_alpha").value)
         self.follow_speed_mps = float(self.get_parameter("follow_speed_mps").value)
         self.follow_speed_gain = float(self.get_parameter("follow_speed_gain").value)
+        self.follow_z_speed_mps = float(self.get_parameter("follow_z_speed_mps").value)
+        self.follow_z_speed_gain = float(self.get_parameter("follow_z_speed_gain").value)
         self.cmd_xy_deadband_m = float(self.get_parameter("cmd_xy_deadband_m").value)
         self.follow_yaw_rate_rad_s = float(self.get_parameter("follow_yaw_rate_rad_s").value)
         self.follow_yaw_rate_gain = float(self.get_parameter("follow_yaw_rate_gain").value)
@@ -103,6 +138,8 @@ class FollowUavOdom(Node):
         self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
         self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
         self.camera_z_offset_m = float(self.get_parameter("camera_z_offset_m").value)
+        self.leader_look_target_x_m = float(self.get_parameter("leader_look_target_x_m").value)
+        self.leader_look_target_y_m = float(self.get_parameter("leader_look_target_y_m").value)
 
         if self.tick_hz <= 0.0:
             raise ValueError("tick_hz must be > 0")
@@ -111,11 +148,14 @@ class FollowUavOdom(Node):
         if (
             self.follow_speed_mps < 0.0
             or self.follow_speed_gain < 0.0
+            or self.follow_z_speed_mps < 0.0
+            or self.follow_z_speed_gain < 0.0
             or self.follow_yaw_rate_rad_s < 0.0
             or self.follow_yaw_rate_gain < 0.0
         ):
             raise ValueError(
-                "follow_speed_mps, follow_speed_gain, follow_yaw_rate_rad_s, and "
+                "follow_speed_mps, follow_speed_gain, follow_z_speed_mps, "
+                "follow_z_speed_gain, follow_yaw_rate_rad_s, and "
                 "follow_yaw_rate_gain must be >= 0"
             )
 
@@ -201,10 +241,13 @@ class FollowUavOdom(Node):
             f"d_target={self.d_target}, d_max={self.d_max}, z_alt={self.z_alt}, "
             f"d_euclidean={self.d_euclidean}, follow_speed_mps={self.follow_speed_mps}, "
             f"follow_speed_gain={self.follow_speed_gain}, "
+            f"follow_z_speed_mps={self.follow_z_speed_mps}, "
+            f"follow_z_speed_gain={self.follow_z_speed_gain}, "
             f"follow_yaw_rate_rad_s={self.follow_yaw_rate_rad_s}, "
             f"follow_yaw_rate_gain={self.follow_yaw_rate_gain}, "
             f"smooth_alpha={self.smooth_alpha}, "
             f"camera_offset_m=({self.camera_x_offset_m}, {self.camera_y_offset_m}, {self.camera_z_offset_m}), "
+            f"leader_look_target_xy_m=({self.leader_look_target_x_m}, {self.leader_look_target_y_m}), "
             f"startup_nudge={'on' if self.startup_nudge_pending else 'off'}"
         )
         self.emit_event("FOLLOW_ODOM_NODE_START")
@@ -229,6 +272,8 @@ class FollowUavOdom(Node):
                     "z_alt",
                     "follow_speed_mps",
                     "follow_speed_gain",
+                    "follow_z_speed_mps",
+                    "follow_z_speed_gain",
                     "follow_yaw_rate_rad_s",
                     "follow_yaw_rate_gain",
                     "cmd_xy_deadband_m",
@@ -246,6 +291,8 @@ class FollowUavOdom(Node):
             elif param.name in (
                 "follow_speed_mps",
                 "follow_speed_gain",
+                "follow_z_speed_mps",
+                "follow_z_speed_gain",
                 "follow_yaw_rate_rad_s",
                 "follow_yaw_rate_gain",
                 "cmd_xy_deadband_m",
@@ -418,15 +465,28 @@ class FollowUavOdom(Node):
         self.current_leader_distance_3d_m = distance_3d
         return horizontal_distance, distance_3d
 
+    def _leader_look_target_xy(self) -> tuple[float, float]:
+        target_x, target_y, _target_z = compute_leader_look_target(
+            self.ugv_pose.x,
+            self.ugv_pose.y,
+            self.ugv_pose.yaw,
+            self.ugv_z,
+            self.leader_look_target_x_m,
+            self.leader_look_target_y_m,
+            0.0,
+        )
+        return target_x, target_y
+
     def _compute_anchor_target(self) -> Pose2D:
         xt = self.ugv_pose.x - self.d_target * math.cos(self.ugv_follow_heading)
         yt = self.ugv_pose.y - self.d_target * math.sin(self.ugv_follow_heading)
         xt, yt = clamp_point_to_radius(self.ugv_pose.x, self.ugv_pose.y, xt, yt, self.d_max)
+        target_x, target_y = self._leader_look_target_xy()
         yaw_cmd = solve_yaw_to_target(
             xt,
             yt,
-            self.ugv_pose.x,
-            self.ugv_pose.y,
+            target_x,
+            target_y,
             self.camera_x_offset_m,
             self.camera_y_offset_m,
         ) if self.follow_yaw else self._current_uav_pose().yaw
@@ -457,6 +517,15 @@ class FollowUavOdom(Node):
         return min(
             self.follow_speed_mps,
             self.follow_speed_gain * max(anchor_distance_error, 0.0),
+        )
+
+    def _compute_command_z(self, current_z: float) -> float:
+        return compute_rate_limited_axis_value(
+            current_z,
+            self.z_alt,
+            tick_hz=self.tick_hz,
+            max_speed_per_s=self.follow_z_speed_mps,
+            gain=self.follow_z_speed_gain,
         )
 
     @staticmethod
@@ -514,17 +583,20 @@ class FollowUavOdom(Node):
             return
         now = self.get_clock().now()
         current_uav = self._control_uav_pose()
+        current_uav_z = self._control_uav_z()
+        target_x, target_y = self._leader_look_target_xy()
         yaw_cmd = solve_yaw_to_target(
             current_uav.x,
             current_uav.y,
-            self.ugv_pose.x,
-            self.ugv_pose.y,
+            target_x,
+            target_y,
             self.camera_x_offset_m,
             self.camera_y_offset_m,
         )
-        self.publish_legacy_uav_command(current_uav.x, current_uav.y, self.z_alt, yaw_cmd)
-        self.publish_pose_cmd(current_uav.x, current_uav.y, self.z_alt, yaw_cmd)
-        self.publish_pose_cmd_odom(current_uav.x, current_uav.y, self.z_alt, yaw_cmd)
+        z_cmd = self._compute_command_z(current_uav_z)
+        self.publish_legacy_uav_command(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
+        self.publish_pose_cmd(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
+        self.publish_pose_cmd_odom(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
         self.uav_cmd = Pose2D(current_uav.x, current_uav.y, yaw_cmd)
         self.have_uav_cmd = True
         self.last_cmd_time = now
@@ -560,6 +632,7 @@ class FollowUavOdom(Node):
     def on_tick(self) -> None:
         now = self.get_clock().now()
         current_uav = self._control_uav_pose()
+        current_uav_z = self._control_uav_z()
 
         if self.can_send_command_now(now) and self._maybe_publish_startup_nudge(now):
             return
@@ -589,11 +662,12 @@ class FollowUavOdom(Node):
                 yt = current_uav.y + dy * s
 
         cmd_xy_delta = math.hypot(xt - current_uav.x, yt - current_uav.y)
+        target_x, target_y = self._leader_look_target_xy()
         yaw_target = solve_yaw_to_target(
             xt,
             yt,
-            self.ugv_pose.x,
-            self.ugv_pose.y,
+            target_x,
+            target_y,
             self.camera_x_offset_m,
             self.camera_y_offset_m,
         )
@@ -634,9 +708,10 @@ class FollowUavOdom(Node):
             xt = current_uav.x
             yt = current_uav.y
 
-        self.publish_legacy_uav_command(xt, yt, self.z_alt, yaw_cmd)
-        self.publish_pose_cmd(xt, yt, self.z_alt, yaw_cmd)
-        self.publish_pose_cmd_odom(xt, yt, self.z_alt, yaw_cmd)
+        z_cmd = self._compute_command_z(current_uav_z)
+        self.publish_legacy_uav_command(xt, yt, z_cmd, yaw_cmd)
+        self.publish_pose_cmd(xt, yt, z_cmd, yaw_cmd)
+        self.publish_pose_cmd_odom(xt, yt, z_cmd, yaw_cmd)
         self.publish_metrics_cmd(self.ugv_pose, xt, yt)
 
         self.uav_cmd = Pose2D(xt, yt, yaw_cmd)

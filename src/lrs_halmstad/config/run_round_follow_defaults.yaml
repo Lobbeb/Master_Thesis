@@ -1,216 +1,232 @@
 /**:
   ros__parameters:
-    camera_x_offset_m: 0.0
-    camera_y_offset_m: 0.0
-    camera_z_offset_m: 0.27
+    camera_x_offset_m: 0.0    # Shared UAV->camera X offset in the UAV body frame (forward).
+    camera_y_offset_m: 0.0     # Shared UAV->camera Y offset in the UAV body frame (left).
+    camera_z_offset_m: 0.27     # Shared UAV->camera Z offset used by tilt geometry and detached camera pose.
+    leader_look_target_x_m: 0.0  # Shared leader look target X offset in the leader body frame (forward).
+    leader_look_target_y_m: 0.0  # Shared leader look target Y offset in the leader body frame (left).
 
 follow_uav:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: true  # Run this node on Gazebo/ROS simulation time.
 
-    event_topic: /coord/events
-    leader_input_type: odom
-    publish_events: false
+    event_topic: /coord/events  # Topic for follow lifecycle/debug event strings.__________________
+                #<||  In the current 1-to-1 odom-follow launch path, the leader odom source is   ||:
+                #<||  set by launch to /<ugv>/amcl_pose_odom (AMCL-derived), not raw             ||:
+                #<||  /<ugv>/platform/odom. This YAML keeps leader_input_type:=odom, while the   ||:
+                #<||  actual leader_odom_topic comes from launch defaults/overrides.             ||:                            ||:
+    leader_input_type: odom  # Launch selector for follow mode; current AMCL baseline uses odom. ||:
+    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<||:
+    publish_events: false  # Publish follow event strings on event_topic.
 
-    d_max: 100.0
-    d_target: 7.0
-    z_alt: 7.0
+    d_max: 100.0  # Safety leash radius for the anchor target around the leader.
+    d_target: 7.0  # Desired horizontal follow distance behind the leader.
+    z_alt: 7.0    # Commanded UAV altitude / map Z used by the follow controller.
 
-    seed_uav_cmd_on_start: true
-    startup_nudge_enable: false
-    uav_start_x: -2.0
-    uav_start_y: 0.0
-    uav_start_yaw_deg: 0.0
+    seed_uav_cmd_on_start: true  # Seed internal UAV command state from the startup pose before real pose arrives.
+    startup_nudge_enable: false  # Send a one-shot XY nudge on startup to break deadlock if needed.
+    uav_start_x: -2.0           # Startup/seeded UAV X position in map frame.
+    uav_start_y: 0.0           # Startup/seeded UAV Y position in map frame.
+    uav_start_yaw_deg: 0.0    # Startup/seeded UAV yaw in degrees.
 
-    min_cmd_period_s: 0.05
-    pose_timeout_s: 3.0
-    tick_hz: 10.0
+    min_cmd_period_s: 0.05  # Minimum time between pose commands even if tick_hz is higher.
+    pose_timeout_s: 3.0    # Treat leader/UAV pose data as stale after this many seconds.
+    tick_hz: 20.0         # Main odom-follow control loop rate.
 
-    cmd_xy_deadband_m: 0.01
-    follow_speed_mps: 5.0
-    follow_speed_gain: 2.0
-    follow_yaw_rate_rad_s: 5.0
-    follow_yaw_rate_gain: 4.0
-    smooth_alpha: 1.0
-    yaw_deadband_rad: 0.01
-    yaw_update_xy_gate_m: 0.0
+    cmd_xy_deadband_m: 0.02  # DONT TOUCH! Hold XY if the commanded move is smaller than this.
+    follow_speed_mps: 5.0     # Hard cap on commanded XY follow speed.
+    follow_speed_gain: 2.0     # Proportional XY speed gain from anchor-position error.
+    follow_z_speed_mps: 8.0    # Hard cap on commanded vertical glide speed.
+    follow_z_speed_gain: 3.0   # Proportional vertical speed gain from altitude error.
+    follow_yaw_rate_rad_s: 3.0  # Max yaw rate cap; yaw_rate_rad_s / tick_hz = max rad step per tick.
+    follow_yaw_rate_gain: 2.0  # Proportional yaw-rate gain; min(gain * yaw_error, yaw_rate_rad_s).
+    smooth_alpha: 1.0         # Target smoothing alpha; 1.0 = no XY smoothing.
+    yaw_deadband_rad: 0.02    # DONT TOUCH! Hold yaw if the remaining yaw error is smaller than this.
+    yaw_update_xy_gate_m: 0.0  # 0 disables it; otherwise yaw only updates when XY motion exceeds this.
+    
+    #--------------------------------------------------!!These are kept here for the non-odom follow path. !!------------
+    #-----------------<< Estimate/YOLO-follow only <<--------------------------------------------------------------------
+    quality_conf_good: 0.45         # Confidence treated as "good" for full-quality response scaling.
+    quality_conf_min: 0.15          # Confidence floor; at or below this the quality scale collapses.
+    quality_deadband_boost_m: 0.12  # Extra XY deadband added as estimate quality drops.
+    quality_hold_step_scale: 0.08   # Hold motion/yaw when quality scale falls to or below this.
+    quality_latency_ref_ms: 300.0   # Reference latency used when reducing response for stale estimates.
+    quality_min_step_scale: 0.30    # Minimum nonzero motion/yaw scale once quality is above zero.
+    quality_scale_enable: true      # Enable leader-status-based motion scaling.
+    quality_status_timeout_s: 3.0   # Treat leader status as stale after this timeout.
 
-    quality_conf_good: 0.45
-    quality_conf_min: 0.15
-    quality_deadband_boost_m: 0.12
-    quality_hold_step_scale: 0.08
-    quality_latency_ref_ms: 300.0
-    quality_min_step_scale: 0.30
-    quality_scale_enable: true
-    quality_status_timeout_s: 3.0
+    #~~~~<< Debounce on follow-state transitions.
+    state_bad_debounce_ticks: 2  # Bad ticks required before switching into degraded/hold states.
+    state_machine_enable: true  # Debounce follow-state transitions instead of switching immediately.
+    state_ok_debounce_ticks: 2  # Good ticks required before switching back into tracking.
 
-    state_bad_debounce_ticks: 2
-    state_machine_enable: true
-    state_ok_debounce_ticks: 2
+    #~~~~<< Heading inference from leader motion.
+    estimate_heading_from_motion_enable: false  # Infer leader heading from motion instead of trusting pose yaw.
+    estimate_heading_alpha: 1.0  # EMA alpha for motion-derived heading/velocity.
+    estimate_heading_max_dt_s: 1.0  # Ignore heading inference updates if pose gaps exceed this.
+    estimate_heading_min_speed_mps: 1.0  # Minimum leader speed before motion-derived heading is trusted.
 
-    estimate_heading_from_motion_enable: false
-    estimate_heading_alpha: 1.0
-    estimate_heading_max_dt_s: 1.0
-    estimate_heading_min_speed_mps: 1.0
+    #~~~~<< Trajectory shaping.
+    traj_enable: true         # Enable velocity/acceleration-limited target shaping.
+    traj_max_accel_mps2: 1.5   # Max XY acceleration inside the trajectory shaper.
+    traj_max_speed_mps: 1.0     # Max XY speed inside the trajectory shaper.
+    traj_pos_gain: 1.6           # Position-to-velocity proportional gain in the trajectory shaper.
+    traj_quality_min_scale: 0.40  # Lowest quality scale allowed inside trajectory shaping.
+    traj_rel_frame_enable: true    # Shape the trajectory in the leader-relative frame instead of world frame.
+    traj_rel_smooth_alpha: 0.30     # EMA alpha on the relative target before velocity shaping.
+    traj_reset_on_yaw_jump_rad: 0.7  # Reset trajectory state if the leader yaw jumps more than this.
+    #--------------------------------------------------------------------------------------------------------------------
 
-    traj_enable: true
-    traj_max_accel_mps2: 1.5
-    traj_max_speed_mps: 1.0
-    traj_pos_gain: 1.6
-    traj_quality_min_scale: 0.40
-    traj_rel_frame_enable: true
-    traj_rel_smooth_alpha: 0.30
-    traj_reset_on_yaw_jump_rad: 0.7
-
+#--------------<< Camera Tracker <<--------------------------------------------------------------------------------------
 camera_tracker:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: true  #---------! Run this node on Gazebo/ROS simulation time. !---------------------------------------
 
-    camera_look_target_z_m: 0.0
-    default_pan_deg: 0.0
-    default_tilt_deg: 0.0
-    pan_enable: false
-    tilt_enable: true
-
-    pose_timeout_s: 3.0
-    tick_hz: 20.0
+    camera_look_target_z_m: 0.3  # DONT TOUCH! Vertical offset above the leader target point for pan/tilt solving.
+    default_pan_deg: 0.0        # Fallback pan command when pan tracking is disabled or stale.
+    default_tilt_deg: -45.0    # Fallback tilt command when tracking is disabled or stale.
+    pan_enable: true          # Publish tracked pan commands instead of holding default_pan_deg.
+    tilt_enable: true        # Publish tracked tilt commands instead of holding default_tilt_deg.
+    tilt_deadband_deg: 1.0  # DONT TOUCH! Hold the previous tilt if the target changes less than this.
+    pose_timeout_s: 3.0    # Treat leader/UAV pose data as stale after this many seconds.
+    tick_hz: 20.0         # Camera pan/tilt update rate.
 
 leader_estimator:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: true  # -------------------!! Run this node on Gazebo/ROS simulation time. !!--------------------------
 
-    estimate_error_topic: /coord/leader_estimate_error
-    event_topic: /coord/events
-    leader_actual_pose_topic: /a201_0000/platform/odom
-    out_topic: /coord/leader_estimate
-    publish_events: false
-    publish_status: true
-    status_topic: /coord/leader_estimate_status
+    estimate_error_topic: /coord/leader_estimate_error  # Debug topic publishing estimate-vs-truth error.
+    event_topic: /coord/events                         # Topic for estimator lifecycle/debug event strings.
+    leader_actual_pose_topic: /a201_0000/platform/odom  # Ground-truth leader pose used only for error reporting.
+    out_topic: /coord/leader_estimate                  # Published leader pose estimate topic.
+    publish_events: false                             # Publish estimator lifecycle/debug events on event_topic.
+    publish_status: true                             # Publish status strings with state/confidence/latency.
+    status_topic: /coord/leader_estimate_status     # Status topic consumed by estimate-follow.
 
-    cam_pitch_offset_deg: 0.0
-    cam_yaw_offset_deg: 0.0
-    image_timeout_s: 1.0
-    uav_pose_timeout_s: 1.0
+    cam_pitch_offset_deg: 0.0  # Camera pitch mounting offset used in bearing/range projection.
+    cam_yaw_offset_deg: 0.0   # Camera yaw mounting offset used in bearing projection.
+    image_timeout_s: 1.0     # Reject camera images older than this.
+    uav_pose_timeout_s: 1.0  # Reject UAV pose data older than this.
 
-    device: cpu
-    est_hz: 10.0
-    imgsz: 640
-    latency_comp_enable: true
+    device: cpu             # YOLO inference device, e.g. cpu or cuda.
+    est_hz: 10.0             # Main estimator loop rate.
+    imgsz: 640                # YOLO inference image size.
+    latency_comp_enable: true  # Predict the tracked estimate forward to compensate for detection latency.
 
-    conf_threshold: 0.12
-    target_class_id: -1
-    target_class_name: ""
+    conf_threshold: 0.12  # Minimum YOLO detection confidence to consider.
+    target_class_id: -1   # Restrict detections to one YOLO class id; -1 means any class.
+    target_class_name: ""  # Optional class-name filter; empty means any class name.
 
-    constant_range_m: 5.0
-    ground_max_range_m: 50.0
-    ground_min_range_m: 2.0
-    range_mode: ground
-    target_ground_z_m: 0.0
+    constant_range_m: 5.0    # Fixed fallback range when range_mode does not provide depth/ground range.
+    ground_max_range_m: 50.0  # Maximum ground-plane intersection range accepted as valid.
+    ground_min_range_m: 2.0  # Minimum ground-plane intersection range accepted as valid.
+    range_mode: ground       # Range source: auto, depth, ground, or const.
+    target_ground_z_m: 0.0    # World Z of the target/ground plane used by ground-range projection.
 
-    bad_debounce_frames: 2
-    bbox_continuity_class_bonus: 0.05
-    bbox_continuity_max_px: 400.0
-    bbox_continuity_weight: 0.15
-    max_bearing_jump_deg: 40.0
-    max_hold_frames: 5
-    max_hold_s: 0.5
-    max_target_speed_mps: 8.0
-    max_xy_jump_m: 6.0
-    ok_debounce_frames: 2
-    smooth_alpha: 0.25
-    tracker_enable: true
-    xy_smooth_alpha: 0.35
+    bad_debounce_frames: 2            # Consecutive bad frames required before switching to hold/reject states.
+    bbox_continuity_class_bonus: 0.05  # Bonus when the candidate class matches the previously latched detection.
+    bbox_continuity_max_px: 400.0     # Pixel jump at which continuity scoring becomes a hard penalty.
+    bbox_continuity_weight: 0.15     # Penalty weight for detection-center jumps between frames.
+    max_bearing_jump_deg: 40.0      # Reject detections that jump more than this in bearing.
+    max_hold_frames: 5             # Keep publishing the last good estimate for up to this many missing frames.
+    max_hold_s: 0.5               # Keep publishing the last good estimate for at most this many seconds.
+    max_target_speed_mps: 8.0    # Reject estimates implying the leader moved faster than this.
+    max_xy_jump_m: 6.0          # Reject estimates that jump more than this in world XY.
+    ok_debounce_frames: 2      # Good frames required before latching/reacquiring a target.
+    smooth_alpha: 0.25        # EMA alpha on bearing/range before world projection.
+    tracker_enable: true     # Enable the alpha-beta tracker on the world-frame estimate.
+    xy_smooth_alpha: 0.35   # EMA alpha on the projected world XY estimate.
 
 ugv_nav2_driver:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: true  # Run this node on Gazebo/ROS simulation time.
 
-    continue_on_goal_failure: false
-    path_topic: planned_path
-    pose_topic: amcl_pose
-    pose_topic_type: pose_with_covariance
+    continue_on_goal_failure: true      # Move on to the next goal instead of stopping the whole sequence.
+    path_topic: planned_path             # Debug path topic for the generated/sent Nav2 route.
+    pose_topic: amcl_pose                 # Localization topic used to read the UGV pose.
+    pose_topic_type: pose_with_covariance  # Message type on pose_topic: pose_with_covariance or odom.
 
-    initial_pose_covariance_xy: 0.25
-    initial_pose_covariance_yaw: 0.068
-    initial_pose_frame_id: map
-    initial_pose_publish_hz: 1.0
-    initial_pose_skip_wait_s: 0.5
-    initial_pose_timeout_s: 15.0
-    initial_pose_topic: initialpose
-    initial_pose_x: 0.0
-    initial_pose_y: 0.0
-    initial_pose_yaw_deg: 0.0
-    set_initial_pose_enable: true
+    initial_pose_covariance_xy: 0.25   # Covariance placed in X/Y when auto-publishing initialpose.
+    initial_pose_covariance_yaw: 0.068  # Covariance placed in yaw when auto-publishing initialpose.
+    initial_pose_frame_id: map         # Frame id used for the auto-published initial pose.
+    initial_pose_publish_hz: 1.0      # Repeat rate while trying to seed localization with initialpose.
+    initial_pose_skip_wait_s: 0.5    # Wait this long for existing localization before publishing initialpose.
+    initial_pose_timeout_s: 15.0    # Give up auto-setting the initial pose after this timeout.
+    initial_pose_topic: initialpose  # Topic used to publish the AMCL/Nav2 initial pose.
+    initial_pose_x: 0.0             # Initial pose X used for localization bootstrap.
+    initial_pose_y: 0.0            # Initial pose Y used for localization bootstrap.
+    initial_pose_yaw_deg: 0.0      # Initial pose yaw in degrees used for localization bootstrap.
+    set_initial_pose_enable: true   # Auto-publish an initial pose at startup if localization is not ready yet.
 
-    goal_action_name: navigate_to_pose
-    goal_frame_id: map
-    goal_reject_retry_count: 5
-    goal_reject_retry_delay_s: 1.0
-    goal_result_timeout_s: 600.0
-    goal_sequence_csv: ""
-    goal_sequence_file: ""
-    goal_sequence_random_reverse: true
-    goal_sequence_randomize: true
-    goal_sequence_relative_to_current_pose: false
-    goal_sequence_seed: -1
-    goal_server_timeout_s: 20.0
-    goal_start_delay_s: 2.0
-    min_goal_xy_delta_m: 0.05
-    min_goal_yaw_delta_deg: 2.0
-    pause_after_goal_s: 0.0
+    goal_action_name: navigate_to_pose    # Nav2 action name to call for goal execution.
+    goal_frame_id: map                     # Frame used for generated/supplied goals.
+    goal_reject_retry_count: 5              # Retries after a goal is rejected by the Nav2 action server.
+    goal_reject_retry_delay_s: 1.0           # Delay between goal-rejection retries.
+    goal_result_timeout_s: 600.0              # Cancel a goal if Nav2 has not returned a result within this timeout.
+    goal_sequence_csv: ""                      # Optional inline waypoint list: x,y,yaw_deg;x,y,yaw_deg;...
+    goal_sequence_file: ""                      # Optional waypoint file; when set, goals are loaded from here.
+    goal_sequence_random_reverse: true           # Allow random reversal of the loaded waypoint order.
+    goal_sequence_randomize: true                 # Randomize the loaded waypoint order using goal_sequence_seed.
+    goal_sequence_relative_to_current_pose: false  # Treat explicit waypoints as offsets from the current pose.
+    goal_sequence_seed: -1                        # RNG seed for waypoint randomization; -1 uses a time-based seed.
+    goal_server_timeout_s: 20.0                  # Timeout while waiting for the Nav2 action server.
+    goal_start_delay_s: 2.0                     # Delay before the first goal so Nav2/TF/costmaps can settle.
+    min_goal_xy_delta_m: 0.05                  # Skip a goal if it is too close in XY to the current pose.
+    min_goal_yaw_delta_deg: 2.0               # Skip a goal if it is too close in yaw to the current pose.
+    pause_after_goal_s: 0.0                  # Dwell time after each completed goal.
 
-    cycles: 2
-    forward_speed: 0.75
-    forward_time_s: 0.90
-    motion_profile: route
-    pause_every_n: 0
-    pause_time_s: 0.0
-    turn_pattern: alternate
-    turn_speed: 0.55
-    turn_time_s: 0.65
-    variation_amplitude: 0.08
-    variation_enable: false
+    cycles: 2           # Number of motion-profile cycles when generating a route internally.
+    forward_speed: 0.75  # Forward speed for generated motion-profile segments.
+    forward_time_s: 0.90  # Duration of each generated forward segment.
+    motion_profile: route  # Named motion profile used when generating internal waypoints.
+    pause_every_n: 0       # Insert a pause after every N generated segments; 0 disables it.
+    pause_time_s: 0.0       # Length of inserted generated-profile pauses.
+    turn_pattern: alternate  # Left/right turn pattern for generated routes.
+    turn_speed: 0.55         # Angular speed for generated turns.
+    turn_time_s: 0.65         # Duration of generated turns.
+    variation_amplitude: 0.08  # Random variation magnitude for generated routes.
+    variation_enable: false   # Enable random variation in the generated route.
 
-    pose_stale_timeout_s: 2.0
-    pose_timeout_s: 10.0
-    start_delay_s: 0.0
+    pose_stale_timeout_s: 2.0  # Reject localization poses that have not been received recently enough.
+    pose_timeout_s: 10.0      # Timeout while waiting for the first/current localization pose.
+    start_delay_s: 0.0       # Delay before starting route generation and Nav2 goal handling.
 
 ugv_motion_driver:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: true  # Run this node on Gazebo/ROS simulation time.
 
-    cmd_topic: /a201_0000/cmd_vel
-    ready_check_enable: true
-    ready_odom_topic: /a201_0000/platform/odom
-    ready_poll_hz: 10.0
-    ready_require_cmd_subscriber: true
-    ready_require_odom_flow: true
-    ready_settle_s: 1.0
-    ready_timeout_s: 8.0
+    cmd_topic: /a201_0000/cmd_vel             # Command topic used to drive the UGV.
+    ready_check_enable: true                   # Wait for the controller stack to be ready before sending motion.
+    ready_odom_topic: /a201_0000/platform/odom  # Odom topic used to verify that the UGV stack is alive.
+    ready_poll_hz: 10.0                        # Poll rate for the readiness gate.
+    ready_require_cmd_subscriber: true        # Require a subscriber on cmd_topic before starting motion.
+    ready_require_odom_flow: true            # Require odom messages on ready_odom_topic before starting motion.
+    ready_settle_s: 1.0                     # Readiness conditions must stay true for this long before motion starts.
+    ready_timeout_s: 8.0                   # Give up waiting for readiness after this timeout and continue anyway.
 
-    cycles: 120
-    forward_speed: 0.75
-    forward_time_s: 0.90
-    motion_profile: default
-    pause_every_n: 0
-    pause_time_s: 0.0
-    pub_rate_hz: 12.0
-    startup_pad_s: 1.5
-    start_delay_s: 0.0
-    turn_pattern: alternate
-    turn_speed: 0.55
-    turn_time_s: 0.65
-    variation_amplitude: 0.08
-    variation_enable: true
+    cycles: 120           # Number of motion-profile cycles to execute.
+    forward_speed: 0.75    # Forward speed for the scripted motion profile.
+    forward_time_s: 0.90    # Duration of each forward segment in the scripted profile.
+    motion_profile: default  # Named scripted motion profile to generate.
+    pause_every_n: 0        # Insert a pause after every N scripted segments; 0 disables it.
+    pause_time_s: 0.0      # Length of inserted scripted pauses.
+    pub_rate_hz: 12.0     # Command publish rate while executing the scripted profile.
+    startup_pad_s: 1.5     # Initial zero-command padding before scripted motion begins.
+    start_delay_s: 0.0      # Delay before the UGV motion profile starts.
+    turn_pattern: alternate  # Left/right turn pattern for the scripted profile.
+    turn_speed: 0.55         # Angular speed for scripted turns.
+    turn_time_s: 0.65         # Duration of scripted turns.
+    variation_amplitude: 0.08  # Random variation magnitude added to the scripted profile.
+    variation_enable: true    # Enable random variation in the scripted profile.
 
-    avoid_turn_speed: 0.80
-    clear_distance_m: 2.00
-    front_sector_deg: 70.0
-    min_valid_scan_points: 3
-    obstacle_avoid_enable: true
-    scan_timeout_s: 0.75
-    scan_topic: /a201_0000/sensors/lidar2d_0/scan
-    side_sector_max_deg: 100.0
-    side_sector_min_deg: 20.0
-    stop_distance_m: 1.40
-    stop_on_scan_timeout: false
+    avoid_turn_speed: 0.80                   # Angular speed used while obstacle avoidance is turning in place.
+    clear_distance_m: 2.00                    # Front clearance needed before leaving obstacle-avoid mode.
+    front_sector_deg: 70.0                     # Width of the front lidar sector used for obstacle checks.
+    min_valid_scan_points: 3                    # Minimum valid lidar hits required before trusting a sector reading.
+    obstacle_avoid_enable: true                  # Enable lidar-based obstacle avoidance on top of the scripted profile.
+    scan_timeout_s: 0.75                          # Lidar freshness timeout for obstacle avoidance.
+    scan_topic: /a201_0000/sensors/lidar2d_0/scan  # Lidar scan topic used by obstacle avoidance.
+    side_sector_max_deg: 100.0                    # Outer edge of the side sectors used to pick a turn direction.
+    side_sector_min_deg: 20.0                    # Inner edge of the side sectors used to pick a turn direction.
+    stop_distance_m: 1.40                       # Enter obstacle-avoid mode when the front range drops below this.
+    stop_on_scan_timeout: false                # Stop the UGV if lidar data times out while avoidance is enabled.

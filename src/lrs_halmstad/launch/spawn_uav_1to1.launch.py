@@ -60,7 +60,7 @@ def generate_launch_description():
         default_value=_default_uav_alt(LaunchConfiguration('world'), '7.0', '7.0'),
     )
     camera_name_arg = DeclareLaunchArgument('camera_name', default_value='camera0')
-    uav_camera_mode_arg = DeclareLaunchArgument('uav_camera_mode', default_value='integrated_joint')
+    uav_camera_mode_arg = DeclareLaunchArgument('uav_camera_mode', default_value='detached_model')
     camera_pitch_offset_deg_arg = DeclareLaunchArgument('camera_pitch_offset_deg', default_value='45.0')
     camera_sensor_roll_deg_arg = DeclareLaunchArgument('camera_sensor_roll_deg', default_value='0.0')
     camera_sensor_pitch_deg_arg = DeclareLaunchArgument('camera_sensor_pitch_deg', default_value='0.0')

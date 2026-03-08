@@ -54,15 +54,28 @@ If you want a different saved map:
 Current baseline:
 - this odom-follow path now uses `/<ugv>/amcl_pose_odom`, not raw `/platform/odom`
 - `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose` by [pose_cov_to_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/pose_cov_to_odom.py)
-- current UAV camera mode is attached/integrated: `uav_camera_mode:=integrated_joint`
-- attached mount pitch defaults to `45 deg`
-- current camera defaults are `pan_enable: false` and `tilt_enable: true`
-- if you override the mount pitch at spawn time, pass the same value to follow:
+- launch `leader_odom_topic` / `ugv_odom_topic` defaults are intentionally pointed at that AMCL-derived topic
+- current UAV camera mode is detached: `uav_camera_mode:=detached_model`
+- current camera defaults are `pan_enable: true` and `tilt_enable: true`
+- attached mode is still available as an override with `camera:=attached`
+- if you override the mount pitch for attached mode, pass the same value to follow:
 
 ```bash
-./run_spawn_uav.sh warehouse uav_name:=dji0 mount_pitch_deg:=35
-./run_1to1_follow.sh warehouse mount_pitch_deg:=35
+./run_spawn_uav.sh warehouse uav_name:=dji0 camera:=attached mount_pitch_deg:=35
+./run_1to1_follow.sh warehouse camera:=attached mount_pitch_deg:=35
 ```
+
+To test the older attached camera path instead of the detached default:
+
+```bash
+./run_spawn_uav.sh warehouse camera:=attached
+./run_1to1_follow.sh warehouse camera:=attached
+```
+
+Important:
+- pass the same camera mode to both spawn and follow
+- detached mode does not rely on the attached `45 deg` mount pitch baseline
+- the wrapper alias also accepts `camera:=attached`
 
 Important runtime note:
 - Gazebo sim time is guarded through [clock_guard.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/clock_guard.py)
@@ -147,6 +160,12 @@ Wrapper:
 ```bash
 ./run_capture_dataset.sh warehouse
 ```
+
+Current capture-topic baseline:
+- image topic default is `/<uav>/camera0/image_raw`
+- camera info default is `/<uav>/camera0/camera_info`
+- camera pose default is `/<uav>/camera/actual/center_pose`
+- older legacy `/<uav>/debug_camera_pose` is not published unless the simulator is started with legacy debug topics enabled
 
 Examples:
 
@@ -305,6 +324,8 @@ This creates:
   - common examples: `dji0`, `dji1`, `dji2`
 - `height:=...`
   - UAV spawn height in meters
+- `camera:=attached|detached`
+  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
 - `mount_pitch_deg:=...`
   - attached camera mount pitch in degrees
   - common examples: `35`, `45`
@@ -336,6 +357,8 @@ This creates:
 
 - positional `WORLD`
   - current tested example: `warehouse`
+- `camera:=attached|detached`
+  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
 - `height:=...`
   - maps to `uav_start_z:=...`
 - `mount_pitch_deg:=...`
@@ -372,6 +395,8 @@ This creates:
 
 - positional `WORLD`
   - current tested example: `warehouse`
+- `camera:=attached|detached`
+  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
 - `weights:=...`
   - maps to `yolo_weights:=...`
   - example: `weights:=detection/yolo26/yolo26s.pt`
