@@ -155,7 +155,7 @@ def generate_launch_description():
     )
     ugv_odom_topic_arg = DeclareLaunchArgument(
         'ugv_odom_topic',
-        default_value=['/', LaunchConfiguration('ugv_namespace'), '/platform/odom/filtered'],
+        default_value=['/', LaunchConfiguration('ugv_namespace'), '/amcl_pose_odom'],
     )
     leader_image_topic_arg = DeclareLaunchArgument('leader_image_topic', default_value=['/', LaunchConfiguration('uav_name'), '/camera0/image_raw'])
     leader_camera_info_topic_arg = DeclareLaunchArgument('leader_camera_info_topic', default_value=['/', LaunchConfiguration('uav_name'), '/camera0/camera_info'])
@@ -300,6 +300,23 @@ def generate_launch_description():
         ],
     )
 
+    ugv_amcl_to_odom_node = Node(
+        package='lrs_halmstad',
+        executable='pose_cov_to_odom',
+        name='ugv_amcl_to_odom',
+        namespace=LaunchConfiguration('ugv_namespace'),
+        output='screen',
+        parameters=[
+            {
+                'pose_topic': 'amcl_pose',
+                'odom_topic': 'amcl_pose_odom',
+                'frame_id': 'map',
+                'child_frame_id': 'base_link',
+                'copy_header_stamp': True,
+            },
+        ],
+    )
+
     ugv_nav2_delayed_start = TimerAction(
         period=0.1,
         actions=[
@@ -348,6 +365,7 @@ def generate_launch_description():
         event_topic_arg,
         ugv_start_delay_arg,
         simulator_node,
+        ugv_amcl_to_odom_node,
         estimator_node,
         follow_odom_node,
         follow_estimate_node,

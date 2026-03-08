@@ -1,4 +1,3 @@
-cat > .gitignore <<'EOF'
 # --- ROS 2 / colcon workspace ---
 build/
 install/
@@ -43,17 +42,20 @@ opt/omnetpp-*/
 *.vci
 *.qtenvrc
 *.cmdenv-log
-EOF
 
-# editor / local history
+# --- Editor / local history ---
 .history/
 
-# windows download metadata
+# --- Windows download metadata ---
 *:Zone.Identifier
 
-# local archives
+# --- Local archives ---
 *.zip
 
-# local ML weights and datasets (keep in drive, not repo)
+# --- Local ML weights and datasets ---
 /models
 /datasets
+
+# --- Local debug helpers ---
+/run_follow_yaw_debug.py
+/run_pose_source_debug.py

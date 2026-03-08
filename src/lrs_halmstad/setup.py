@@ -83,6 +83,7 @@ setup(
             "leader_estimator = lrs_halmstad.leader_estimator:main",
             "gazebo_pose_tcp_bridge = lrs_halmstad.gazebo_pose_tcp_bridge:main",
             "pose_cmd_to_odom = lrs_halmstad.pose_cmd_to_odom:main",
+            "pose_cov_to_odom = lrs_halmstad.pose_cov_to_odom:main",
             "controller = lrs_halmstad.controller:main",
             "simulator = lrs_halmstad.simulator:main",
             "clock_guard = lrs_halmstad.clock_guard:main",

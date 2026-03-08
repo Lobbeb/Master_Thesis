@@ -1,4 +1,23 @@
 # Halmstad ROS 2 + Gazebo Testbed — Workspace Snapshot
+Current source of truth
+-----------------------
+- `CURRENT_STATE.md`
+- `RUNNING_SIM.md`
+
+Current tested baseline:
+1. `./run_gazebo_sim.sh warehouse`
+2. `./run_spawn_uav.sh warehouse uav_name:=dji0`
+3. `./run_localization.sh warehouse`
+4. `./run_nav2.sh`
+5. `./run_1to1_follow.sh warehouse`
+
+Current important notes:
+- the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
+- attached camera mode is the current default
+- Gazebo sim time is guarded by `clock_guard`, and `/clock` should have exactly one publisher
+
+The rest of this README contains older reference material and may be stale compared with the two files above.
+
 Running experiments (current runbook)
 -------------------------------------
 This section documents the commands currently used to run the Halmstad Gazebo + ROS 2 simulation stack, spawn UAVs, start movement/follow logic, and start the OMNeT TCP bridge.

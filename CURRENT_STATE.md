@@ -3,202 +3,141 @@
 Assumption:
 - start in `~/halmstad_ws`
 
-### Active Run Sequence
-Use these wrappers:
+### Active Baseline
 
+Tested world:
+- `warehouse`
+
+Standard run order:
 1. `./run_gazebo_sim.sh warehouse`
 2. `./run_spawn_uav.sh warehouse uav_name:=dji0`
 3. `./run_localization.sh warehouse`
 4. `./run_nav2.sh`
-5. `./run_1to1_follow.sh`
+5. `./run_1to1_follow.sh warehouse`
 
 YOLO variant:
-- `./run_1to1_yolo.sh`
+- `./run_1to1_yolo.sh warehouse`
 
-Notes:
-- `./run_1to1_follow.sh` defaults to `leader_mode:=odom`
-- `./run_1to1_yolo.sh` defaults to `leader_mode:=estimate`
-- `./run_spawn_uav.sh` now defaults to attached/integrated camera mode
-- wrapper scripts source ROS/workspace automatically
+### What Works Now
 
-### Current Architecture
+The main odom-follow failure mode is resolved:
+- UAV tracking is now stable through normal turns
+- the fix was changing the leader truth source from UGV raw/filtered odom drift to AMCL-aligned pose
+- user confirmed that this change made the UAV track the UGV "flawlessly"
 
-#### Odom Follow
-- `leader_mode:=odom` uses:
-  - [follow_uav_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_uav_odom.py)
+Current odom-follow path:
+- `leader_mode:=odom`
+- launch default leader topic is now `/<ugv>/amcl_pose_odom`
+- `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose`
 
-Responsibilities:
-- reads UGV odom from `/a201_0000/platform/odom/...`
-- reads actual UAV pose from `/<uav>/pose`
-- computes anchor behind the UGV
-- publishes UAV command on:
-  - `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
+Relevant files:
+- [run_round_follow_motion.launch.py](/home/ruben/halmstad_ws/src/lrs_halmstad/launch/run_round_follow_motion.launch.py)
+- [run_round_follow_yolo.launch.py](/home/ruben/halmstad_ws/src/lrs_halmstad/launch/run_round_follow_yolo.launch.py)
+- [pose_cov_to_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/pose_cov_to_odom.py)
+- [follow_uav_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_uav_odom.py)
+- [camera_tracker.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/camera_tracker.py)
 
-#### Estimate/YOLO Follow
-- `leader_mode:=estimate` / pose-like path uses:
-  - [follow_uav.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_uav.py)
+Important hindsight:
+- the long yaw/turn debugging path was misleading because the debug topics were internally self-consistent while the leader truth source itself was drifting
+- if a future regression again looks like "numbers are fine but the image drifts", validate the pose source against AMCL before retuning yaw math
 
-This file was already cleaned somewhat and is now estimate/pose-oriented.
+### Camera Baseline
 
-#### Camera Control
-- camera control is separate:
-  - [camera_tracker.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/camera_tracker.py)
+Current 1-to-1 default:
+- attached camera
+- `uav_camera_mode:=integrated_joint`
+- mount pitch `45 deg`
+- `pan_enable: false`
+- `tilt_enable: true`
+- `default_tilt_deg: 0.0`
 
-Current behavior:
-- `pan` is disabled by default
-- `tilt` is enabled by default
-- default pan/tilt are still published at startup
-- in integrated mode, the startup command is `default_tilt_deg: 0.0` and the attached camera mount provides the initial `-45 deg` downward look
-- in integrated mode, the attached gimbal pitch command is relative to the spawned camera mount angle
+Interpretation:
+- the fixed mount angle gives the initial `-45 deg` look
+- gimbal tilt is still active and compensates vertical geometry on top of that
+- horizontal framing is still body-yaw-only because pan is disabled
 
-#### Shared Helpers
-- math helpers:
-  - [follow_math.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_math.py)
-- grouped debug publishers:
-  - [follow_debug.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_debug.py)
+Important consequence:
+- tilt can improve vertical centering
+- tilt will not fix a left/right image offset
+- if horizontal centering is still imperfect, the next control lever is pan or image-space feedback, not more tilt
 
-#### Simulator
-- [simulator.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/simulator.py)
+### Clock / Sim Time
 
-Responsibilities:
-- subscribes to UAV command topic
-- moves UAV in Gazebo
-- applies camera pan/tilt for detached camera mode
-- publishes grouped camera actual/error topics
+Current Gazebo sim launch now uses a guarded clock path:
+- Gazebo `/clock` -> ROS `/clock_raw`
+- [clock_guard.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/clock_guard.py) republishes monotonic ROS `/clock`
 
-### Current Odom Tuning Model
+Why:
+- Gazebo clock was observed to jump backward occasionally
+- that produced repeated `Detected jump back in time. Clearing TF buffer.` warnings
 
-Odom path is being simplified around a clean separation:
+Current expected runtime check:
+- `ros2 topic info /clock -v`
+- publisher count should be `1`
+- publisher should be `clock_guard`
 
-#### XY
-- proportional with cap
-- current law:
-  - `effective_follow_speed_mps = min(follow_speed_mps, follow_speed_gain * anchor_distance_error)`
+### Current Tuning Defaults
 
-Relevant params in [run_round_follow_defaults.yaml](/home/ruben/halmstad_ws/src/lrs_halmstad/config/run_round_follow_defaults.yaml):
-- `follow_speed_mps`
-- `follow_speed_gain`
-
-#### Body Yaw
-- proportional with cap
-- current law:
-  - `effective_yaw_rate_rad_s = min(follow_yaw_rate_rad_s, follow_yaw_rate_gain * abs(yaw_error))`
-
-Relevant params:
-- `follow_yaw_rate_rad_s`
-- `follow_yaw_rate_gain`
-
-Current defaults:
+From [run_round_follow_defaults.yaml](/home/ruben/halmstad_ws/src/lrs_halmstad/config/run_round_follow_defaults.yaml):
+- `d_target: 7.0`
+- `z_alt: 7.0`
 - `follow_speed_mps: 5.0`
 - `follow_speed_gain: 2.0`
-- `follow_yaw_rate_rad_s: 3.0`
-- `follow_yaw_rate_gain: 2.0`
+- `follow_yaw_rate_rad_s: 5.0`
+- `follow_yaw_rate_gain: 4.0`
+- `tick_hz: 10.0`
+- `yaw_deadband_rad: 0.01`
 
-### Debug Topics To Monitor
+Camera defaults:
+- `default_pan_deg: 0.0`
+- `default_tilt_deg: 0.0`
+- `pan_enable: false`
+- `tilt_enable: true`
 
-Grouped follow topics:
-- `/<uav>/follow/target/*`
-- `/<uav>/follow/actual/*`
-- `/<uav>/follow/error/*`
+### Debug / Verification
 
-Grouped camera topics:
-- `/<uav>/camera/target/*`
-- `/<uav>/camera/actual/*`
-- `/<uav>/camera/error/*`
+Useful checks:
+- `/dji0/follow/target/*`
+- `/dji0/follow/actual/*`
+- `/dji0/follow/error/*`
+- `/dji0/follow/debug/*`
+- `/dji0/camera/target/*`
+- `/dji0/camera/actual/*`
+- `/dji0/camera/error/*`
 
-Important examples for `dji0`:
-- `/dji0/follow/error/anchor_distance_m`
-- `/dji0/follow/error/anchor_along_m`
-- `/dji0/follow/error/anchor_cross_m`
-- `/dji0/follow/error/yaw_rad`
-- `/dji0/follow/debug/yaw_target_raw_rad`
-- `/dji0/follow/debug/yaw_target_unwrapped_rad`
-- `/dji0/follow/debug/yaw_actual_unwrapped_rad`
-- `/dji0/follow/debug/yaw_error_raw_rad`
-- `/dji0/follow/debug/yaw_wrap_correction_rad`
-- `/dji0/follow/debug/yaw_wrap_active`
-- `/dji0/follow/debug/yaw_step_limit_rad`
-- `/dji0/follow/debug/yaw_cmd_delta_rad`
-- `/dji0/follow/debug/yaw_mode`
-- `/dji0/camera/target/look_at_point`
-- `/dji0/camera/target/world_yaw_rad`
-- `/dji0/camera/actual/world_yaw_rad`
-- `/dji0/camera/error/world_yaw_rad`
+Pose-source validation:
+- compare `/platform/odom`, `/platform/odom/filtered`, and `/amcl_pose` in `map`
+- use this if follow starts looking correct numerically but drifts visually again
 
-Legacy/noisy topics were muted by default:
-- `/coord/events`
-- `/coord/follow_dist_cmd`
-- `/coord/follow_tracking_error_cmd`
-- `/dji0/debug_camera_pose`
-- `/dji0/debug_yaw`
+Manual checks:
+- `ros2 topic echo /a201_0000/platform/odom`
+- `ros2 topic echo /a201_0000/platform/odom/filtered`
+- `ros2 topic echo /a201_0000/amcl_pose`
+- `ros2 topic echo /dji0/follow/debug/yaw_mode`
 
-### Spawn / Camera Model Work
+### Remaining Limitation
 
-Detached camera sensor-frame offsets were exposed through spawn:
-- `sensor_roll_deg:=...`
-- `sensor_pitch_deg:=...`
-- `sensor_yaw_deg:=...`
+Current remaining camera limitation:
+- with pan disabled, the attached camera follows UAV body yaw only in the horizontal plane
+- this means the UGV can still be slightly off-center left/right even when the tracking path itself is now correct
 
-Path:
-- [run_spawn_uav.sh](/home/ruben/halmstad_ws/run_spawn_uav.sh)
-- [spawn_uav_1to1.launch.py](/home/ruben/halmstad_ws/src/lrs_halmstad/launch/spawn_uav_1to1.launch.py)
-- [spawn_gimbal.launch.py](/home/ruben/halmstad_ws/src/lrs_halmstad/launch/spawn_gimbal.launch.py)
-- [generate_sdf.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/generate_sdf.py)
-- [lrs_camera_gimbal.sdf.xacro](/home/ruben/halmstad_ws/src/lrs_halmstad/xacro/lrs_camera_gimbal.sdf.xacro)
+Most likely next task:
+- improve horizontal framing while keeping the attached camera baseline
+- preferred directions are attached-gimbal pan if available, or image-space feedback
+- more tilt tuning will only affect vertical framing
 
-The typing bug in `generate_sdf.py` for `camera_sensor_*_deg` was already fixed:
-- integer or float launch args now work
+Things that should not be "fixed back":
+- do not switch follow back to raw `/platform/odom` or `/platform/odom/filtered`
+- do not remove `clock_guard` unless the upstream Gazebo clock issue is proven fixed
+- do not pitch the whole UAV body to change camera look angle; use mount pitch and gimbal tilt instead
 
-### Removed / Simplified
-
-Removed from active follow architecture:
-- scripted UGV backend from active 1-to-1/follow path
-- `run_round_motion.sh`
-- `run_round_motion.launch.py`
-- `run_sweep_motion.launch.py`
-- `run_sweep_motion.yaml`
-
-Current UGV modes:
-- `nav2`
-- `external`
-
-### Main Remaining Problem
-
-The remaining issue is:
-- after sharp turns, the UAV body yaw still seems to overshoot / drift
-- visually, the UAV can stop centering the UGV after turning
-
-Important findings already established:
-- some earlier “good” debug values were from self-consistent commanded camera state, not independent Gazebo sensor truth
-- `look_at_point` matched UGV odom
-- camera target/actual world yaw often matched
-- image could still look wrong
-- pan/body-yaw coupling was suspected, so pan was disabled again by default
-
-Current hypothesis:
-- the remaining problem is primarily in the body-yaw control path of `follow_uav_odom.py`
-- not in the basic UGV target point
-
-### Recommended Next Step
-
-Continue debugging only the odom path:
-- [follow_uav_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_uav_odom.py)
-
-Do not add more control layers until body yaw is proven stable.
-
-Suggested next checks:
-1. verify `pan_enable:=false` and `tilt_enable:=true` at runtime
-2. monitor:
-   - `/dji0/follow/error/yaw_rad`
-   - `/dji0/follow/error/anchor_cross_m`
-   - `/dji0/camera/error/world_yaw_rad`
-3. if overshoot remains, tune only:
-   - `follow_yaw_rate_rad_s`
-   - `follow_yaw_rate_gain`
+Local-only helpers:
+- `run_follow_yaw_debug.py` and `run_pose_source_debug.py` were useful during debugging
+- they are now intentionally ignored in git and should not be relied on as committed tooling
 
 ### Build State
 
-Recent builds passed after the latest changes:
+Recent builds passed:
 - `colcon build --packages-select lrs_halmstad`
 
 If a new chat continues from here, start by reading:
