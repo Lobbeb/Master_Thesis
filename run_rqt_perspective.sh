@@ -2,21 +2,60 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_PERSPECTIVE="$WS_ROOT/perspectives/monitor_UGVUAV_with_YOLO"
+PERSPECTIVE_DIR="$WS_ROOT/perspectives"
+DEFAULT_PERSPECTIVE="$PERSPECTIVE_DIR/monitor_UGVUAV_with_YOLO"
 PERSPECTIVE="${1:-$DEFAULT_PERSPECTIVE}"
+
+resolve_perspective() {
+  local candidate="$1"
+  local stem=""
+
+  if [ -f "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  if [ -f "$PERSPECTIVE_DIR/$candidate" ]; then
+    printf '%s\n' "$PERSPECTIVE_DIR/$candidate"
+    return 0
+  fi
+
+  stem="${candidate##*/}"
+  if [ -f "$PERSPECTIVE_DIR/$stem" ]; then
+    printf '%s\n' "$PERSPECTIVE_DIR/$stem"
+    return 0
+  fi
+
+  if [ -f "$PERSPECTIVE_DIR/${candidate}.perspective" ]; then
+    printf '%s\n' "$PERSPECTIVE_DIR/${candidate}.perspective"
+    return 0
+  fi
+
+  if [ -f "$PERSPECTIVE_DIR/${stem}.perspective" ]; then
+    printf '%s\n' "$PERSPECTIVE_DIR/${stem}.perspective"
+    return 0
+  fi
+
+  return 1
+}
+
+print_available() {
+  echo "Available perspectives in $PERSPECTIVE_DIR:" >&2
+  find "$PERSPECTIVE_DIR" -maxdepth 1 -type f -printf '  %f\n' | sort >&2
+}
 
 if [ "$#" -gt 0 ]; then
   shift
 fi
 
-if [[ "$PERSPECTIVE" != /* ]]; then
-  if [ -f "$WS_ROOT/perspectives/$PERSPECTIVE" ]; then
-    PERSPECTIVE="$WS_ROOT/perspectives/$PERSPECTIVE"
-  fi
+if [ "$PERSPECTIVE" = "list" ] || [ "$PERSPECTIVE" = "--list" ]; then
+  print_available
+  exit 0
 fi
 
-if [ ! -f "$PERSPECTIVE" ]; then
+if ! PERSPECTIVE="$(resolve_perspective "$PERSPECTIVE")"; then
   echo "Perspective file not found: $PERSPECTIVE" >&2
+  print_available
   exit 1
 fi
 

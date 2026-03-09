@@ -79,7 +79,7 @@ class SimDatasetCapture(Node):
         self.declare_parameter("camera_topic", "")
         self.declare_parameter("camera_info_topic", "")
         self.declare_parameter("camera_pose_topic", "")
-        self.declare_parameter("target_pose_topic", "/a201_0000/platform/odom")
+        self.declare_parameter("target_pose_topic", "/a201_0000/amcl_pose_odom")
         self.declare_parameter("output_dir", "datasets/warehouse_auto")
         self.declare_parameter("dataset_name", "warehouse_auto")
         self.declare_parameter("class_id", 0)

@@ -87,7 +87,7 @@ camera_tracker:
     default_tilt_deg: -45.0    # Fallback tilt command when tracking is disabled or stale.
     pan_enable: true          # Publish tracked pan commands instead of holding default_pan_deg.
     tilt_enable: true        # Publish tracked tilt commands instead of holding default_tilt_deg.
-    tilt_deadband_deg: 1.0  # DONT TOUCH! Hold the previous tilt if the target changes less than this.
+    tilt_deadband_deg: 0.5  # DONT TOUCH! Hold the previous tilt if the target changes less than this.
     pose_timeout_s: 3.0    # Treat leader/UAV pose data as stale after this many seconds.
     tick_hz: 20.0         # Camera pan/tilt update rate.
 

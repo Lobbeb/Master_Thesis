@@ -10,6 +10,24 @@
   reliability: reliable
   durability: volatile
 
+/a201_0000/platform/odom/filtered:
+  history: keep_last
+  depth: 50
+  reliability: reliable
+  durability: volatile
+
+/a201_0000/amcl_pose:
+  history: keep_last
+  depth: 10
+  reliability: reliable
+  durability: transient_local
+
+/a201_0000/amcl_pose_odom:
+  history: keep_last
+  depth: 50
+  reliability: reliable
+  durability: volatile
+
 /a201_0000/cmd_vel:
   history: keep_last
   depth: 10

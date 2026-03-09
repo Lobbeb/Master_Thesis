@@ -36,10 +36,12 @@ Relevant files:
 - [pose_cov_to_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/pose_cov_to_odom.py)
 - [follow_uav_odom.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/follow_uav_odom.py)
 - [camera_tracker.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/camera_tracker.py)
+- [sim_dataset_capture.py](/home/ruben/halmstad_ws/src/lrs_halmstad/lrs_halmstad/sim_dataset_capture.py)
 
 Important hindsight:
 - the long yaw/turn debugging path was misleading because the debug topics were internally self-consistent while the leader truth source itself was drifting
 - if a future regression again looks like "numbers are fine but the image drifts", validate the pose source against AMCL before retuning yaw math
+- the same lesson applies to dataset capture: target geometry must use `/<ugv>/amcl_pose_odom`, not raw `/platform/odom`
 
 ### Camera Baseline
 

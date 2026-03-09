@@ -675,8 +675,15 @@ def main(args=None) -> None:
         node.cancel_active_goal()
         rc = 130
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
     raise SystemExit(rc)
 
 

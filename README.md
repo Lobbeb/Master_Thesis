@@ -11,6 +11,17 @@ Current tested baseline:
 4. `./run_nav2.sh`
 5. `./run_1to1_follow.sh warehouse`
 
+Recommended tmux workflow:
+- start the full stack with `./run_tmux_1to1_follow.sh warehouse`
+- current default tmux layout is panes:
+  - row 1: `gazebo | spawn`
+  - row 2: `localization | nav2`
+  - row 3: `follow`
+- current default delays:
+  - `gui:=false` -> `spawn=9`, `localization/nav2/follow=10`
+  - `gui:=true` -> `spawn=7`, `localization/nav2/follow=8`
+- stop the tmux-managed stack with `./stop_tmux_1to1_follow.sh warehouse`
+
 Current important notes:
 - the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
 - detached camera mode is the current default

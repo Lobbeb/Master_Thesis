@@ -5,6 +5,17 @@ Default tested path: `warehouse`.
 Assumption:
 - you already start in `~/halmstad_ws`
 
+Recommended tmux workflow:
+- start with `./run_tmux_1to1_follow.sh warehouse`
+- stop with `./stop_tmux_1to1_follow.sh warehouse`
+- default tmux layout is panes:
+  - row 1: `gazebo | spawn`
+  - row 2: `localization | nav2`
+  - row 3: `follow`
+- current default delays:
+  - `gui:=false` -> `spawn=9`, `localization/nav2/follow=10`
+  - `gui:=true` -> `spawn=7`, `localization/nav2/follow=8`
+
 ## Start 1-to-1 Sim With Nav2 And AMCL Follow
 
 Run these in order in separate terminals:
@@ -49,6 +60,78 @@ If you want a different saved map:
 
 ```bash
 ./run_1to1_follow.sh warehouse
+```
+
+#### If you want the same stack started automatically in tmux, use:
+
+```bash
+./run_tmux_1to1_follow.sh warehouse
+```
+
+Default tmux layout is panes:
+- Gazebo
+- UAV spawn
+- localization
+- Nav2
+- follow
+
+Useful overrides:
+
+```bash
+./run_tmux_1to1_follow.sh warehouse gui:=false
+./run_tmux_1to1_follow.sh warehouse delay_s:=9
+./run_tmux_1to1_follow.sh warehouse layout:=windows
+./run_tmux_1to1_follow.sh warehouse attach:=false
+./run_tmux_1to1_follow.sh warehouse dry_run:=true
+```
+
+Default startup is staggered with short delays so the later launches do not all fire at the same instant.
+
+Default delays depend on `gui:=true|false`:
+- `gui:=false` uses `spawn=9` and `localization/nav2/follow=10`
+- `gui:=true` uses `spawn=7` and `localization/nav2/follow=8`
+
+If your machine is slower, increase the delay args:
+- `delay_s:=...`
+
+If you want separate tmux windows instead of the default panes:
+
+```bash
+./run_tmux_1to1_follow.sh warehouse layout:=windows
+```
+
+Alias:
+
+```bash
+./run_tmux_1to1_follow.sh warehouse panes:=true
+```
+
+Pane layout is:
+- row 1: Gazebo | spawn
+- row 2: localization | Nav2
+- row 3: follow
+
+To stop the tmux-managed stack cleanly, use:
+
+```bash
+./stop_tmux_1to1_follow.sh warehouse
+```
+
+This sends `Ctrl-c` in this order:
+- follow, localization, and Nav2 together
+- wait `2s`
+- Gazebo
+- spawn is expected to exit automatically when sim goes down
+
+Then it waits a few seconds, kills the tmux session, performs a safety cleanup pass for leftover Gazebo / launch processes, and clears stale helper state files under `/tmp/halmstad_ws`.
+
+Useful stop overrides:
+
+```bash
+./stop_tmux_1to1_follow.sh warehouse group_grace_s:=2
+./stop_tmux_1to1_follow.sh warehouse final_grace_s:=8
+./stop_tmux_1to1_follow.sh warehouse kill_session:=false
+./stop_tmux_1to1_follow.sh session:=halmstad-warehouse-1to1
 ```
 
 Current baseline:
@@ -134,6 +217,59 @@ ros2 param set /follow_uav z_alt 9.0
 
 Use `d_target` and `z_alt` only if you explicitly want to control horizontal distance and altitude separately.
 
+## Record Pose Alignment For AMCL Analysis
+
+Use this when you want to measure how raw `platform/odom` differs from the AMCL-derived pose during a real sim run.
+
+1. Start the normal sim stack:
+
+```bash
+./run_gazebo_sim.sh warehouse
+./run_spawn_uav.sh warehouse
+./run_localization.sh warehouse
+./run_nav2.sh
+./run_1to1_follow.sh warehouse
+```
+
+2. In one extra terminal, start recording:
+
+```bash
+./run_record_pose_alignment.sh
+```
+
+Default recorded topics:
+- `/clock`
+- `/<ugv>/platform/odom`
+- `/<ugv>/platform/odom/filtered`
+- `/<ugv>/amcl_pose`
+- `/<ugv>/amcl_pose_odom`
+- `/<ugv>/tf`
+- `/<ugv>/tf_static`
+- `/<uav>/pose`
+- `/<uav>/pose_cmd`
+- `/<uav>/camera/actual/center_pose`
+
+3. Let the UGV drive for a while, especially through turns and longer paths, then stop the recorder with `Ctrl-c`.
+
+4. Analyze the bag:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+python3 ./run_analyze_pose_alignment.py runs/pose_alignment/<bag_dir>
+```
+
+Example with CSV export:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+python3 ./run_analyze_pose_alignment.py runs/pose_alignment/<bag_dir> \
+  --csv runs/pose_alignment/alignment_report.csv
+```
+
+Read the result like this:
+- small rigid-fit residuals mean a single 2D correction might approximate the run
+- large rigid-fit residuals mean the correction is time-varying, so old dataset boxes are not safely recoverable with one static transform
+
 ## Capture Images For Datasets
 
 Do this while the follow stack is already running.
@@ -165,7 +301,12 @@ Current capture-topic baseline:
 - image topic default is `/<uav>/camera0/image_raw`
 - camera info default is `/<uav>/camera0/camera_info`
 - camera pose default is `/<uav>/camera/actual/center_pose`
+- target pose default is `/<ugv>/amcl_pose_odom`, not raw `/platform/odom`
 - older legacy `/<uav>/debug_camera_pose` is not published unless the simulator is started with legacy debug topics enabled
+
+Important:
+- dataset capture must use the AMCL-derived UGV pose topic for target geometry
+- older captures made against raw `/platform/odom` should be treated as mislabelled for training
 
 Examples:
 
