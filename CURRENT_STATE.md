@@ -110,8 +110,6 @@ Current Python package layout under `src/lrs_halmstad/lrs_halmstad`:
   - `world_names.py`
   - `paths.py`
 
-Compatibility shims remain at the old top-level module paths for now so launch files, tests, and older imports do not break during the migration.
-
 ### UGV / Nav2 State
 
 The validated UGV truth path is still:
@@ -367,8 +365,8 @@ Things that should not be "fixed back":
 ### Current Loose Ends
 
 Important current handoff note:
-- the package split is now implemented in-code, but only import/entrypoint compatibility shims preserve the legacy top-level module paths
-- do not remove those shims until every launch file, test, and helper import has been validated against the new package layout
+- the package split is now the only active module layout
+- the old top-level compatibility shims have been removed
 
 Validation state of the latest refactor:
 - `python3 -m py_compile` passed for the touched Python and launch files
