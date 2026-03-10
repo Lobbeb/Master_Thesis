@@ -8,7 +8,7 @@ import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 
-from lrs_halmstad.world_names import gazebo_world_name
+from lrs_halmstad.common.world_names import gazebo_world_name
 
 
 REQUIRED_SERVICES = [

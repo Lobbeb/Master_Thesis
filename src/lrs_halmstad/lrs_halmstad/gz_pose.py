@@ -11,7 +11,7 @@ from ros_gz_interfaces.srv import SetEntityPose
 from geometry_msgs.msg import Pose, Point, Quaternion
 from std_msgs.msg import Header
 
-from lrs_halmstad.world_names import gazebo_world_name
+from lrs_halmstad.common.world_names import gazebo_world_name
 
 
 @dataclass

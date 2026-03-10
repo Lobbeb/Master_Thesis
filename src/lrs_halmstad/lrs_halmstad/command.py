@@ -12,7 +12,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from tf_transformations import quaternion_from_euler, quaternion_multiply
 from ros_gz_interfaces.srv import SetEntityPose
 
-from lrs_halmstad.world_names import gazebo_world_name
+from lrs_halmstad.common.world_names import gazebo_world_name
 
 class GzCommand(Node):
     def __init__(self):    

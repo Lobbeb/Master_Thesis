@@ -76,6 +76,42 @@ Important separation:
 - `run_1to1_follow.sh` / `run_1to1_yolo.sh` start the runtime logic
 - nothing actually follows until the follow launch is running
 
+Current Python package layout under `src/lrs_halmstad/lrs_halmstad`:
+- `perception/`
+  - `leader_detector.py`
+  - `leader_tracker.py`
+  - `leader_estimator.py`
+  - shared helpers: `detection_protocol.py`, `yolo_common.py`
+- `follow/`
+  - `follow_uav.py`
+  - `follow_uav_odom.py`
+  - `camera_tracker.py`
+  - `follow_debug.py`
+  - `follow_math.py`
+- `sim/`
+  - `simulator.py`
+  - `controller.py`
+  - `clock_guard.py`
+  - `pose_cov_to_odom.py`
+  - `pose_cmd_to_odom.py`
+  - `gazebo_pose_tcp_bridge.py`
+- `nav/`
+  - `ugv_nav2_driver.py`
+  - `ugv_nav2_goal_tester.py`
+  - `ugv_motion_profile.py`
+- `dataset/`
+  - `sim_dataset_capture.py`
+  - `make_obb.py`
+  - `sync_check.py`
+- `tools/`
+  - `follow_control.py`
+  - `follow_debug_cli.py`
+- `common/`
+  - `world_names.py`
+  - `paths.py`
+
+Compatibility shims remain at the old top-level module paths for now so launch files, tests, and older imports do not break during the migration.
+
 ### UGV / Nav2 State
 
 The validated UGV truth path is still:
@@ -91,10 +127,10 @@ Important interpretation:
 
 Current relevant files:
 - `src/lrs_halmstad/launch/run_follow_motion.launch.py`
-- `src/lrs_halmstad/lrs_halmstad/pose_cov_to_odom.py`
-- `src/lrs_halmstad/lrs_halmstad/follow_uav_odom.py`
-- `src/lrs_halmstad/lrs_halmstad/ugv_nav2_driver.py`
-- `src/lrs_halmstad/lrs_halmstad/sim_dataset_capture.py`
+- `src/lrs_halmstad/lrs_halmstad/sim/pose_cov_to_odom.py`
+- `src/lrs_halmstad/lrs_halmstad/follow/follow_uav_odom.py`
+- `src/lrs_halmstad/lrs_halmstad/nav/ugv_nav2_driver.py`
+- `src/lrs_halmstad/lrs_halmstad/dataset/sim_dataset_capture.py`
 
 Clearpath path:
 - Gazebo sim, localization, Nav2, and SLAM now use the workspace Clearpath copy:
@@ -106,15 +142,15 @@ Clearpath path:
 This is the biggest structural change from earlier in the project.
 
 Current active perception architecture:
-- `leader_detector.py`
+- `perception/leader_detector.py`
   - plain prediction node
   - runs a model on camera images
   - publishes the best detection to `/coord/leader_detection`
-- `leader_tracker.py`
+- `perception/leader_tracker.py`
   - separate Ultralytics `track()` node
   - uses tracker configs from `src/lrs_halmstad/config/trackers`
   - also publishes tracked detections to `/coord/leader_detection`
-- `leader_estimator.py`
+- `perception/leader_estimator.py`
   - estimator-only node
   - consumes `/coord/leader_detection`
   - projects detection into world pose
@@ -122,7 +158,7 @@ Current active perception architecture:
   - publishes `/coord/leader_estimate`, status, fault, debug image, and optional error-to-truth
 
 Important consequence:
-- `leader_estimator.py` is no longer the predictor/tracker brain
+- `perception/leader_estimator.py` is no longer the predictor/tracker brain
 - the prediction backend is now swappable
 - detector and tracker are separate runtime choices
 
@@ -266,6 +302,7 @@ Tracker:
 
 `run_follow_control.sh`
 - live tuning helper for follow parameters
+- wrapper now resolves the installed `run_follow_control` entrypoint from `lrs_halmstad.tools.follow_control`
 - current useful modes:
   - default keyboard mode for `d_target` / `z_alt`
   - `--mode params`
@@ -274,6 +311,7 @@ Tracker:
 
 `run_follow_debug.sh`
 - runtime analyzer for follow/camera behavior
+- wrapper now resolves the installed `run_follow_debug` entrypoint from `lrs_halmstad.tools.follow_debug_cli`
 - logs under:
   - `debug_logs/follow_debug/`
 - useful for:
@@ -289,7 +327,8 @@ Current rule:
 - `run_capture_dataset.sh` already enforces this
 
 Current dataset additions:
-- `run_dataset_make_obb.py`
+- `run_dataset_make_obb.sh`
+  - wrapper for installed `run_dataset_make_obb` from `lrs_halmstad.dataset.make_obb`
   - creates `labels_obb/` from saved metadata/projected points
 - current generated OBB label dirs:
   - `datasets/warehouse_v1/run1/labels_obb`
@@ -328,12 +367,14 @@ Things that should not be "fixed back":
 ### Current Loose Ends
 
 Important current handoff note:
-- `leader_tracker.py` exists and is wired into launch/setup, but it is currently a new file and must be added to git when committing
+- the package split is now implemented in-code, but only import/entrypoint compatibility shims preserve the legacy top-level module paths
+- do not remove those shims until every launch file, test, and helper import has been validated against the new package layout
 
 Validation state of the latest refactor:
 - `python3 -m py_compile` passed for the touched Python and launch files
 - `bash -n` passed for the touched shell wrappers
-- a full end-to-end ROS/Gazebo verification was **not** run after the latest detector/tracker/estimator split
+- `colcon build --symlink-install --packages-select lrs_halmstad` passed after the package split
+- a full end-to-end ROS/Gazebo verification was **not** run after the package split
 
 ### Build / Validation State
 

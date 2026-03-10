@@ -1,7 +1,7 @@
 import math
 
-from lrs_halmstad.camera_tracker import apply_deadband_command, should_prefer_command_pose
-from lrs_halmstad.follow_math import compute_camera_tilt_deg, compute_leader_look_target
+from lrs_halmstad.follow.camera_tracker import apply_deadband_command, should_prefer_command_pose
+from lrs_halmstad.follow.follow_math import compute_camera_tilt_deg, compute_leader_look_target
 
 
 def test_should_prefer_fresh_command_pose_when_newer_than_actual():

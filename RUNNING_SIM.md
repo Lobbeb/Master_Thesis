@@ -16,8 +16,8 @@ Recommended tmux workflow:
   - row 2: `localization | nav2`
   - row 3: `follow`
 - current default delays:
-  - `gui:=false` -> `spawn=9`, `localization/nav2=11`, `follow=13`
-  - `gui:=true` -> `spawn=7`, `localization/nav2=9`, `follow=11`
+  - `gui:=false` -> `spawn=9`, `localization/nav2=11`, `follow=15`
+  - `gui:=true` -> `spawn=7`, `localization/nav2=9`, `follow=13`
 
 ## Start 1-to-1 Sim With Nav2 And AMCL Follow
 
@@ -100,8 +100,8 @@ Useful overrides:
 Default startup is staggered with short delays so the later launches do not all fire at the same instant.
 
 Default delays depend on `gui:=true|false`:
-- `gui:=false` uses `spawn=9`, `localization/nav2=11`, and `follow=13`
-- `gui:=true` uses `spawn=7`, `localization/nav2=9`, and `follow=11`
+- `gui:=false` uses `spawn=9`, `localization/nav2=11`, and `follow=15`
+- `gui:=true` uses `spawn=7`, `localization/nav2=9`, and `follow=13`
 
 If your machine is slower, increase the delay args:
 - `delay_s:=...`
@@ -152,7 +152,7 @@ Useful stop overrides:
 
 Current baseline:
 - this odom-follow path now uses `/<ugv>/amcl_pose_odom`, not raw `/platform/odom`
-- `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose` by [pose_cov_to_odom.py](src/lrs_halmstad/lrs_halmstad/pose_cov_to_odom.py)
+- `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose` by [pose_cov_to_odom.py](src/lrs_halmstad/lrs_halmstad/sim/pose_cov_to_odom.py)
 - launch `leader_odom_topic` / `ugv_odom_topic` defaults are intentionally pointed at that AMCL-derived topic
 - current UAV camera mode is detached: `uav_camera_mode:=detached_model`
 - current camera defaults are `pan_enable: true` and `tilt_enable: true`
@@ -177,7 +177,7 @@ Important:
 - the wrapper alias also accepts `camera:=attached`
 
 Important runtime note:
-- Gazebo sim time is guarded through [clock_guard.py](src/lrs_halmstad/lrs_halmstad/clock_guard.py)
+- Gazebo sim time is guarded through [clock_guard.py](src/lrs_halmstad/lrs_halmstad/sim/clock_guard.py)
 - expected `/clock` publisher is `clock_guard`
 - if Gazebo is restarted or the world is reset, restart localization, Nav2, and follow
 
@@ -405,7 +405,7 @@ This subscribes to the follow, estimator, and camera topics and prints an interp
 - suspicious motion while estimator state is `NO_DET` / `REJECT`
 - logs are also saved by default under `debug_logs/follow_debug/`
 
-That default mode is now direct manual UAV steering. If you want the old runtime `d_target` / `z_alt` tuning path instead, use:
+Default `run_follow_control.sh` mode is keyboard tuning for `d_target` and `z_alt`. If you want the same parameter path explicitly, use:
 
 ```bash
 ./run_follow_control.sh --mode params

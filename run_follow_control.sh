@@ -8,4 +8,4 @@ source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/install/setup.bash"
 set -u
 
-exec python3 "$WS_ROOT/src/lrs_halmstad/lrs_halmstad/run_follow_control.py" "$@"
+exec ros2 run lrs_halmstad run_follow_control "$@"

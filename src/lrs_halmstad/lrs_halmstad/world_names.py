@@ -1,11 +1,3 @@
-from __future__ import annotations
+"""Compatibility shim for the moved common.world_names module."""
 
-
-WORLD_NAME_ALIASES = {
-    "construction": "office_construction",
-}
-
-
-def gazebo_world_name(world: str) -> str:
-    name = str(world).strip()
-    return WORLD_NAME_ALIASES.get(name, name)
+from lrs_halmstad.common.world_names import *  # noqa: F401,F403
