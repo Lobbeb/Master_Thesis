@@ -54,10 +54,45 @@ LOCALIZATION_PANE_ID=""
 NAV2_PANE_ID=""
 FOLLOW_PANE_ID=""
 
-if [ -f "$SESSION_STATE_FILE" ]; then
+load_state_file() {
+  local path="$1"
+  [ -f "$path" ] || return 1
   # State file is written by run_tmux_1to1.sh for robust shutdown targeting.
   # shellcheck disable=SC1090
-  source "$SESSION_STATE_FILE"
+  source "$path"
+  SESSION_SAFE="$(printf '%s' "$SESSION" | tr -c 'A-Za-z0-9_.-' '_')"
+  SESSION_STATE_FILE="$TMUX_STATE_DIR/${SESSION_SAFE}.env"
+  return 0
+}
+
+discover_fallback_state_file() {
+  local candidate=""
+  local matches=()
+
+  candidate="$TMUX_STATE_DIR/halmstad-1to1.env"
+  if [ -f "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  if [ -d "$TMUX_STATE_DIR" ]; then
+    while IFS= read -r candidate; do
+      matches+=("$candidate")
+    done < <(find "$TMUX_STATE_DIR" -maxdepth 1 -type f -name '*.env' | sort)
+  fi
+
+  if [ "${#matches[@]}" -eq 1 ]; then
+    printf '%s\n' "${matches[0]}"
+    return 0
+  fi
+  return 1
+}
+
+if ! load_state_file "$SESSION_STATE_FILE"; then
+  fallback_state_file="$(discover_fallback_state_file || true)"
+  if [ -n "${fallback_state_file:-}" ]; then
+    load_state_file "$fallback_state_file" || true
+  fi
 fi
 
 tmux_has_session() {
