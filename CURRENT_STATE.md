@@ -51,11 +51,8 @@ Top-level wrapper chain:
 
 Follow launch chain:
 - `scripts/run_1to1_follow.sh`
-  - launches `src/lrs_halmstad/launch/run_1to1_follow.launch.py`
-- `run_1to1_follow.launch.py`
-  - mostly forwards world/runtime arguments
-  - includes `src/lrs_halmstad/launch/run_follow_motion.launch.py`
-- `run_follow_motion.launch.py`
+  - launches `src/lrs_halmstad/launch/run_follow.launch.py`
+- `run_follow.launch.py`
   - starts the runtime nodes:
     - `uav_simulator`
     - `ugv_amcl_to_odom` (`pose_cov_to_odom`)
@@ -64,6 +61,10 @@ Follow launch chain:
     - `ugv_nav2_driver`
     - optional perception node: `leader_detector` or `leader_tracker`
     - optional `leader_estimator`
+- `run_follow_motion.launch.py`
+  - compatibility shim including `run_follow.launch.py`
+- `run_1to1_follow.launch.py`
+  - compatibility shim including `run_follow.launch.py`
 
 Spawn chain:
 - `scripts/run_spawn_uav.sh`
@@ -126,7 +127,7 @@ Important interpretation:
 - do not switch dataset capture back to raw `/platform/odom`
 
 Current relevant files:
-- `src/lrs_halmstad/launch/run_follow_motion.launch.py`
+- `src/lrs_halmstad/launch/run_follow.launch.py`
 - `src/lrs_halmstad/lrs_halmstad/sim/pose_cov_to_odom.py`
 - `src/lrs_halmstad/lrs_halmstad/follow/follow_uav_odom.py`
 - `src/lrs_halmstad/lrs_halmstad/nav/ugv_nav2_driver.py`
@@ -156,6 +157,7 @@ Current active perception architecture:
   - projects detection into world pose
   - may use OBB corners to derive heading
   - publishes `/coord/leader_estimate`, status, fault, debug image, and optional error-to-truth
+  - debug image overlay shows `est=(x,y,yaw)` and `err=(dx,dy,planar)` when an estimate exists
 
 Important consequence:
 - `perception/leader_estimator.py` is no longer the predictor/tracker brain
@@ -182,6 +184,17 @@ Current default behavior of `scripts/run_1to1_yolo.sh`:
 - `external_detection_enable:=true`
 - `external_detection_node:=detector`
 - `leader_range_mode:=ground`
+- shared YAML defaults are already quiet:
+  - `follow_uav.publish_debug_topics: false`
+  - `follow_uav.publish_pose_cmd_topics: false`
+  - `camera_tracker.publish_debug_topics: false`
+- important override nuance:
+  - `run_follow.launch.py` still declares `leader_actual_pose_enable`, `publish_follow_debug_topics`, `publish_pose_cmd_topics`, and `publish_camera_debug_topics` with launch-default `true`
+  - that means quiet mode is guaranteed by `scripts/run_1to1_yolo.sh`, not by a bare `ros2 launch lrs_halmstad run_follow.launch.py ...`
+- `leader_actual_pose_enable:=false`
+- `publish_follow_debug_topics:=false`
+- `publish_pose_cmd_topics:=false`
+- `publish_camera_debug_topics:=false`
 - if `use_estimate:=true` and not overridden:
   - `startup_reposition_enable:=true`
   - `uav_start_x:=-7.0`
@@ -195,6 +208,7 @@ Current test variants:
   - `./run.sh 1to1_yolo warehouse tracker:=true`
 - explicit tracker config:
   - `./run.sh 1to1_yolo warehouse tracker:=true tracker_config:=botsort.yaml`
+  - bare tracker config names resolve under `src/lrs_halmstad/config/trackers`
 - OBB weights:
   - `./run.sh 1to1_yolo warehouse obb:=true`
 
@@ -212,8 +226,8 @@ Normal odom follow:
 - `follow_uav_odom`
   - subscribes to `/<ugv>/amcl_pose_odom`
   - subscribes to `/<uav>/pose`
-  - publishes `/<uav>/pose_cmd`
-  - publishes `/<uav>/pose_cmd/odom`
+  - can publish `/<uav>/pose_cmd`
+  - can publish `/<uav>/pose_cmd/odom`
 
 Estimate follow:
 - `leader_detector` or `leader_tracker`
@@ -225,6 +239,8 @@ Estimate follow:
 - `follow_uav`
   - subscribes to `/coord/leader_estimate`
   - may also use shared AMCL heading if enabled
+  - can publish legacy `/<uav>/pose_cmd*` helper topics when enabled
+  - can publish `/<uav>/follow/{target,actual,error,debug}/*` topics when enabled
 
 Camera side:
 - `camera_tracker`
@@ -233,13 +249,40 @@ Camera side:
   - publishes:
     - `/<uav>/update_pan`
     - `/<uav>/update_tilt`
-    - `/<uav>/camera/target/*`
+    - optional `/<uav>/camera/target/*` debug topics
 
 Simulator side:
 - `uav_simulator`
-  - consumes `/<uav>/pose_cmd`
+  - consumes `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
   - consumes `/<uav>/update_pan` and `/<uav>/update_tilt`
   - publishes `/<uav>/pose` and follow/camera debug topics
+
+### Current Active Debug Target
+
+Current live bug in YOLO detect/track follow:
+- the UAV can detect or track the UGV correctly
+- then the camera can snap upward / near straight ahead
+- the UAV body moves forward briefly
+- then the camera points back down again
+
+Where to start:
+- `follow/follow_uav.py`
+- `follow/camera_tracker.py`
+- `sim/simulator.py`
+- `perception/leader_estimator.py`
+
+Relevant topics to inspect:
+- `/coord/leader_detection`
+- `/coord/leader_estimate`
+- `/coord/leader_estimate_status`
+- `/coord/leader_debug_image`
+- `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
+- `/<uav>/update_pan`
+- `/<uav>/update_tilt`
+
+Important current assumption:
+- this does not look like a missing detector/tracker wiring problem anymore
+- it looks more like a runtime interaction between estimate state, body yaw/XY commands, and camera pan/tilt commands
 
 ### Camera Baseline
 
@@ -294,9 +337,17 @@ Detector:
 
 Tracker:
 - `predict_hz: 20.0`
-- `tracker_config: botsort.yaml`
+- `tracker_config: bytetrack.yaml`
 - `conf_threshold: 0.12`
 - `iou_threshold: 0.45`
+
+Important effective-runtime nuance:
+- `run_follow.launch.py` still sets launch-default `tracker_config:=botsort.yaml`
+- `run_follow.launch.py` still sets launch-default `leader_actual_pose_enable:=true`
+- `run_follow.launch.py` still sets launch-default `publish_follow_debug_topics:=true`
+- `run_follow.launch.py` still sets launch-default `publish_pose_cmd_topics:=true`
+- `run_follow.launch.py` still sets launch-default `publish_camera_debug_topics:=true`
+- `scripts/run_1to1_yolo.sh` overrides those to a quieter runtime unless explicitly told otherwise
 
 ### Runtime Helpers
 
@@ -373,23 +424,31 @@ Things that should not be "fixed back":
 Important current handoff note:
 - the package split is now the only active module layout
 - the old top-level compatibility shims have been removed
+- the only compatibility shims still intentionally left are the launch-file shims:
+  - `run_follow_motion.launch.py`
+  - `run_1to1_follow.launch.py`
 
-Validation state of the latest refactor:
-- `python3 -m py_compile` passed for the touched Python and launch files
-- `bash -n` passed for the touched shell wrappers
-- `colcon build --symlink-install --packages-select lrs_halmstad` passed after the package split
-- a full end-to-end ROS/Gazebo verification was **not** run after the package split
+Current priority is not another refactor:
+- first debug the YOLO follow movement/camera snap behavior in live sim
+- only refactor again after the motion cause is understood
 
 ### Build / Validation State
 
-If testing the new perception split:
+Current validation baseline:
+1. `colcon build --symlink-install --packages-select lrs_halmstad` passes
+2. the wrapper/launch rename to `run_follow.launch.py` is in place
+3. the runtime stack starts successfully through the current wrapper flow
+4. detector/tracker follow still needs focused live debugging for the movement issue above
+
+Recommended next-session verification order:
 1. clean/rebuild `lrs_halmstad`
-2. restart the tmux stack
+2. restart the tmux stack in YOLO mode
 3. verify which external perception node is active:
    - `leader_detector`
    - or `leader_tracker`
 4. verify `/coord/leader_detection` is alive
 5. verify `leader_estimator` is consuming it
+6. inspect `/coord/leader_estimate_status`, `/coord/leader_debug_image`, and the UAV pan/tilt + body command topics during the camera-snap event
 
 If a new chat continues from here, start by reading:
 - this file

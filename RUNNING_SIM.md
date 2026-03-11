@@ -8,10 +8,13 @@ Assumption:
 - use `./run.sh <name>` and `./stop.sh <name>` from the workspace root
 - optional bash startup hook for completion:
   - `source "$HOME/halmstad_ws/scripts/bashrc_halmstad_ws.bash"`
+- quiet YOLO defaults in this file refer to `./run.sh 1to1_yolo ...`
+- a bare `ros2 launch lrs_halmstad run_follow.launch.py ...` still inherits the launch-argument defaults unless you override them explicitly
 
 Recommended tmux workflow:
 - start with `./run.sh tmux_1to1 warehouse`
 - start YOLO mode with `./run.sh tmux_1to1 warehouse mode:=yolo`
+- start YOLO tracker mode with `./run.sh tmux_1to1 warehouse mode:=yolo tracker:=true`
 - pass a custom YOLO weight with `./run.sh tmux_1to1 warehouse mode:=yolo weights:=yolo26v2.pt`
 - enable truth-assisted YOLO testing with `./run.sh tmux_1to1 warehouse mode:=yolo use_estimate:=false`
 - stop with `./stop.sh tmux_1to1 warehouse`
@@ -200,6 +203,14 @@ UAV camera: ``/dji0/camera0/image_raw``
 UGV camera: ``/a201_0000/sensors/camera_0/color/image``
 
 YOLO debug image: ``/coord/leader_debug_image``
+
+Overlay fields:
+- `perception=detector|tracker|none`
+- `track_id=<id|none>`
+- `est=(x,y,yaw)`
+- `err=(dx,dy,planar)`
+
+If truth comparison is disabled or stale, `err` shows `na`.
 
 
 Only use the YOLO debug image when you started the YOLO flow from the section below.
@@ -393,6 +404,18 @@ Then start the YOLO follow flow:
 ./run.sh 1to1_yolo warehouse
 ```
 
+Tracker variant:
+
+```bash
+./run.sh 1to1_yolo warehouse tracker:=true
+```
+
+Tracker variant with explicit config:
+
+```bash
+./run.sh 1to1_yolo warehouse tracker:=true tracker_config:=botsort.yaml
+```
+
 Live follow control works here too:
 
 ```bash
@@ -412,6 +435,12 @@ This subscribes to the follow, estimator, and camera topics and prints an interp
 - suspicious motion while estimator state is `NO_DET` / `REJECT`
 - logs are also saved by default under `debug_logs/follow_debug/`
 
+For YOLO mode, detailed follow-debug topics are now muted by default. Re-enable them if needed:
+
+```bash
+./run.sh 1to1_yolo warehouse publish_follow_debug_topics:=true publish_pose_cmd_topics:=true publish_camera_debug_topics:=true
+```
+
 Default `run.sh follow_control` mode is keyboard tuning for `d_target` and `z_alt`. If you want the same parameter path explicitly, use:
 
 ```bash
@@ -425,8 +454,30 @@ Default behavior:
 - through `scripts/run_1to1_yolo.sh`, that startup pose defaults to `uav_start_x:=-7.0` and `uav_start_z:=7.0` in non-solar worlds
 - the shared follow/camera fallback tilt baseline stays at `-45.0`
 - held-estimate reuse is disabled by default, so rejected/missing detections now surface directly as `REJECT` / `NO_DET` instead of `*_HOLD`
-- estimator error is still computed against `/<ugv>/amcl_pose_odom` by default
+- shared YAML defaults already mute:
+  - `follow_uav.publish_debug_topics`
+  - `follow_uav.publish_pose_cmd_topics`
+  - `camera_tracker.publish_debug_topics`
+- truth/error and legacy debug topics are muted by default in the YOLO wrapper:
+  - `leader_actual_pose_enable:=false`
+  - `publish_follow_debug_topics:=false`
+  - `publish_pose_cmd_topics:=false`
+  - `publish_camera_debug_topics:=false`
+- direct `ros2 launch lrs_halmstad run_follow.launch.py ...` does not inherit that quiet wrapper policy automatically
 - bare custom weight names resolve under `models/detection/mymodels/`
+
+Current live issue under investigation:
+- in detector/tracker mode, the UAV can detect/track correctly
+- then the camera can snap upward / near straight ahead
+- the UAV body surges forward briefly
+- then the camera points back down again
+
+First topics to watch during that event:
+- `/coord/leader_estimate_status`
+- `/coord/leader_debug_image`
+- `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
+- `/<uav>/update_pan`
+- `/<uav>/update_tilt`
 
 Truth-assisted test mode:
 
@@ -472,7 +523,7 @@ Estimate error topic:
 ros2 topic echo /coord/leader_estimate_error
 ```
 
-This topic is populated by default in the current YOLO path and is computed against `/<ugv>/amcl_pose_odom`. Disable it only if you explicitly pass `leader_actual_pose_enable:=false`.
+This topic is muted by default in the current YOLO path. Re-enable it with `leader_actual_pose_enable:=true` if you want estimate-vs-truth diagnostics against `/<ugv>/amcl_pose_odom`.
 
 Available YOLO models:
 
@@ -619,9 +670,9 @@ This creates:
   - maps to `tilt_enable:=true|false` for `camera_tracker`
 - `follow_yaw:=true|false`
   - enable or disable UAV body yaw following
-  - default is `false`
+  - default is `true`
 - extra forwarded launch arguments
-  - anything else is passed through to `run_1to1_follow.launch.py`
+  - anything else is passed through to `run_follow.launch.py`
 - common forwarded launch arguments:
   - `uav_name:=dji0`
   - `uav_camera_mode:=integrated_joint|detached_model`
@@ -673,7 +724,7 @@ This creates:
   - maps to `tilt_enable:=true|false` for `camera_tracker`
 - `follow_yaw:=true|false`
   - enable or disable UAV body yaw following
-  - default is `false`
+  - default is `true`
 - `camera_default_tilt_deg:=...`
   - forwarded through to launch if you want to override the shared fallback tilt
 - `target:=...`
@@ -682,8 +733,26 @@ This creates:
 - `use_estimate:=true|false`
   - default `true`: estimate-only YOLO follow path
   - `false`: truth-assisted test mode; still runs the estimator, but shares UGV pose into the follow/camera path
+- `leader_actual_pose_enable:=true|false`
+  - default `false` in `./run.sh 1to1_yolo`
+  - enable `/coord/leader_estimate_error` truth diagnostics
+- `publish_follow_debug_topics:=true|false`
+  - default `false` in `./run.sh 1to1_yolo`
+  - enable `/<uav>/follow/{target,actual,error,debug}/*`
+- `publish_pose_cmd_topics:=true|false`
+  - default `false` in `./run.sh 1to1_yolo`
+  - enable legacy `/<uav>/pose_cmd` and `/<uav>/pose_cmd/odom`
+- `publish_camera_debug_topics:=true|false`
+  - default `false` in `./run.sh 1to1_yolo`
+  - enable `/<uav>/camera/target/*`
+- `tracker:=true|false`
+  - default `false`
+  - `true` switches `external_detection_node:=tracker`
+- `tracker_config:=...`
+  - current default from `run_follow.launch.py` is `botsort.yaml`
+  - bare filenames resolve under `src/lrs_halmstad/config/trackers`
 - extra forwarded launch arguments
-  - anything else is passed through to `run_1to1_follow.launch.py`
+  - anything else is passed through to `run_follow.launch.py`
 
 
 ### `./run.sh capture_dataset`

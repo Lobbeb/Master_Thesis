@@ -162,6 +162,8 @@ class LeaderEstimator(Node):
         self.last_actual_leader_pose: Optional[Pose2D] = None
         self.last_actual_leader_pose_stamp: Optional[Time] = None
         self.last_estimate_pose: Optional[Pose2D] = None
+        self.last_estimate_stamp: Optional[Time] = None
+        self.last_estimate_track_id: Optional[int] = None
 
         self.last_estimate_error_dx_m: Optional[float] = None
         self.last_estimate_error_dy_m: Optional[float] = None
@@ -409,10 +411,29 @@ class LeaderEstimator(Node):
             return None
         return float(np.median(patch))
 
-    def _ground_range_from_pixel(self, det: Detection2D, cam: CameraModel) -> Optional[float]:
+    def _ground_projection_pixel(self, det: Detection2D) -> Tuple[float, float]:
+        if det.obb_corners is not None and len(det.obb_corners) == 4:
+            try:
+                ordered = self._order_quad(np.asarray(det.obb_corners, dtype=np.float64))
+                bottom_edge_idx = max(
+                    range(4),
+                    key=lambda idx: float(ordered[idx, 1] + ordered[(idx + 1) % 4, 1]),
+                )
+                p1 = ordered[bottom_edge_idx]
+                p2 = ordered[(bottom_edge_idx + 1) % 4]
+                return (0.5 * float(p1[0] + p2[0]), 0.5 * float(p1[1] + p2[1]))
+            except Exception:
+                pass
+        try:
+            x1, _, x2, y2 = det.bbox
+            return (0.5 * float(x1 + x2), float(y2))
+        except Exception:
+            return (float(det.u), float(det.v))
+
+    def _ground_range_from_pixel(self, u: float, v: float, cam: CameraModel) -> Optional[float]:
         assert self.uav_pose is not None
-        x_n = (det.u - cam.cx) / cam.fx
-        y_n = (det.v - cam.cy) / cam.fy
+        x_n = (u - cam.cx) / cam.fx
+        y_n = (v - cam.cy) / cam.fy
         pitch_img = math.atan2(y_n, math.sqrt(1.0 + x_n * x_n))
         cam_world_z = self.uav_pose.z + self.cam_z_offset_m
         dz = self.target_ground_z_m - cam_world_z
@@ -459,7 +480,11 @@ class LeaderEstimator(Node):
             cam_world_y + horiz_range * math.sin(self.uav_pose.yaw + bearing),
         )
 
-    def _obb_heading_from_corners(self, corners: Tuple[Tuple[float, float], ...], cam: CameraModel) -> Optional[float]:
+    def _obb_heading_from_corners(
+        self,
+        corners: Tuple[Tuple[float, float], ...],
+        cam: CameraModel,
+    ) -> Optional[float]:
         ordered = self._order_quad(np.asarray(corners, dtype=np.float64))
         edges = np.roll(ordered, -1, axis=0) - ordered
         lengths = np.linalg.norm(edges, axis=1)
@@ -485,12 +510,48 @@ class LeaderEstimator(Node):
         yaw_b = self._unwrap_angle_near(yaw_b, self.prev_heading_yaw)
         return yaw_a if abs(yaw_a - self.prev_heading_yaw) <= abs(yaw_b - self.prev_heading_yaw) else yaw_b
 
-    def _estimate_from_detection(self, det: Detection2D, cam: CameraModel) -> Tuple[Pose2D, str]:
+    def _ground_reject_reason(self, x: float, y: float, now: Time, track_id: Optional[int]) -> str:
+        if self.last_estimate_pose is None or self.last_estimate_stamp is None:
+            return "none"
+        age_s = max(0.0, (now - self.last_estimate_stamp).nanoseconds * 1e-9)
+        freshness_window_s = max(self.external_detection_timeout_s, self.image_timeout_s, self.uav_pose_timeout_s)
+        if age_s > freshness_window_s:
+            return "none"
+        if (
+            track_id is not None
+            and self.last_estimate_track_id is not None
+            and track_id != self.last_estimate_track_id
+        ):
+            return "none"
+        jump_m = math.hypot(x - self.last_estimate_pose.x, y - self.last_estimate_pose.y)
+        max_jump_m = 3.0 + 2.0 * age_s
+        if jump_m > max_jump_m:
+            return "ground_jump"
+        return "none"
+
+    def _estimate_from_detection(self, det: Detection2D, cam: CameraModel, now: Time) -> Tuple[Pose2D, str]:
         assert self.uav_pose is not None
-        x_n = (det.u - cam.cx) / cam.fx
-        bearing = self.cam_yaw_offset_rad - math.atan2(x_n, 1.0)
+        center_x_n = (det.u - cam.cx) / cam.fx
+        center_bearing = self.cam_yaw_offset_rad - math.atan2(center_x_n, 1.0)
         depth_range = self._depth_range_at(det)
-        ground_range = self._ground_range_from_pixel(det, cam)
+        ground_u: Optional[float] = None
+        ground_v: Optional[float] = None
+        ground_range: Optional[float] = None
+        ground_bearing: Optional[float] = None
+        reject_reason = "none"
+        cam_world_x, cam_world_y = self._cam_world_xy()
+        if self.range_mode in ("ground", "auto"):
+            ground_u, ground_v = self._ground_projection_pixel(det)
+            ground_x_n = (ground_u - cam.cx) / cam.fx
+            ground_bearing = self.cam_yaw_offset_rad - math.atan2(ground_x_n, 1.0)
+            ground_range = self._ground_range_from_pixel(ground_u, ground_v, cam)
+            if ground_range is not None and ground_bearing is not None:
+                ground_x = cam_world_x + ground_range * math.cos(self.uav_pose.yaw + ground_bearing)
+                ground_y = cam_world_y + ground_range * math.sin(self.uav_pose.yaw + ground_bearing)
+                reject_reason = self._ground_reject_reason(ground_x, ground_y, now, det.track_id)
+                if reject_reason != "none":
+                    ground_range = None
+                    ground_bearing = None
         if self.range_mode == "depth":
             if depth_range is None:
                 raise ValueError("depth_range_invalid")
@@ -498,7 +559,8 @@ class LeaderEstimator(Node):
             range_source = "depth"
         elif self.range_mode == "ground":
             if ground_range is None:
-                raise ValueError("ground_range_invalid")
+                self.last_reject_reason = reject_reason
+                raise ValueError(reject_reason if reject_reason != "none" else "ground_range_invalid")
             range_m = ground_range
             range_source = "ground"
         elif self.range_mode == "const":
@@ -515,7 +577,7 @@ class LeaderEstimator(Node):
                 range_m = self.constant_range_m
                 range_source = "const"
 
-        cam_world_x, cam_world_y = self._cam_world_xy()
+        bearing = ground_bearing if range_source == "ground" and ground_bearing is not None else center_bearing
         x = cam_world_x + range_m * math.cos(self.uav_pose.yaw + bearing)
         y = cam_world_y + range_m * math.sin(self.uav_pose.yaw + bearing)
 
@@ -536,10 +598,10 @@ class LeaderEstimator(Node):
         self.last_range_used_m = float(range_m)
         self.last_bearing_used_deg = math.degrees(bearing)
         self.last_heading_source = heading_source
-        self.last_reject_reason = "none"
+        self.last_reject_reason = reject_reason
         return Pose2D(x=x, y=y, z=self.target_ground_z_m, yaw=yaw), range_source
 
-    def _publish_estimate(self, pose: Pose2D, now: Time) -> None:
+    def _publish_estimate(self, pose: Pose2D, now: Time, track_id: Optional[int]) -> None:
         msg = PoseStamped()
         msg.header.stamp = now.to_msg()
         msg.header.frame_id = "map"
@@ -553,6 +615,8 @@ class LeaderEstimator(Node):
         msg.pose.orientation.w = qw
         self.pub.publish(msg)
         self.last_estimate_pose = pose
+        self.last_estimate_stamp = now
+        self.last_estimate_track_id = track_id
         self.prev_heading_yaw = pose.yaw
         self._publish_estimate_error(pose, now)
 
@@ -628,6 +692,12 @@ class LeaderEstimator(Node):
             return (0, 165, 255)
         return (0, 0, 255)
 
+    def _estimate_error_line(self) -> str:
+        err_dx = "na" if self.last_estimate_error_dx_m is None else f"{self.last_estimate_error_dx_m:.2f}"
+        err_dy = "na" if self.last_estimate_error_dy_m is None else f"{self.last_estimate_error_dy_m:.2f}"
+        err_planar = "na" if self.last_estimate_error_m is None else f"{self.last_estimate_error_m:.2f}"
+        return f"err=({err_dx},{err_dy},{err_planar})"
+
     def _publish_debug_image(self, state: str, det: Optional[Detection2D]) -> None:
         if not self.publish_debug_image or self.debug_image_pub is None or self.last_image_msg is None:
             return
@@ -653,6 +723,7 @@ class LeaderEstimator(Node):
                 ]
                 if self.last_estimate_pose is not None:
                     lines.append(f"est=({self.last_estimate_pose.x:.2f},{self.last_estimate_pose.y:.2f},{self.last_estimate_pose.yaw:.2f})")
+                    lines.append(self._estimate_error_line())
                 y = 20
                 for line in lines:
                     cv2.putText(out, line, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 3, cv2.LINE_AA)
@@ -668,6 +739,7 @@ class LeaderEstimator(Node):
         now = self.get_clock().now()
         det = self.last_external_det if self.external_detection_fresh(now) else None
         self.last_latency_ms = self._detector_age_ms(now)
+        self.last_reject_reason = "none"
         self.last_debug_state = "INIT"
         self.last_debug_det = det
 
@@ -710,7 +782,7 @@ class LeaderEstimator(Node):
             return
 
         try:
-            pose, _ = self._estimate_from_detection(det, self.camera_model)
+            pose, _ = self._estimate_from_detection(det, self.camera_model, now)
         except ValueError as exc:
             reason = str(exc) or "estimate_failed"
             self.last_heading_source = "none"
@@ -726,7 +798,7 @@ class LeaderEstimator(Node):
             self._publish_debug_image("STALE", det)
             return
 
-        self._publish_estimate(pose, now)
+        self._publish_estimate(pose, now, det.track_id)
         self.publish_status_msg(self._status_line("OK", "none", now))
         self.last_debug_state = "OK"
         self.last_debug_det = det

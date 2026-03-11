@@ -55,6 +55,25 @@ Important files and roles:
 General rule:
 - do not collapse separate concerns back into one giant file
 
+## Active Entry Points
+
+Current user-facing wrappers:
+- scripts live under `scripts/`
+- use `./run.sh <name>` and `./stop.sh <name>` from the workspace root
+
+Current follow launch naming:
+- `src/lrs_halmstad/launch/run_follow.launch.py`
+  - this is the real active follow launch graph
+- `run_follow_motion.launch.py`
+  - compatibility shim
+- `run_1to1_follow.launch.py`
+  - compatibility shim
+
+Important:
+- keep the wrapper interface stable unless explicitly asked to change it
+- do not document compatibility shims as the primary runtime path
+- if defaults differ between YAML and wrapper-passed launch args, document the effective runtime behavior, not just the YAML file
+
 ## Documentation Rules
 
 These two documents must stay current:
@@ -106,6 +125,33 @@ Do not make estimator logic control the vehicle directly.
 - estimate pose / heading
 - publish estimate outputs
 - stay independent of vehicle-control decisions
+
+## Active Debugging Target
+
+The current open issue is not the package split anymore.
+
+The next debugging focus is the live YOLO follow behavior:
+- in detector/tracker mode, the UAV can detect/track the UGV correctly
+- then the camera sometimes snaps upward / near straight ahead
+- the UAV body surges forward briefly
+- then the camera looks back down again
+
+Start investigation from:
+- `lrs_halmstad/follow/follow_uav.py`
+- `lrs_halmstad/follow/camera_tracker.py`
+- `lrs_halmstad/sim/simulator.py`
+- `lrs_halmstad/perception/leader_estimator.py`
+
+Relevant runtime topics:
+- `/coord/leader_detection`
+- `/coord/leader_estimate`
+- `/coord/leader_estimate_status`
+- `/coord/leader_debug_image`
+- `/<uav>/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
+- `/<uav>/update_pan`
+- `/<uav>/update_tilt`
+
+Do not start a new refactor before understanding that runtime behavior.
 
 ## Change Discipline
 

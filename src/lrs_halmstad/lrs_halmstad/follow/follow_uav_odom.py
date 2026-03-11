@@ -94,6 +94,8 @@ class FollowUavOdom(Node):
         self.declare_parameter("event_topic", "/coord/events")
         self.declare_parameter("publish_events", False)
         self.declare_parameter("publish_metrics", False)
+        self.declare_parameter("publish_debug_topics", True)
+        self.declare_parameter("publish_pose_cmd_topics", True)
         self.declare_parameter("metrics_prefix", "/coord")
         self.declare_parameter("camera_x_offset_m", 0.0)
         self.declare_parameter("camera_y_offset_m", 0.0)
@@ -137,6 +139,8 @@ class FollowUavOdom(Node):
         self.event_topic = str(self.get_parameter("event_topic").value)
         self.publish_events = coerce_bool(self.get_parameter("publish_events").value)
         self.publish_metrics = coerce_bool(self.get_parameter("publish_metrics").value)
+        self.publish_debug_topics = coerce_bool(self.get_parameter("publish_debug_topics").value)
+        self.publish_pose_cmd_topics = coerce_bool(self.get_parameter("publish_pose_cmd_topics").value)
         self.metrics_prefix = str(self.get_parameter("metrics_prefix").value).rstrip("/") or "/coord"
         self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
         self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
@@ -211,8 +215,16 @@ class FollowUavOdom(Node):
             10,
         )
 
-        self.pose_pub = self.create_publisher(PoseStamped, f"/{self.uav_name}/pose_cmd", 10)
-        self.pose_odom_pub = self.create_publisher(Odometry, f"/{self.uav_name}/pose_cmd/odom", 10)
+        self.pose_pub = (
+            self.create_publisher(PoseStamped, f"/{self.uav_name}/pose_cmd", 10)
+            if self.publish_pose_cmd_topics
+            else None
+        )
+        self.pose_odom_pub = (
+            self.create_publisher(Odometry, f"/{self.uav_name}/pose_cmd/odom", 10)
+            if self.publish_pose_cmd_topics
+            else None
+        )
         self.uav_cmd_pub = self.create_publisher(
             Joy,
             f"/{self.uav_name}/psdk_ros2/flight_control_setpoint_ENUposition_yaw",
@@ -233,7 +245,11 @@ class FollowUavOdom(Node):
             if self.publish_metrics
             else None
         )
-        self.debug_pubs = FollowDebugPublishers(self, self.uav_name)
+        self.debug_pubs = (
+            FollowDebugPublishers(self, self.uav_name)
+            if self.publish_debug_topics
+            else None
+        )
 
         self.timer = self.create_timer(1.0 / self.tick_hz, self.on_tick)
         self.add_on_set_parameters_callback(self._on_set_parameters)
@@ -250,6 +266,7 @@ class FollowUavOdom(Node):
             f"follow_yaw_rate_rad_s={self.follow_yaw_rate_rad_s}, "
             f"follow_yaw_rate_gain={self.follow_yaw_rate_gain}, "
             f"smooth_alpha={self.smooth_alpha}, "
+            f"publish_debug_topics={self.publish_debug_topics}, publish_pose_cmd_topics={self.publish_pose_cmd_topics}, "
             f"camera_offset_m=({self.camera_x_offset_m}, {self.camera_y_offset_m}, {self.camera_z_offset_m}), "
             f"leader_look_target_xy_m=({self.leader_look_target_x_m}, {self.leader_look_target_y_m}), "
             f"startup_nudge={'on' if self.startup_nudge_pending else 'off'}"
@@ -432,6 +449,8 @@ class FollowUavOdom(Node):
         self.uav_cmd_pub.publish(msg)
 
     def publish_pose_cmd(self, x: float, y: float, z: float, yaw_rad: float) -> None:
+        if self.pose_pub is None:
+            return
         ps = PoseStamped()
         ps.header.stamp = self.get_clock().now().to_msg()
         ps.header.frame_id = "map"
@@ -446,6 +465,9 @@ class FollowUavOdom(Node):
         self.pose_pub.publish(ps)
 
     def publish_pose_cmd_odom(self, x: float, y: float, z: float, yaw_rad: float) -> None:
+        if self.pose_odom_pub is None:
+            self.uav_cmd_z = float(z)
+            return
         odom = Odometry()
         odom.header.stamp = self.get_clock().now().to_msg()
         odom.header.frame_id = "map"
@@ -564,6 +586,8 @@ class FollowUavOdom(Node):
         yaw_cmd_delta: float,
         yaw_mode: str,
     ) -> None:
+        if self.debug_pubs is None:
+            return
         now_msg = self.get_clock().now().to_msg()
         anchor_distance_error, anchor_along_error, anchor_cross_error = self._anchor_errors(anchor_target, current_uav)
         self.debug_pubs.publish(

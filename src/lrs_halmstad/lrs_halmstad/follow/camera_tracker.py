@@ -91,6 +91,7 @@ class CameraTracker(Node):
         self.declare_parameter("default_tilt_deg", 0.0)
         self.declare_parameter("tilt_enable", True)
         self.declare_parameter("tilt_deadband_deg", 0.0)
+        self.declare_parameter("publish_debug_topics", True)
 
         self.uav_name = str(self.get_parameter("uav_name").value)
         self.leader_input_type = str(self.get_parameter("leader_input_type").value).strip().lower()
@@ -115,6 +116,7 @@ class CameraTracker(Node):
         self.default_tilt_deg = float(self.get_parameter("default_tilt_deg").value)
         self.tilt_enable = coerce_bool(self.get_parameter("tilt_enable").value)
         self.tilt_deadband_deg = max(0.0, float(self.get_parameter("tilt_deadband_deg").value))
+        self.publish_debug_topics = coerce_bool(self.get_parameter("publish_debug_topics").value)
 
         if self.leader_input_type == "estimate":
             self.leader_input_type = "pose"
@@ -181,20 +183,32 @@ class CameraTracker(Node):
             self.on_uav_pose_cmd,
             10,
         )
-        self.target_camera_pose_pub = self.create_publisher(
-            PoseStamped,
-            f"/{self.uav_name}/camera/target/center_pose",
-            10,
+        self.target_camera_pose_pub = (
+            self.create_publisher(
+                PoseStamped,
+                f"/{self.uav_name}/camera/target/center_pose",
+                10,
+            )
+            if self.publish_debug_topics
+            else None
         )
-        self.target_look_at_point_pub = self.create_publisher(
-            PointStamped,
-            f"/{self.uav_name}/camera/target/look_at_point",
-            10,
+        self.target_look_at_point_pub = (
+            self.create_publisher(
+                PointStamped,
+                f"/{self.uav_name}/camera/target/look_at_point",
+                10,
+            )
+            if self.publish_debug_topics
+            else None
         )
-        self.target_camera_world_yaw_pub = self.create_publisher(
-            Float32,
-            f"/{self.uav_name}/camera/target/world_yaw_rad",
-            10,
+        self.target_camera_world_yaw_pub = (
+            self.create_publisher(
+                Float32,
+                f"/{self.uav_name}/camera/target/world_yaw_rad",
+                10,
+            )
+            if self.publish_debug_topics
+            else None
         )
         self.tilt_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_tilt", 10)
         self.pan_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_pan", 10)
@@ -204,6 +218,7 @@ class CameraTracker(Node):
             f"pan_enable={self.pan_enable}, default_pan_deg={self.default_pan_deg}, "
             f"tilt_enable={self.tilt_enable}, default_tilt_deg={self.default_tilt_deg}, "
             f"tilt_deadband_deg={self.tilt_deadband_deg}, "
+            f"publish_debug_topics={self.publish_debug_topics}, "
             f"leader_look_target_m=({self.leader_look_target_x_m}, "
             f"{self.leader_look_target_y_m}, {self.camera_look_target_z_m}), "
             f"camera_mode={self.uav_camera_mode}, camera_mount_pitch_deg={self.camera_mount_pitch_deg}, "
@@ -407,6 +422,12 @@ class CameraTracker(Node):
         leader_pose: Pose2D,
         leader_z: float,
     ) -> None:
+        if (
+            self.target_camera_pose_pub is None
+            or self.target_look_at_point_pub is None
+            or self.target_camera_world_yaw_pub is None
+        ):
+            return
         camera_x, camera_y = camera_xy_from_uav_pose(
             uav_pose.x,
             uav_pose.y,

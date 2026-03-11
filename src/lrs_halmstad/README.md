@@ -2,6 +2,10 @@
 
 Reference for the current 1-to-1 Gazebo/ROS 2 workflow.
 
+Current real follow launch:
+- `run_follow.launch.py`
+- `run_follow_motion.launch.py` and `run_1to1_follow.launch.py` are compatibility shims only
+
 ## Topic contract
 
 ### Husky UGV (`a201_0000`)
@@ -22,8 +26,17 @@ Reference for the current 1-to-1 Gazebo/ROS 2 workflow.
 - `/dji0/update_pan`
 - `/dji0/update_tilt`
 - `/dji0/pose`
+
+Legacy optional debug topics:
 - `/dji0/pose_cmd`
 - `/dji0/pose_cmd/odom`
+
+Perception / estimate topics:
+- `/coord/leader_detection`
+- `/coord/leader_estimate`
+- `/coord/leader_estimate_status`
+- `/coord/leader_estimate_fault`
+- `/coord/leader_debug_image`
 
 ## Recommended 1-to-1 bring-up
 
@@ -53,18 +66,22 @@ This starts the UAV simulator adapter plus the follow stack for `dji0` and `a201
 cd <workspace_root>
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
-ros2 launch lrs_halmstad run_1to1_follow.launch.py
+ros2 launch lrs_halmstad run_follow.launch.py
 ```
 
 Useful overrides:
 
 ```bash
-ros2 launch lrs_halmstad run_1to1_follow.launch.py leader_mode:=odom
-ros2 launch lrs_halmstad run_1to1_follow.launch.py leader_mode:=estimate start_leader_estimator:=true
-ros2 launch lrs_halmstad run_1to1_follow.launch.py leader_mode:=estimate start_leader_estimator:=true leader_range_mode:=ground yolo_weights:=detection/yolo26/yolo26l.pt
-ros2 launch lrs_halmstad run_1to1_follow.launch.py ugv_mode:=nav2
-ros2 launch lrs_halmstad run_1to1_follow.launch.py ugv_mode:=nav2 ugv_initial_pose_x:=1.0 ugv_initial_pose_y:=2.0 ugv_initial_pose_yaw_deg:=90.0
+ros2 launch lrs_halmstad run_follow.launch.py leader_mode:=odom
+ros2 launch lrs_halmstad run_follow.launch.py leader_mode:=estimate start_leader_estimator:=true
+ros2 launch lrs_halmstad run_follow.launch.py leader_mode:=estimate start_leader_estimator:=true leader_range_mode:=ground yolo_weights:=detection/yolo26/yolo26l.pt
+ros2 launch lrs_halmstad run_follow.launch.py ugv_mode:=nav2
+ros2 launch lrs_halmstad run_follow.launch.py ugv_mode:=nav2 ugv_initial_pose_x:=1.0 ugv_initial_pose_y:=2.0 ugv_initial_pose_yaw_deg:=90.0
 ```
+
+Important launch-default nuance:
+- `run_follow.launch.py` still declares `leader_actual_pose_enable`, `publish_follow_debug_topics`, `publish_pose_cmd_topics`, and `publish_camera_debug_topics` with launch-default `true`
+- `./run.sh 1to1_yolo ...` overrides those to a quieter runtime
 
 For `ugv_mode:=nav2`, start Clearpath localization and Nav2 separately first. The follow launch will then drive the Husky through `/a201_0000/navigate_to_pose` using the configured waypoint route.
 
@@ -135,6 +152,7 @@ ros2 run lrs_halmstad controller --ros-args -p uav_name:=dji0
 - The default perception range mode is `ground`, not fixed range. `leader_range_mode:=const` is still available as a fallback for debugging.
 - The Husky now uses `lidar2d_0` as its only active range sensor in this workspace. The old temporary `lidar3d_0` path is no longer part of the active bring-up.
 - UGV mobility now runs in two supported modes: `ugv_mode:=nav2` sends sequential Nav2 `NavigateToPose` goals derived from the configured route, and `ugv_mode:=external` leaves UGV motion to an external Nav2 goal source.
+- Current open debugging issue: in YOLO detect/track follow, the camera can snap upward and the UAV can surge forward briefly before recovering. Start from `follow_uav.py`, `camera_tracker.py`, `simulator.py`, and `leader_estimator.py`.
 
 ## Contract checks
 

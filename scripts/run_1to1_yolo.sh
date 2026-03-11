@@ -18,8 +18,12 @@ MODEL_SUBDIR=""
 HAVE_UAV_START_X="false"
 HAVE_UAV_START_Z="false"
 HAVE_STARTUP_REPOSITION_ENABLE="false"
-DEFAULT_CUSTOM_WEIGHTS="detection/mymodels/warehouse_v1-v1-yolo26n.pt"
-DEFAULT_DETECTION_WEIGHTS="detection/mymodels/warehouse_v1-v1-yolo26n.pt"
+HAVE_LEADER_ACTUAL_POSE_ENABLE="false"
+HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="false"
+HAVE_PUBLISH_POSE_CMD_TOPICS="false"
+HAVE_PUBLISH_CAMERA_DEBUG_TOPICS="false"
+DEFAULT_CUSTOM_WEIGHTS="detection/mymodels/warehouse_v1-v2-yolo26n.pt"
+DEFAULT_DETECTION_WEIGHTS="detection/mymodels/warehouse_v1-v2-yolo26n.pt"
 DEFAULT_OBB_WEIGHTS="obb/mymodels/warehouse-v1-yolo26n-obb.pt"
 
 if [ -f "$SIM_WORLD_FILE" ]; then
@@ -86,7 +90,23 @@ for arg in "$@"; do
       HAVE_LEADER_ACTUAL_HEADING_ENABLE="true"
       EXTRA_ARGS+=("$arg")
       ;;
+    leader_actual_pose_enable:=*)
+      HAVE_LEADER_ACTUAL_POSE_ENABLE="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
     leader_actual_heading_topic:=*)
+      EXTRA_ARGS+=("$arg")
+      ;;
+    publish_follow_debug_topics:=*)
+      HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    publish_pose_cmd_topics:=*)
+      HAVE_PUBLISH_POSE_CMD_TOPICS="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    publish_camera_debug_topics:=*)
+      HAVE_PUBLISH_CAMERA_DEBUG_TOPICS="true"
       EXTRA_ARGS+=("$arg")
       ;;
     folder:=*|dir:=*|subdir:=*)
@@ -230,19 +250,32 @@ if [ "$USE_ESTIMATE" = true ]; then
   fi
 fi
 
+if [ "$HAVE_LEADER_ACTUAL_POSE_ENABLE" != true ]; then
+  EXTRA_ARGS+=("leader_actual_pose_enable:=false")
+fi
+if [ "$HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS" != true ]; then
+  EXTRA_ARGS+=("publish_follow_debug_topics:=false")
+fi
+if [ "$HAVE_PUBLISH_POSE_CMD_TOPICS" != true ]; then
+  EXTRA_ARGS+=("publish_pose_cmd_topics:=false")
+fi
+if [ "$HAVE_PUBLISH_CAMERA_DEBUG_TOPICS" != true ]; then
+  EXTRA_ARGS+=("publish_camera_debug_topics:=false")
+fi
+
 set +u
 source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/install/setup.bash"
 set -u
 
-ros2 launch lrs_halmstad run_1to1_follow.launch.py \
+ros2 launch lrs_halmstad run_follow.launch.py \
   ugv_mode:=nav2 \
   ugv_set_initial_pose:=true \
   leader_mode:="$LEADER_MODE" \
   start_leader_estimator:=true \
   external_detection_enable:=true \
   external_detection_node:="$EXTERNAL_DETECTION_NODE" \
-  leader_range_mode:=ground \
+  leader_range_mode:=auto \
   yolo_weights:="$WEIGHTS_REL" \
   "${EXTRA_ARGS[@]}" \
   world:="$WORLD"

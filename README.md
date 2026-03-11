@@ -11,6 +11,10 @@ Current tested baseline:
 4. `./run.sh nav2`
 5. `./run.sh 1to1_follow warehouse`
 
+Current real follow launch:
+- `src/lrs_halmstad/launch/run_follow.launch.py`
+- `run_follow_motion.launch.py` and `run_1to1_follow.launch.py` are compatibility shims only
+
 Wrappers now live under `scripts/`. Use `./run.sh <name>` and `./stop.sh <name>`
 from the workspace root for the supported helper flow.
 
@@ -36,6 +40,8 @@ Current important notes:
 - the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
 - detached camera mode is the current default
 - Gazebo sim time is guarded by `clock_guard`, and `/clock` should have exactly one publisher
+- `./run.sh 1to1_yolo ...` is the quiet/default YOLO wrapper; bare `ros2 launch ... run_follow.launch.py ...` does not automatically inherit those quiet overrides
+- current active debugging target is the YOLO follow motion bug where the camera can snap upward and the UAV briefly surges forward before recovering
 
 The rest of this README contains older reference material and may be stale compared with the two files above.
 
@@ -79,7 +85,7 @@ ros2 launch lrs_halmstad spawn_uavs.launch.py world:=warehouse uav_mode:=telepor
 3. Start motion / follow logic:
 - Follow stack (UGV motion + UAV follow + optional YOLO leader estimate):
 ```bash
-ros2 launch lrs_halmstad run_follow_motion.launch.py
+ros2 launch lrs_halmstad run_follow.launch.py
 ```
 
 4. Start OMNeT pose bridge (TCP pose snapshots from ROS odom topics):
@@ -158,18 +164,18 @@ Motion-only launch:
 
 Follow launch (UGV motion + `follow_uav` + optional `leader_estimator`):
 ```bash
-ros2 launch lrs_halmstad run_follow_motion.launch.py \
+ros2 launch lrs_halmstad run_follow.launch.py \
   world:=warehouse uav_name:=dji0 leader_mode:=odom
 ```
 
 YOLO estimate mode (UAV follows UGV estimate from camera detections):
 ```bash
-ros2 launch lrs_halmstad run_follow_motion.launch.py \
+ros2 launch lrs_halmstad run_follow.launch.py \
   world:=warehouse uav_name:=dji0 leader_mode:=estimate \
   yolo_weights:=detection/yolo26/yolo26n.pt yolo_device:=cpu
 ```
 
-`run_follow_motion.launch.py` arguments:
+`run_follow.launch.py` arguments:
 - `params_file:=<yaml>` (default `config/run_follow_defaults.yaml`)
 - `world:=<world>` (default `warehouse`)
 - `uav_name:=<uav_name>` (default `dji0`)

@@ -66,7 +66,7 @@ source "$WS_ROOT/install/setup.bash"
 set -u
 
 set +e
-ros2 launch lrs_halmstad run_1to1_follow.launch.py \
+ros2 launch lrs_halmstad run_follow.launch.py \
   ugv_mode:=nav2 \
   ugv_set_initial_pose:=true \
   leader_mode:=odom \

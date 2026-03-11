@@ -22,10 +22,10 @@ class Simulator(Node):
         super().__init__('example_simulator')
         self.group = ReentrantCallbackGroup()
 
-        self.declare_parameter("world", "orchard")
+        self.declare_parameter("world", "warehouse")
         self.declare_parameter("uav_name", "")
         self.declare_parameter("name", "")
-        self.declare_parameter("update_rate_hz", 30.0)
+        self.declare_parameter("update_rate_hz", 20.0)
         self.declare_parameter("camera_mode", "detached_model")
         self.declare_parameter("camera_name", "camera0")
         self.declare_parameter("camera_x_offset_m", 0.0)

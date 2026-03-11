@@ -9,9 +9,11 @@ from typing import Deque, Optional, TextIO
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterType, ParameterValue
 from rclpy.node import Node
 from rclpy.parameter_client import AsyncParameterClient
+from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32, Float64, String
 from lrs_halmstad.follow.follow_math import wrap_pi, yaw_from_quat
 from lrs_halmstad.common.paths import workspace_root
@@ -57,13 +59,23 @@ class Sample:
 
 
 class FollowDebugNode(Node):
-    def __init__(self, uav_name: str, window_s: float, report_hz: float, log_file: str):
+    def __init__(
+        self,
+        uav_name: str,
+        window_s: float,
+        report_hz: float,
+        log_file: str,
+        leader_estimate_topic: str,
+        leader_actual_topic: str,
+    ):
         super().__init__("follow_debug")
         self.uav_name = uav_name
         self.window_s = max(0.2, float(window_s))
         self.report_period_s = 1.0 / max(0.2, float(report_hz))
         self.history_limit = max(20, int(math.ceil(self.window_s * 40.0)))
         self.log_file_handle: Optional[TextIO] = self._open_log_file(log_file)
+        self.leader_estimate_topic = str(leader_estimate_topic).strip() or "/coord/leader_estimate"
+        self.leader_actual_topic = str(leader_actual_topic).strip() or "/a201_0000/amcl_pose_odom"
 
         self.estimator_status: dict[str, str] = {}
         self.estimator_fault: dict[str, str] = {}
@@ -80,6 +92,9 @@ class FollowDebugNode(Node):
             "leader_input_type",
             "startup_reposition_enable",
             "leader_actual_heading_enable",
+            "camera_x_offset_m",
+            "camera_y_offset_m",
+            "camera_z_offset_m",
         ]
         self.camera_param_names = [
             "pan_enable",
@@ -91,6 +106,10 @@ class FollowDebugNode(Node):
 
         self.pose_cmd_yaw_hist: Deque[Sample] = deque(maxlen=self.history_limit)
         self.pose_actual_yaw_hist: Deque[Sample] = deque(maxlen=self.history_limit)
+        self.pose_cmd_x_hist: Deque[Sample] = deque(maxlen=self.history_limit)
+        self.pose_cmd_y_hist: Deque[Sample] = deque(maxlen=self.history_limit)
+        self.pose_actual_x_hist: Deque[Sample] = deque(maxlen=self.history_limit)
+        self.pose_actual_y_hist: Deque[Sample] = deque(maxlen=self.history_limit)
         self.pan_hist: Deque[Sample] = deque(maxlen=self.history_limit)
         self.tilt_hist: Deque[Sample] = deque(maxlen=self.history_limit)
         self.follow_target_yaw_hist: Deque[Sample] = deque(maxlen=self.history_limit)
@@ -98,6 +117,10 @@ class FollowDebugNode(Node):
         self.follow_error_yaw_hist: Deque[Sample] = deque(maxlen=self.history_limit)
         self.pose_cmd_xy: Optional[tuple[float, float]] = None
         self.pose_actual_xy: Optional[tuple[float, float]] = None
+        self.pose_actual_z: Optional[float] = None
+        self.leader_estimate_xy: Optional[tuple[float, float]] = None
+        self.actual_leader_xy: Optional[tuple[float, float]] = None
+        self.actual_leader_z: Optional[float] = None
         self.anchor_target_xy: Optional[tuple[float, float]] = None
         self.follow_target_d_target_m: Optional[float] = None
         self.follow_actual_xy_distance_m: Optional[float] = None
@@ -117,7 +140,15 @@ class FollowDebugNode(Node):
 
         self.create_subscription(String, "/coord/leader_estimate_status", self.on_estimator_status, 10)
         self.create_subscription(String, "/coord/leader_estimate_fault", self.on_estimator_fault, 10)
+        self.create_subscription(PoseStamped, self.leader_estimate_topic, self.on_leader_estimate, 10)
+        self.create_subscription(Odometry, self.leader_actual_topic, self.on_actual_leader_pose, 10)
         self.create_subscription(PoseStamped, f"/{self.uav_name}/pose_cmd", self.on_pose_cmd, 10)
+        self.create_subscription(
+            Joy,
+            f"/{self.uav_name}/psdk_ros2/flight_control_setpoint_ENUposition_yaw",
+            self.on_uav_setpoint,
+            10,
+        )
         self.create_subscription(PoseStamped, f"/{self.uav_name}/pose", self.on_pose_actual, 10)
         self.create_subscription(
             PoseStamped,
@@ -127,6 +158,8 @@ class FollowDebugNode(Node):
         )
         self.create_subscription(Float64, f"/{self.uav_name}/update_pan", self.on_pan, 10)
         self.create_subscription(Float64, f"/{self.uav_name}/update_tilt", self.on_tilt, 10)
+        self.create_subscription(Float32, f"/{self.uav_name}/follow/actual/pan_deg", self.on_actual_pan, 10)
+        self.create_subscription(Float32, f"/{self.uav_name}/follow/actual/tilt_deg", self.on_actual_tilt, 10)
         self.create_subscription(
             Float32,
             f"/{self.uav_name}/follow/target/d_target_m",
@@ -202,7 +235,8 @@ class FollowDebugNode(Node):
         self.report_timer = self.create_timer(self.report_period_s, self.report)
         self.get_logger().info(
             f"[follow_debug] Watching uav={self.uav_name}, window_s={self.window_s:.1f}, "
-            f"topics=estimator+follow+camera+xy"
+            f"topics=estimator+follow+camera+xy, leader_estimate={self.leader_estimate_topic}, "
+            f"leader_actual={self.leader_actual_topic}"
         )
         if self.log_file_handle is not None:
             self._emit_text(
@@ -256,16 +290,49 @@ class FollowDebugNode(Node):
         self.estimator_fault = parse_status_line(msg.data)
         self.estimator_fault_rx_s = self.now_s()
 
+    def on_leader_estimate(self, msg: PoseStamped) -> None:
+        self.leader_estimate_xy = (
+            float(msg.pose.position.x),
+            float(msg.pose.position.y),
+        )
+
+    def on_actual_leader_pose(self, msg: Odometry) -> None:
+        self.actual_leader_xy = (
+            float(msg.pose.pose.position.x),
+            float(msg.pose.pose.position.y),
+        )
+        self.actual_leader_z = float(msg.pose.pose.position.z)
+
     def on_pose_cmd(self, msg: PoseStamped) -> None:
         q = msg.pose.orientation
         yaw = yaw_from_quat(float(q.x), float(q.y), float(q.z), float(q.w))
-        self.pose_cmd_xy = (float(msg.pose.position.x), float(msg.pose.position.y))
+        x = float(msg.pose.position.x)
+        y = float(msg.pose.position.y)
+        self.pose_cmd_xy = (x, y)
+        self.append_sample(self.pose_cmd_x_hist, x)
+        self.append_sample(self.pose_cmd_y_hist, y)
+        self.append_sample(self.pose_cmd_yaw_hist, yaw)
+
+    def on_uav_setpoint(self, msg: Joy) -> None:
+        if len(msg.axes) < 4:
+            return
+        x = float(msg.axes[0])
+        y = float(msg.axes[1])
+        yaw = float(msg.axes[3])
+        self.pose_cmd_xy = (x, y)
+        self.append_sample(self.pose_cmd_x_hist, x)
+        self.append_sample(self.pose_cmd_y_hist, y)
         self.append_sample(self.pose_cmd_yaw_hist, yaw)
 
     def on_pose_actual(self, msg: PoseStamped) -> None:
         q = msg.pose.orientation
         yaw = yaw_from_quat(float(q.x), float(q.y), float(q.z), float(q.w))
-        self.pose_actual_xy = (float(msg.pose.position.x), float(msg.pose.position.y))
+        x = float(msg.pose.position.x)
+        y = float(msg.pose.position.y)
+        self.pose_actual_z = float(msg.pose.position.z)
+        self.pose_actual_xy = (x, y)
+        self.append_sample(self.pose_actual_x_hist, x)
+        self.append_sample(self.pose_actual_y_hist, y)
         self.append_sample(self.pose_actual_yaw_hist, yaw)
 
     def on_follow_target_anchor(self, msg: PoseStamped) -> None:
@@ -275,6 +342,12 @@ class FollowDebugNode(Node):
         self.append_sample(self.pan_hist, float(msg.data))
 
     def on_tilt(self, msg: Float64) -> None:
+        self.append_sample(self.tilt_hist, float(msg.data))
+
+    def on_actual_pan(self, msg: Float32) -> None:
+        self.append_sample(self.pan_hist, float(msg.data))
+
+    def on_actual_tilt(self, msg: Float32) -> None:
         self.append_sample(self.tilt_hist, float(msg.data))
 
     def on_follow_target_d_target(self, msg: Float32) -> None:
@@ -398,6 +471,57 @@ class FollowDebugNode(Node):
             return "(na, na)"
         return f"({value[0]:.2f}, {value[1]:.2f})"
 
+    def fmt_delta_m(self, value: Optional[float]) -> str:
+        if value is None:
+            return "na"
+        return f"{value:.2f}m"
+
+    def status_float(self, key: str) -> Optional[float]:
+        raw = self.estimator_status.get(key)
+        if raw is None:
+            return None
+        try:
+            value = float(raw)
+        except Exception:
+            return None
+        return value if math.isfinite(value) else None
+
+    def estimate_error_m(self) -> Optional[float]:
+        if self.leader_estimate_xy is None or self.actual_leader_xy is None:
+            return None
+        return math.hypot(
+            self.leader_estimate_xy[0] - self.actual_leader_xy[0],
+            self.leader_estimate_xy[1] - self.actual_leader_xy[1],
+        )
+
+    def actual_truth_distances(self) -> tuple[Optional[float], Optional[float]]:
+        if self.pose_actual_xy is None or self.pose_actual_z is None:
+            return None, None
+        if self.actual_leader_xy is None or self.actual_leader_z is None:
+            return None, None
+        yaw = self.latest(self.pose_actual_yaw_hist)
+        if yaw is None:
+            return None, None
+        cam_x_off = float(self.follow_params.get("camera_x_offset_m", 0.0) or 0.0)
+        cam_y_off = float(self.follow_params.get("camera_y_offset_m", 0.0) or 0.0)
+        cam_z_off = float(self.follow_params.get("camera_z_offset_m", 0.0) or 0.0)
+        cy = math.cos(yaw)
+        sy = math.sin(yaw)
+        cam_x = self.pose_actual_xy[0] + cam_x_off * cy - cam_y_off * sy
+        cam_y = self.pose_actual_xy[1] + cam_x_off * sy + cam_y_off * cy
+        cam_z = self.pose_actual_z - cam_z_off
+        dx = self.actual_leader_xy[0] - cam_x
+        dy = self.actual_leader_xy[1] - cam_y
+        dz = self.actual_leader_z - cam_z
+        return math.hypot(dx, dy), math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    def recent_xy_delta(self, x_hist: Deque[Sample], y_hist: Deque[Sample]) -> Optional[float]:
+        dx = self.recent_delta(x_hist, wrap=False)
+        dy = self.recent_delta(y_hist, wrap=False)
+        if dx is None or dy is None:
+            return None
+        return math.hypot(dx, dy)
+
     def estimator_state(self) -> str:
         return self.estimator_status.get("state", "none")
 
@@ -413,11 +537,16 @@ class FollowDebugNode(Node):
 
     def classify(self) -> tuple[str, list[str]]:
         warnings: list[str] = []
+        body_cmd_xy_delta = self.recent_xy_delta(self.pose_cmd_x_hist, self.pose_cmd_y_hist)
+        body_actual_xy_delta = self.recent_xy_delta(self.pose_actual_x_hist, self.pose_actual_y_hist)
         body_cmd_delta = self.recent_delta(self.pose_cmd_yaw_hist, wrap=True)
         body_actual_delta = self.recent_delta(self.pose_actual_yaw_hist, wrap=True)
         pan_delta = self.recent_delta(self.pan_hist, wrap=False)
         tilt_delta = self.recent_delta(self.tilt_hist, wrap=False)
+        estimate_error_m = self.estimate_error_m()
 
+        body_xy_active = body_cmd_xy_delta is not None and body_cmd_xy_delta > 0.25
+        body_xy_actual_active = body_actual_xy_delta is not None and body_actual_xy_delta > 0.25
         body_active = body_cmd_delta is not None and abs(math.degrees(body_cmd_delta)) > 3.0
         body_actual_active = body_actual_delta is not None and abs(math.degrees(body_actual_delta)) > 3.0
         pan_active = pan_delta is not None and abs(pan_delta) > 2.0
@@ -436,12 +565,18 @@ class FollowDebugNode(Node):
             "DEBOUNCE_HOLD",
         }
 
-        if body_active and pan_active:
+        if body_xy_active and (pan_active or tilt_active):
+            cause = "UAV XY command and camera are both moving"
+        elif body_xy_active:
+            cause = "UAV XY command is moving"
+        elif body_active and pan_active:
             cause = "camera pan and UAV body yaw are both moving"
         elif body_active:
             cause = "UAV body yaw command is moving"
         elif pan_active or tilt_active:
             cause = "camera-only pan/tilt is moving"
+        elif body_xy_actual_active:
+            cause = "UAV body is translating without a large new XY command"
         elif body_actual_active:
             cause = "UAV body is drifting/rotating without a large new yaw command"
         else:
@@ -449,12 +584,16 @@ class FollowDebugNode(Node):
 
         if bad_estimator_state and (pan_active or tilt_active):
             warnings.append(f"camera still moving while estimator state={estimator_state}")
+        if bad_estimator_state and body_xy_active:
+            warnings.append(f"body XY command still moving while estimator state={estimator_state}")
         if bad_estimator_state and body_active:
             warnings.append(f"body yaw command still moving while estimator state={estimator_state}")
         if self.follow_params.get("follow_yaw") is False and body_active:
             warnings.append("follow_yaw=false but body yaw command is still changing")
         if self.follow_params.get("startup_reposition_enable") and not self.follow_params.get("manual_override_enable", False):
             warnings.append("startup_reposition_enable=true on /follow_uav")
+        if estimate_error_m is not None and estimate_error_m > 3.0:
+            warnings.append(f"estimate error is high ({estimate_error_m:.2f}m)")
         if (
             estimator_state == "OK"
             and self.follow_error_anchor_cross_m is not None
@@ -471,13 +610,21 @@ class FollowDebugNode(Node):
         reason = self.estimator_reason()
         conf = self.estimator_status.get("conf", "na")
         reject = self.estimator_status.get("reject_reason", "na")
+        track_id = self.estimator_status.get("track_id", "na")
+        range_m = self.estimator_status.get("range_m", "na")
+        bearing_deg = self.estimator_status.get("bearing_deg", "na")
+        latency_ms = self.estimator_status.get("latency_ms", "na")
 
+        body_cmd_xy_delta = self.recent_xy_delta(self.pose_cmd_x_hist, self.pose_cmd_y_hist)
+        body_actual_xy_delta = self.recent_xy_delta(self.pose_actual_x_hist, self.pose_actual_y_hist)
         body_cmd_delta = self.recent_delta(self.pose_cmd_yaw_hist, wrap=True)
         body_actual_delta = self.recent_delta(self.pose_actual_yaw_hist, wrap=True)
         pan_delta = self.recent_delta(self.pan_hist, wrap=False)
         tilt_delta = self.recent_delta(self.tilt_hist, wrap=False)
         pan_now = self.latest(self.pan_hist)
         tilt_now = self.latest(self.tilt_hist)
+        estimate_error_m = self.estimate_error_m()
+        actual_truth_xy_m, actual_truth_3d_m = self.actual_truth_distances()
 
         follow_yaw = self.follow_params.get("follow_yaw", "na")
         actual_heading_enable = self.follow_params.get("leader_actual_heading_enable", "na")
@@ -502,8 +649,25 @@ class FollowDebugNode(Node):
 
         lines = [
             f"[{timestamp}] Follow Debug",
-            f"  Estimator: state={state} reason={reason} conf={conf} reject={reject}",
+            (
+                "  Estimator: "
+                f"state={state} reason={reason} conf={conf} track_id={track_id} "
+                f"est_range={range_m}m bearing={bearing_deg}deg latency={latency_ms}ms reject={reject}"
+            ),
             f"  Motion: {cause}",
+            (
+                "  Body XY: "
+                f"cmd_delta={self.fmt_delta_m(body_cmd_xy_delta)} "
+                f"actual_delta={self.fmt_delta_m(body_actual_xy_delta)} "
+                f"leader_est={self.fmt_xy(self.leader_estimate_xy)} "
+                f"leader_actual={self.fmt_xy(self.actual_leader_xy)} "
+                f"est_err={self.fmt_delta_m(estimate_error_m)}"
+            ),
+            (
+                "  Truth Dist: "
+                f"amcl_xy={self.fmt_m(actual_truth_xy_m)} "
+                f"amcl_3d={self.fmt_m(actual_truth_3d_m)}"
+            ),
             (
                 "  Body yaw: "
                 f"cmd_delta={self.fmt_deg(body_cmd_delta, radians=True)} "
@@ -553,6 +717,16 @@ class FollowDebugNode(Node):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze follow/camera turning causes during runtime.")
     parser.add_argument("--uav-name", default="dji0", help="UAV namespace/name. Default: dji0")
+    parser.add_argument(
+        "--leader-estimate-topic",
+        default="/coord/leader_estimate",
+        help="Leader estimate topic to compare against truth. Default: /coord/leader_estimate",
+    )
+    parser.add_argument(
+        "--leader-actual-topic",
+        default="/a201_0000/amcl_pose_odom",
+        help="Ground-truth leader odom topic for estimate-error checks. Default: /a201_0000/amcl_pose_odom",
+    )
     parser.add_argument("--window-s", type=float, default=1.5, help="Analysis window in seconds. Default: 1.5")
     parser.add_argument("--report-hz", type=float, default=1.0, help="How often to print diagnoses. Default: 1.0")
     parser.add_argument(
@@ -571,6 +745,8 @@ def main() -> None:
         window_s=float(args.window_s),
         report_hz=float(args.report_hz),
         log_file=str(args.log_file),
+        leader_estimate_topic=str(args.leader_estimate_topic),
+        leader_actual_topic=str(args.leader_actual_topic),
     )
     try:
         rclpy.spin(node)

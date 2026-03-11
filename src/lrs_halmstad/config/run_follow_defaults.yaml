@@ -44,6 +44,8 @@ follow_uav:
     smooth_alpha: 1.0         # Target smoothing alpha; 1.0 = no XY smoothing.
     yaw_deadband_rad: 0.02    # DONT TOUCH! Hold yaw if the remaining yaw error is smaller than this.
     yaw_update_xy_gate_m: 0.0  # 0 disables it; otherwise yaw only updates when XY motion exceeds this.
+    publish_debug_topics: false  # Publish /<uav>/follow/{target,actual,error,debug} topics.
+    publish_pose_cmd_topics: false  # Publish legacy /<uav>/pose_cmd and /<uav>/pose_cmd/odom helper topics.
     
     #--------------------------------------------------!!These are kept here for the non-odom follow path. !!------------
     #-----------------<< Estimate/YOLO-follow only <<--------------------------------------------------------------------
@@ -64,15 +66,15 @@ follow_uav:
     #~~~~<< Heading inference from leader motion.
     leader_actual_heading_enable: false  # Use shared UGV body heading for anchor placement while still following estimator XY.
     leader_actual_heading_topic: /a201_0000/amcl_pose_odom  # Shared AMCL-derived UGV pose used to read the true chassis heading for the anchor.
-    estimate_heading_from_motion_enable: false  # leader_estimator already publishes a motion-aligned yaw; keep this off unless you explicitly want a second heading estimate in follow_uav.
+    estimate_heading_from_motion_enable: true  # In estimate-follow, prefer leader motion heading over noisy pose yaw when actual heading is unavailable.
     estimate_heading_alpha: 1.0  # EMA alpha for motion-derived heading/velocity.
     estimate_heading_max_dt_s: 1.0  # Ignore heading inference updates if pose gaps exceed this.
-    estimate_heading_min_speed_mps: 1.0  # Minimum leader speed before motion-derived heading is trusted.
+    estimate_heading_min_speed_mps: 0.15  # Minimum leader speed before motion-derived heading is trusted.
 
     #~~~~<< Trajectory shaping.
     traj_enable: true         # Enable velocity/acceleration-limited target shaping.
-    traj_max_accel_mps2: 3.0   # Max XY acceleration inside the trajectory shaper.
-    traj_max_speed_mps: 2.0     # Max XY speed inside the trajectory shaper.
+    traj_max_accel_mps2: 5.0   # Max XY acceleration inside the trajectory shaper.
+    traj_max_speed_mps: 3.0     # Max XY speed inside the trajectory shaper.
     traj_pos_gain: 1.6           # Position-to-velocity proportional gain in the trajectory shaper.
     traj_quality_min_scale: 0.40  # Lowest quality scale allowed inside trajectory shaping.
     traj_rel_frame_enable: true    # Shape the trajectory in the leader-relative frame instead of world frame.
@@ -91,6 +93,7 @@ camera_tracker:
     pan_enable: true          # Publish tracked pan commands instead of holding default_pan_deg.
     tilt_enable: true        # Publish tracked tilt commands instead of holding default_tilt_deg.
     tilt_deadband_deg: 0.5  # DONT TOUCH! Hold the previous tilt if the target changes less than this.
+    publish_debug_topics: false  # Publish /<uav>/camera/target/* debug geometry topics.
     pose_timeout_s: 3.0    # Treat leader/UAV pose data as stale after this many seconds.
     tick_hz: 20.0         # Camera pan/tilt update rate.
 
@@ -100,13 +103,13 @@ leader_detector:
 
     event_topic: /coord/events    # Topic for detector lifecycle/debug event strings.
     out_topic: /coord/leader_detection  # Best-detection topic consumed by leader_estimator.
-    publish_events: false         # Publish detector lifecycle/debug events on event_topic.
+    publish_events: true         # Publish detector lifecycle/debug events on event_topic.
 
     device: cpu             # YOLO inference device, e.g. cpu or cuda.
     imgsz: 640               # YOLO inference image size.
     predict_hz: 20.0         # Max detector publish rate; incoming images above this are skipped.
 
-    conf_threshold: 0.12  # Minimum YOLO detection confidence to consider.
+    conf_threshold: 0.3  # Minimum YOLO detection confidence to consider.
     target_class_id: -1   # Restrict detections to one YOLO class id; -1 means any class.
     target_class_name: ""  # Optional class-name filter; empty means any class name.
 
@@ -120,12 +123,12 @@ leader_tracker:
 
     event_topic: /coord/events    # Topic for tracker lifecycle/debug event strings.
     out_topic: /coord/leader_detection  # Best tracked detection topic consumed by leader_estimator.
-    publish_events: false         # Publish tracker lifecycle/debug events on event_topic.
+    publish_events: true         # Publish tracker lifecycle/debug events on event_topic.
 
     device: cpu             # Ultralytics tracking device, e.g. cpu or cuda.
     imgsz: 640              # Tracking inference image size.
     predict_hz: 20.0        # Max tracking publish rate; incoming images above this are skipped.
-    tracker_config: botsort.yaml  # Tracker config filename under config/trackers or an absolute path.
+    tracker_config: bytetrack.yaml  # Tracker config filename under config/trackers or an absolute path.
 
     conf_threshold: 0.12  # Minimum detection confidence accepted by the tracker.
     iou_threshold: 0.45   # IOU threshold passed into Ultralytics track().
@@ -145,7 +148,7 @@ leader_estimator:
     leader_actual_pose_topic: /a201_0000/amcl_pose_odom  # Optional truth leader pose used only for diagnostics/testing.
     out_topic: /coord/leader_estimate  # Published leader pose estimate topic.
     publish_debug_image: true  # Publish a diagnostic overlay image.
-    publish_events: false  # Publish estimator lifecycle/debug events on event_topic.
+    publish_events: true  # Publish estimator lifecycle/debug events on event_topic.
     publish_fault_status: true  # Publish fault/state transitions on fault_status_topic.
     publish_status: true  # Publish status strings with state/confidence/latency.
     status_topic: /coord/leader_estimate_status  # Status topic consumed by estimate-follow.
