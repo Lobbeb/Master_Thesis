@@ -112,12 +112,15 @@ leader_estimator:
 
     device: cpu             # YOLO inference device, e.g. cpu or cuda.
     est_hz: 20.0             # Main estimator loop rate.
-    imgsz: 640                # YOLO inference image size.
-    latency_comp_enable: true  # Predict the tracked estimate forward to compensate for detection latency.
+    imgsz: 512                # YOLO inference image size; 512 is a better CPU default on this stack.
+    debug_image_max_width: 960  # Downscale only the debug image topic to reduce GUI/ROS image overhead.
 
     conf_threshold: 0.12  # Minimum YOLO detection confidence to consider.
     target_class_id: 0   # Restrict detections to one YOLO class id; -1 means any class.
     target_class_name: "ugv"  # Optional class-name filter; empty means any class name.
+    tracker_enable: true  # Enable Ultralytics tracking; false falls back to raw per-frame detections.
+    tracker_name: botsort  # Ultralytics tracker backend: botsort or bytetrack.
+    tracker_yaml: ""  # Optional explicit tracker YAML override; empty uses config/trackers/<tracker_name>.yaml.
 
     constant_range_m: 7.0    # Fixed fallback range when range_mode does not provide depth/ground range.
     ground_max_range_m: 50.0  # Maximum ground-plane intersection range accepted as valid.
@@ -125,19 +128,13 @@ leader_estimator:
     range_mode: auto       # Range source: auto, depth, ground, or const.
     target_ground_z_m: 0.0    # World Z of the target/ground plane used by ground-range projection.
 
-    bad_debounce_frames: 1            # Consecutive bad frames required before switching to hold/reject states.
-    bbox_continuity_class_bonus: 0.10  # Bonus when the candidate class matches the previously latched detection.
-    bbox_continuity_max_px: 1000.0     # Pixel jump at which continuity scoring becomes a hard penalty.
-    bbox_continuity_weight: 0.05     # Penalty weight for detection-center jumps between frames.
-    max_bearing_jump_deg: 180.0    # Reject detections that imply an implausibly large bearing jump between frames.
-    max_hold_frames: 0             # Disable held-estimate reuse; missing/rejected detections drop out immediately.
-    max_hold_s: 0.0               # Disable held-estimate reuse by time as well.
-    max_target_speed_mps: 20.0   # Reject detections that imply the target moved faster than this.
-    max_xy_jump_m: 20.0         # Reject detections that jump too far in world XY in one update.
-    ok_debounce_frames: 1      # Good frames required before latching/reacquiring a target.
-    tracker_enable: true     # Enable the alpha-beta tracker on the world-frame estimate.
-    smooth_alpha: 0.5        # EMA alpha on bearing/range before world projection.
-    xy_smooth_alpha: 0.8    # EMA alpha on the projected world XY estimate.
+    bad_debounce_frames: 1
+    max_bearing_jump_deg: 180.0
+    max_target_speed_mps: 20.0
+    max_xy_jump_m: 20.0
+    ok_debounce_frames: 1
+    smooth_alpha: 0.5
+    xy_smooth_alpha: 0.8
 
 ugv_nav2_driver:
   ros__parameters:

@@ -239,6 +239,9 @@ def generate_launch_description():
     leader_constant_range_m_arg = DeclareLaunchArgument('leader_constant_range_m', default_value='5.0')
     target_class_name_arg = DeclareLaunchArgument('target_class_name', default_value='')
     target_class_id_arg = DeclareLaunchArgument('target_class_id', default_value='-1')
+    tracker_enable_arg = DeclareLaunchArgument('tracker_enable', default_value='true')
+    tracker_name_arg = DeclareLaunchArgument('tracker_name', default_value='botsort')
+    tracker_yaml_arg = DeclareLaunchArgument('tracker_yaml', default_value='')
     yolo_weights_arg = DeclareLaunchArgument(
         'yolo_weights',
         default_value='',
@@ -290,6 +293,9 @@ def generate_launch_description():
                 'leader_actual_pose_enable': _bool_param('leader_actual_pose_enable'),
                 'target_class_name': LaunchConfiguration('target_class_name'),
                 'target_class_id': LaunchConfiguration('target_class_id'),
+                'tracker_enable': _bool_param('tracker_enable'),
+                'tracker_name': LaunchConfiguration('tracker_name'),
+                'tracker_yaml': LaunchConfiguration('tracker_yaml'),
                 'device': LaunchConfiguration('yolo_device'),
                 'yolo_weights': LaunchConfiguration('yolo_weights'),
                 'event_topic': LaunchConfiguration('event_topic'),
@@ -438,6 +444,9 @@ def generate_launch_description():
         leader_constant_range_m_arg,
         target_class_name_arg,
         target_class_id_arg,
+        tracker_enable_arg,
+        tracker_name_arg,
+        tracker_yaml_arg,
         yolo_weights_arg,
         yolo_device_arg,
         event_topic_arg,

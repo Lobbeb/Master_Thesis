@@ -165,4 +165,130 @@ Entry template:
   - `bash -n stop_tmux_1to1.sh` passed.
   - `./stop_tmux_1to1.sh warehouse dry_run:=true` now executes cleanly from WSL.
 
+## 2026-03-10 23:36 (local)
+- Type: feature
+- Files:
+  - `src/lrs_halmstad/lrs_halmstad/leader_estimator.py`
+  - `src/lrs_halmstad/launch/run_follow_motion.launch.py`
+  - `src/lrs_halmstad/launch/run_1to1_follow.launch.py`
+  - `src/lrs_halmstad/config/run_follow_defaults.yaml`
+  - `src/lrs_halmstad/setup.py`
+  - `run_tmux_1to1.sh`
+- Summary:
+  - Rewrote `leader_estimator.py` around Ultralytics detection/tracking, removed the old pseudo-tracking state machine, and exposed tracker selection cleanly through launch/config.
+- Why:
+  - The old estimator mixed detector loading, bbox continuity heuristics, debounce/holdover logic, and a world-frame alpha-beta tracker, which conflicted with clean integration of Ultralytics tracking.
+- Behavior impact:
+  - `leader_estimator` now uses Ultralytics `track()` when `tracker_enable:=true` and falls back to raw per-frame detections when disabled.
+  - BoT-SORT is the default tracker, with `tracker_name` / `tracker_yaml` selectable from launch.
+  - `run_tmux_1to1.sh ... mode:=yolo` now forwards `tracker_enable`, `tracker_name`, and `tracker_yaml` to the YOLO path.
+  - Status/debug output now includes tracked target metadata such as `track_id`, track hits, and track age.
+- Core logic impact:
+  - significant
+- Verification:
+  - `python3 -m py_compile src/lrs_halmstad/lrs_halmstad/leader_estimator.py src/lrs_halmstad/launch/run_follow_motion.launch.py src/lrs_halmstad/launch/run_1to1_follow.launch.py` passed.
+  - `colcon build --packages-select lrs_halmstad --symlink-install` passed.
+  - `ros2 launch lrs_halmstad run_1to1_follow.launch.py --show-args | rg 'tracker_(enable|name|yaml)'` showed the new tracker launch arguments.
+  - `./run_tmux_1to1.sh warehouse mode:=yolo tracker_name:=bytetrack tracker_enable:=true tracker_yaml:=/tmp/custom.yaml dry_run:=true tmux_attach:=false` forwarded the tracker arguments into `run_1to1_yolo.sh`.
+  - A subprocess smoke test started `ros2 run lrs_halmstad leader_estimator ... -p tracker_enable:=true -p tracker_name:=botsort` and confirmed the node stayed alive for at least 3 seconds without startup/tracker initialization errors.
+
+## 2026-03-11 11:24 (local)
+- Type: feature
+- Files:
+  - `src/lrs_halmstad/lrs_halmstad/leader_estimator.py`
+  - `src/lrs_halmstad/lrs_halmstad/leader_tracking.py`
+  - `src/lrs_halmstad/lrs_halmstad/leader_projection.py`
+  - `src/lrs_halmstad/lrs_halmstad/leader_types.py`
+  - `src/lrs_halmstad/config/run_follow_defaults.yaml`
+  - `run_tmux_1to1.sh`
+- Summary:
+  - Replaced the heavy single-file estimator rewrite with a cleaner modular split: a thinner ROS node, a dedicated Ultralytics tracking helper, a dedicated projection/sanity helper, and shared estimator datatypes.
+- Why:
+  - The first rewrite still felt too close to the original estimator and kept too much structure inside one file. The goal was to keep the external contract while making the tracked estimator path smaller, clearer, and less coupled to old pseudo-tracking ideas.
+- Behavior impact:
+  - The estimator still publishes the same core estimate/status/fault topics used by follow/camera/debug tools.
+  - The active tracked target now flows through a dedicated tracker helper instead of living inside one large node file.
+  - The defaults file only keeps estimator parameters that the new implementation actually uses.
+- Core logic impact:
+  - significant
+- Verification:
+  - `python3 -m py_compile src/lrs_halmstad/lrs_halmstad/leader_types.py src/lrs_halmstad/lrs_halmstad/leader_tracking.py src/lrs_halmstad/lrs_halmstad/leader_projection.py src/lrs_halmstad/lrs_halmstad/leader_estimator.py` passed.
+  - `python3 -m py_compile src/lrs_halmstad/launch/run_follow_motion.launch.py src/lrs_halmstad/launch/run_1to1_follow.launch.py` passed.
+  - `colcon build --packages-select lrs_halmstad --symlink-install` passed.
+  - A subprocess smoke test confirmed `ros2 run lrs_halmstad leader_estimator ... -p tracker_enable:=true -p tracker_name:=botsort` stayed alive for at least 3 seconds.
+  - A subprocess `ros2 launch ... --show-args` check still showed `tracker_enable`, `tracker_name`, and `tracker_yaml`.
+  - `./run_tmux_1to1.sh warehouse mode:=yolo tracker_name:=bytetrack tracker_enable:=true tracker_yaml:=/tmp/custom.yaml dry_run:=true tmux_attach:=false` still forwarded tracker arguments into `run_1to1_yolo.sh`.
+
+## 2026-03-11 11:40 (local)
+- Type: fix
+- Files:
+  - `run_1to1_yolo.sh`
+- Summary:
+  - Updated the YOLO wrapper default weights path to the actual top-level `models/warehouse_v1-v1-yolo26n.pt` file present in this workspace.
+- Why:
+  - The previous default still pointed at `models/detection/mymodels/...`, which no longer exists here and caused `YOLO_DISABLED` / `weights_missing` during tracker testing.
+- Behavior impact:
+  - Running the YOLO path without an explicit `weights:=...` argument now starts with a valid model by default on this workspace.
+- Core logic impact:
+  - none
+- Verification:
+  - `bash -n run_1to1_yolo.sh` passed.
+  - `test -f models/warehouse_v1-v1-yolo26n.pt` returned present.
+
+## 2026-03-11 12:05 (local)
+- Type: perf
+- Files:
+  - `src/lrs_halmstad/lrs_halmstad/leader_estimator.py`
+  - `src/lrs_halmstad/lrs_halmstad/leader_tracking.py`
+  - `src/lrs_halmstad/config/run_follow_defaults.yaml`
+- Summary:
+  - Reduced estimator-side image overhead by switching camera/depth subscriptions to sensor-data QoS, avoiding unnecessary decode copies, fusing the Ultralytics model at load time, and downscaling only the published debug image topic.
+- Why:
+  - Tracker testing was functionally working, but the estimator was CPU-heavy and the debug GUI looked stale/jittery. The goal was to improve runtime smoothness without changing the tracking/follow logic.
+- Behavior impact:
+  - The tracker logic and output topics are unchanged.
+  - The estimator now drops stale sensor frames more aggressively instead of building image backlog.
+  - `/coord/leader_debug_image` is published at a smaller width by default, which reduces GUI and ROS image transport cost.
+  - The default YOLO `imgsz` in the estimator config is now `512` instead of `640` for a lighter CPU baseline.
+- Core logic impact:
+  - none
+- Verification:
+  - `python3 -m py_compile src/lrs_halmstad/lrs_halmstad/leader_estimator.py src/lrs_halmstad/lrs_halmstad/leader_tracking.py src/lrs_halmstad/lrs_halmstad/leader_projection.py src/lrs_halmstad/lrs_halmstad/leader_types.py` passed.
+  - `colcon build --packages-select lrs_halmstad --symlink-install` passed.
+
+## 2026-03-11 12:12 (local)
+- Type: fix
+- Files:
+  - `src/lrs_halmstad/lrs_halmstad/leader_estimator.py`
+- Summary:
+  - Restored the debug image publisher QoS to reliable `depth=1` so `rqt` image viewers can subscribe to `/coord/leader_debug_image` again.
+- Why:
+  - The previous best-effort debug-image QoS reduced overhead, but it likely made the `rqt` debug pane appear as a blank gray placeholder instead of showing the estimator overlay.
+- Behavior impact:
+  - Debug image display in `rqt` should work again.
+  - Tracking logic and estimator outputs are unchanged.
+- Core logic impact:
+  - none
+- Verification:
+  - `python3 -m py_compile src/lrs_halmstad/lrs_halmstad/leader_estimator.py` passed.
+  - `colcon build --packages-select lrs_halmstad --symlink-install` passed.
+
+## 2026-03-11 14:08 (local)
+- Type: fix
+- Files:
+  - `src/lrs_halmstad/lrs_halmstad/leader_estimator.py`
+- Summary:
+  - Replaced the incompatible `SensorDataQoS` import with Jazzy-compatible `qos_profile_sensor_data`.
+- Why:
+  - `leader_estimator` was crashing on startup with `ImportError: cannot import name 'SensorDataQoS' from 'rclpy.qos'`, which left `/coord/leader_debug_image` blank because the estimator node was dead.
+- Behavior impact:
+  - The estimator should now start again in YOLO sessions.
+  - Debug image/status topics should exist again after a full restart of the tmux stack.
+- Core logic impact:
+  - none
+- Verification:
+  - `python3 -m py_compile src/lrs_halmstad/lrs_halmstad/leader_estimator.py` passed.
+  - `colcon build --packages-select lrs_halmstad --symlink-install` passed.
+  - Direct startup repro no longer fails with the previous `ImportError`.
+
 

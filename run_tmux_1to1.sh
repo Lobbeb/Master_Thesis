@@ -79,10 +79,10 @@ for arg in "$@"; do
       FOLLOW_ARGS+=("$arg")
       ;;
     follow_yaw:=*|pan_enable:=*|use_tilt:=*|tilt_enable:=*|camera_default_tilt_deg:=*) FOLLOW_ARGS+=("$arg") ;;
-    weights:=*|target:=*|use_estimate:=*|obb:=*|folder:=*|dir:=*|subdir:=*) FOLLOW_ARGS+=("$arg") ;;
+    weights:=*|target:=*|use_estimate:=*|obb:=*|folder:=*|dir:=*|subdir:=*|tracker_enable:=*|tracker_name:=*|tracker_yaml:=*) FOLLOW_ARGS+=("$arg") ;;
     *)
       echo "Unknown argument: $arg" >&2
-      echo "Usage: $0 [world] [mode:=follow|yolo] [record:=true|false] [record_profile:=default|vision] [record_tag:=name] [record_out:=runs/experiments/...] [camera:=detached|attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [use_estimate:=true|false] [obb:=true|false] [folder:=...] [map:=/path/map.yaml] [gui:=true|false] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [record_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes]" >&2
+      echo "Usage: $0 [world] [mode:=follow|yolo] [record:=true|false] [record_profile:=default|vision] [record_tag:=name] [record_out:=runs/experiments/...] [camera:=detached|attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [use_estimate:=true|false] [obb:=true|false] [folder:=...] [tracker_enable:=true|false] [tracker_name:=botsort|bytetrack] [tracker_yaml:=/path/to/tracker.yaml] [map:=/path/map.yaml] [gui:=true|false] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [record_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes]" >&2
       exit 2
       ;;
   esac
@@ -106,7 +106,7 @@ esac
 if [ "$MODE" != "yolo" ]; then
   for arg in "${FOLLOW_ARGS[@]}"; do
     case "$arg" in
-      weights:=*|target:=*|use_estimate:=*|obb:=*|folder:=*|dir:=*|subdir:=*)
+      weights:=*|target:=*|use_estimate:=*|obb:=*|folder:=*|dir:=*|subdir:=*|tracker_enable:=*|tracker_name:=*|tracker_yaml:=*)
         echo "Argument '$arg' requires mode:=yolo" >&2
         exit 2
         ;;
@@ -338,4 +338,3 @@ fi
 
 echo "Started tmux session: $SESSION"
 echo "Attach with: tmux attach -t $SESSION"
-

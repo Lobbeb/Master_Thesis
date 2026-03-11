@@ -13,8 +13,8 @@ MODEL_SUBDIR=""
 HAVE_UAV_START_X="false"
 HAVE_UAV_START_Z="false"
 HAVE_STARTUP_REPOSITION_ENABLE="false"
-DEFAULT_CUSTOM_WEIGHTS="detection/mymodels/warehouse_v1-v1-yolo26n.pt"
-DEFAULT_DETECTION_WEIGHTS="detection/mymodels/warehouse_v1-v1-yolo26n.pt"
+DEFAULT_CUSTOM_WEIGHTS="warehouse_v1-v1-yolo26n.pt"
+DEFAULT_DETECTION_WEIGHTS="warehouse_v1-v1-yolo26n.pt"
 DEFAULT_OBB_WEIGHTS="obb/yolo26/yolo26l-obb.pt"
 
 if [ -f "$SIM_WORLD_FILE" ]; then

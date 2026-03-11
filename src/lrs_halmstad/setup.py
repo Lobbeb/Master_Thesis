@@ -14,6 +14,7 @@ setup(
             ['resource/' + package_name]),
         (os.path.join('share', package_name), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml') + glob('config/*.config')),
+        (os.path.join('share', package_name, 'config', 'trackers'), glob('config/trackers/*.yaml')),
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*.sdf')),
         (os.path.join('share', package_name, 'hook'), glob('hook/*.dsv')),
         ('share/' + "/matrice_100/materials/textures", glob('models/matrice_100/materials/textures/*')),        

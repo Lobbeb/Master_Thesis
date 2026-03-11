@@ -104,6 +104,9 @@ def generate_launch_description():
     leader_constant_range_m_arg = DeclareLaunchArgument('leader_constant_range_m', default_value='5.0')
     target_class_name_arg = DeclareLaunchArgument('target_class_name', default_value='')
     target_class_id_arg = DeclareLaunchArgument('target_class_id', default_value='-1')
+    tracker_enable_arg = DeclareLaunchArgument('tracker_enable', default_value='true')
+    tracker_name_arg = DeclareLaunchArgument('tracker_name', default_value='botsort')
+    tracker_yaml_arg = DeclareLaunchArgument('tracker_yaml', default_value='')
     yolo_device_arg = DeclareLaunchArgument('yolo_device', default_value='cpu')
     event_topic_arg = DeclareLaunchArgument('event_topic', default_value='/coord/events')
     ugv_start_delay_arg = DeclareLaunchArgument('ugv_start_delay_s', default_value='0.0')
@@ -147,6 +150,9 @@ def generate_launch_description():
             'leader_constant_range_m': LaunchConfiguration('leader_constant_range_m'),
             'target_class_name': LaunchConfiguration('target_class_name'),
             'target_class_id': LaunchConfiguration('target_class_id'),
+            'tracker_enable': LaunchConfiguration('tracker_enable'),
+            'tracker_name': LaunchConfiguration('tracker_name'),
+            'tracker_yaml': LaunchConfiguration('tracker_yaml'),
             'yolo_device': LaunchConfiguration('yolo_device'),
             'event_topic': LaunchConfiguration('event_topic'),
             'ugv_start_delay_s': LaunchConfiguration('ugv_start_delay_s'),
@@ -188,6 +194,9 @@ def generate_launch_description():
         leader_constant_range_m_arg,
         target_class_name_arg,
         target_class_id_arg,
+        tracker_enable_arg,
+        tracker_name_arg,
+        tracker_yaml_arg,
         yolo_device_arg,
         event_topic_arg,
         ugv_start_delay_arg,
