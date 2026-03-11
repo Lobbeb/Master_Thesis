@@ -18,19 +18,29 @@ Recommended tmux variants:
 
 Current tmux default:
 - `layout:=panes`
+- `gui:=false`
 - row 1: `gazebo | spawn`
 - row 2: `localization | nav2`
 - row 3: `follow`
+- `record:=false`
 
 Current tmux default delays:
-- `gui:=true` -> `spawn=7s`, `localization/nav2=9s`, `follow=13s`
-- `gui:=false` -> `spawn=9s`, `localization/nav2=11s`, `follow=15s`
+- `gui:=true` -> `spawn=6s`, `localization/nav2=8s`, `follow=10s`
+- `gui:=false` -> `spawn=8s`, `localization/nav2=10s`, `follow=12s`
 
 Per-stage delay overrides now exist:
 - `spawn_delay_s:=...`
 - `localization_delay_s:=...`
 - `nav2_delay_s:=...`
 - `follow_delay_s:=...`
+
+New tmux extras:
+- `record:=true|false`
+- `record_profile:=default|vision`
+- `record_tag:=...`
+- `record_out:=bags/experiments/...`
+- `record_delay_s:=...`
+- `rtf:=...` / `real_time_factor:=...`
 
 Equivalent manual run order:
 1. `./run.sh gazebo_sim warehouse`
@@ -109,6 +119,7 @@ Current Python package layout under `src/lrs_halmstad/lrs_halmstad`:
 - `tools/`
   - `follow_control.py`
   - `follow_debug_cli.py`
+  - `uav_command_logger.py`
 - `common/`
   - `world_names.py`
   - `paths.py`
@@ -144,20 +155,23 @@ This is the biggest structural change from earlier in the project.
 
 Current active perception architecture:
 - `perception/leader_detector.py`
-  - plain prediction node
+  - plain detection node
   - runs a model on camera images
   - publishes the best detection to `/coord/leader_detection`
+  - publishes detector-owned detection status to `/coord/leader_detection_status`
 - `perception/leader_tracker.py`
   - separate Ultralytics `track()` node
   - uses tracker configs from `src/lrs_halmstad/config/trackers`
   - also publishes tracked detections to `/coord/leader_detection`
+  - also publishes tracker-owned detection status to `/coord/leader_detection_status`
 - `perception/leader_estimator.py`
   - estimator-only node
   - consumes `/coord/leader_detection`
+  - consumes `/coord/leader_detection_status` only for debug-image overlay
   - projects detection into world pose
   - may use OBB corners to derive heading
   - publishes `/coord/leader_estimate`, status, fault, debug image, and optional error-to-truth
-  - debug image overlay shows `est=(x,y,yaw)` and `err=(dx,dy,planar)` when an estimate exists
+  - estimate status no longer mirrors tracker-owned detection metadata
 
 Important consequence:
 - `perception/leader_estimator.py` is no longer the predictor/tracker brain
@@ -183,11 +197,11 @@ Current default behavior of `scripts/run_1to1_yolo.sh`:
 - `start_leader_estimator:=true`
 - `external_detection_enable:=true`
 - `external_detection_node:=detector`
-- `leader_range_mode:=ground`
-- shared YAML defaults are already quiet:
-  - `follow_uav.publish_debug_topics: false`
-  - `follow_uav.publish_pose_cmd_topics: false`
-  - `camera_tracker.publish_debug_topics: false`
+- `tracker:=false`
+- `obb:=true`
+- `leader_range_mode:=auto`
+- default weights with no override:
+  - `obb/mymodels/warehouse-v1-yolo26n-obb.pt`
 - important override nuance:
   - `run_follow.launch.py` still declares `leader_actual_pose_enable`, `publish_follow_debug_topics`, `publish_pose_cmd_topics`, and `publish_camera_debug_topics` with launch-default `true`
   - that means quiet mode is guaranteed by `scripts/run_1to1_yolo.sh`, not by a bare `ros2 launch lrs_halmstad run_follow.launch.py ...`
@@ -200,25 +214,32 @@ Current default behavior of `scripts/run_1to1_yolo.sh`:
   - `uav_start_x:=-7.0`
   - `uav_start_z:=7.0`
   - `leader_actual_heading_enable:=true`
+- if you want estimator-only heading behavior instead of shared AMCL heading:
+  - pass `use_actual_heading:=false`
 
 Current test variants:
 - shared truth pose control instead of estimate:
   - `./run.sh 1to1_yolo warehouse use_estimate:=false`
 - tracker instead of plain detector:
   - `./run.sh 1to1_yolo warehouse tracker:=true`
+- estimator-only heading instead of shared actual heading:
+  - `./run.sh 1to1_yolo warehouse use_actual_heading:=false`
 - explicit tracker config:
   - `./run.sh 1to1_yolo warehouse tracker:=true tracker_config:=botsort.yaml`
   - bare tracker config names resolve under `src/lrs_halmstad/config/trackers`
-- OBB weights:
-  - `./run.sh 1to1_yolo warehouse obb:=true`
+- plain detection-family weights instead of the OBB default:
+  - `./run.sh 1to1_yolo warehouse obb:=false`
 
 Current weights resolution:
 - detection default root: `models/detection/mymodels`
 - OBB default root: `models/obb/mymodels`
-- plain detector default weight:
-  - `detection/mymodels/warehouse_v1-v1-yolo26n.pt`
+- plain detector default weight when `obb:=false`:
+  - `detection/mymodels/warehouse_v1-v2-yolo26n.pt`
 - OBB default weight:
   - `obb/mymodels/warehouse-v1-yolo26n-obb.pt`
+- bare `weights:=foo.pt` resolution:
+  - `tracker:=false` -> resolve under `detection/...`
+  - `tracker:=true` -> resolve under `obb/...`
 
 ### Follow Data Flow
 
@@ -232,7 +253,10 @@ Normal odom follow:
 Estimate follow:
 - `leader_detector` or `leader_tracker`
   - publishes `/coord/leader_detection`
+  - publishes `/coord/leader_detection_status`
 - `leader_estimator`
+  - consumes `/coord/leader_detection`
+  - consumes `/coord/leader_detection_status` for debug-image overlay only
   - publishes `/coord/leader_estimate`
   - publishes `/coord/leader_estimate_status`
   - publishes `/coord/leader_estimate_fault`
@@ -259,11 +283,11 @@ Simulator side:
 
 ### Current Active Debug Target
 
-Current live bug in YOLO detect/track follow:
-- the UAV can detect or track the UGV correctly
-- then the camera can snap upward / near straight ahead
-- the UAV body moves forward briefly
-- then the camera points back down again
+Current live focus in YOLO detect/track follow:
+- estimator/follow behavior is much better than earlier, but close-range behavior is still the main problem
+- the UAV can struggle when the UGV passes underneath or tries to cross the UAV path
+- the estimator can still end up holding the fallback/const range at the wrong moment
+- camera/body centering and target-distance recovery are the active runtime tuning/debug areas
 
 Where to start:
 - `follow/follow_uav.py`
@@ -273,6 +297,7 @@ Where to start:
 
 Relevant topics to inspect:
 - `/coord/leader_detection`
+- `/coord/leader_detection_status`
 - `/coord/leader_estimate`
 - `/coord/leader_estimate_status`
 - `/coord/leader_debug_image`
@@ -311,9 +336,13 @@ Follow controller:
 - `follow_z_speed_mps: 8.0`
 - `follow_z_speed_gain: 3.0`
 - `follow_yaw_rate_rad_s: 3.0`
-- `follow_yaw_rate_gain: 2.0`
+- `follow_yaw_rate_gain: 3.0`
 - `yaw_deadband_rad: 0.02`
 - `yaw_update_xy_gate_m: 0.0`
+- `leader_actual_heading_enable: false` in YAML
+- `estimate_heading_from_motion_enable: true`
+- `traj_max_speed_mps: 5.0`
+- `traj_max_accel_mps2: 8.0`
 
 Camera tracker:
 - `tick_hz: 20.0`
@@ -321,6 +350,9 @@ Camera tracker:
 - `default_tilt_deg: -45.0`
 - `pan_enable: true`
 - `tilt_enable: true`
+- `image_center_correction_enable: true`
+- `pan_image_center_gain: 0.5`
+- `tilt_image_center_gain: 0.8`
 
 Estimator:
 - `est_hz: 20.0`
@@ -331,7 +363,7 @@ Estimator:
 
 Detector:
 - `predict_hz: 20.0`
-- `conf_threshold: 0.12`
+- `conf_threshold: 0.3`
 - `bbox_continuity_weight: 0.10`
 - `bbox_continuity_max_px: 180.0`
 

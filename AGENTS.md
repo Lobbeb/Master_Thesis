@@ -46,11 +46,17 @@ Important files and roles:
   - keep this as the main sim-side execution path
   - keep topic names stable unless explicitly asked to change them
 - `leader_detector.py`
-  - prediction only
+  - detection only
+  - publishes `/coord/leader_detection`
+  - publishes `/coord/leader_detection_status`
 - `leader_tracker.py`
   - tracking only
+  - publishes `/coord/leader_detection`
+  - publishes `/coord/leader_detection_status`
 - `leader_estimator.py`
   - estimation only
+  - consumes detection inputs
+  - publishes estimate outputs and `leader_debug_image`
 
 General rule:
 - do not collapse separate concerns back into one giant file
@@ -123,6 +129,7 @@ Do not make estimator logic control the vehicle directly.
 
 `leader_estimator.py` should:
 - consume detections/tracks
+- consume detection status only for debug/visibility
 - estimate pose / heading
 - publish estimate outputs
 - stay independent of vehicle-control decisions
@@ -131,11 +138,11 @@ Do not make estimator logic control the vehicle directly.
 
 The current open issue is not the package split anymore.
 
-The next debugging focus is the live YOLO follow behavior:
-- in detector/tracker mode, the UAV can detect/track the UGV correctly
-- then the camera sometimes snaps upward / near straight ahead
-- the UAV body surges forward briefly
-- then the camera looks back down again
+The current debugging focus is the live YOLO follow behavior:
+- estimate-follow works much better than before, but it still struggles when the UGV passes under the UAV
+- the estimator can still fall back to `const` range at the wrong time
+- camera/body centering and close-range behavior are the active runtime tuning/debug area
+- the older camera-snap / forward-surge failure is still relevant context, but it is no longer the only symptom to watch
 
 Start investigation from:
 - `lrs_halmstad/follow/follow_uav.py`
@@ -145,6 +152,7 @@ Start investigation from:
 
 Relevant runtime topics:
 - `/coord/leader_detection`
+- `/coord/leader_detection_status`
 - `/coord/leader_estimate`
 - `/coord/leader_estimate_status`
 - `/coord/leader_debug_image`

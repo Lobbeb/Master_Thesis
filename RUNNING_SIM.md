@@ -15,6 +15,9 @@ Recommended tmux workflow:
 - start with `./run.sh tmux_1to1 warehouse`
 - start YOLO mode with `./run.sh tmux_1to1 warehouse mode:=yolo`
 - start YOLO tracker mode with `./run.sh tmux_1to1 warehouse mode:=yolo tracker:=true`
+- record a YOLO run with `./run.sh tmux_1to1 warehouse mode:=yolo record:=true`
+- record a YOLO vision run with `./run.sh tmux_1to1 warehouse mode:=yolo record:=true record_profile:=vision`
+- speed up sim time with `./run.sh tmux_1to1 warehouse rtf:=2.0`
 - pass a custom YOLO weight with `./run.sh tmux_1to1 warehouse mode:=yolo weights:=yolo26v2.pt`
 - enable truth-assisted YOLO testing with `./run.sh tmux_1to1 warehouse mode:=yolo use_estimate:=false`
 - stop with `./stop.sh tmux_1to1 warehouse`
@@ -23,8 +26,8 @@ Recommended tmux workflow:
   - row 2: `localization | nav2`
   - row 3: `follow`
 - current default delays:
-  - `gui:=false` -> `spawn=9`, `localization/nav2=11`, `follow=15`
-  - `gui:=true` -> `spawn=7`, `localization/nav2=9`, `follow=13`
+  - `gui:=false` -> `spawn=8`, `localization/nav2=10`, `follow=12`
+  - `gui:=true` -> `spawn=6`, `localization/nav2=8`, `follow=10`
 
 ## Start 1-to-1 Sim With Nav2 And AMCL Follow
 
@@ -99,7 +102,10 @@ Useful overrides:
 ./run.sh tmux_1to1 warehouse spawn_delay_s:=12 follow_delay_s:=18
 ./run.sh tmux_1to1 warehouse layout:=windows
 ./run.sh tmux_1to1 warehouse mode:=yolo
+./run.sh tmux_1to1 warehouse mode:=yolo use_actual_heading:=false
 ./run.sh tmux_1to1 warehouse mode:=yolo follow_yaw:=false use_tilt:=false
+./run.sh tmux_1to1 warehouse mode:=yolo record:=true record_profile:=vision
+./run.sh tmux_1to1 warehouse rtf:=2.0
 ./run.sh tmux_1to1 warehouse tmux_attach:=false
 ./run.sh tmux_1to1 warehouse dry_run:=true
 ```
@@ -107,8 +113,8 @@ Useful overrides:
 Default startup is staggered with short delays so the later launches do not all fire at the same instant.
 
 Default delays depend on `gui:=true|false`:
-- `gui:=false` uses `spawn=9`, `localization/nav2=11`, and `follow=15`
-- `gui:=true` uses `spawn=7`, `localization/nav2=9`, and `follow=13`
+- `gui:=false` uses `spawn=8`, `localization/nav2=10`, and `follow=12`
+- `gui:=true` uses `spawn=6`, `localization/nav2=8`, and `follow=10`
 
 If your machine is slower, increase the delay args:
 - `delay_s:=...`
@@ -147,6 +153,7 @@ This sends `Ctrl-c` in this order:
 - spawn is expected to exit automatically when Gazebo goes down
 
 Then it waits a few seconds, kills the tmux session, performs a safety cleanup pass for leftover Gazebo / launch processes, and clears stale helper state files under `/tmp/halmstad_ws`.
+If recording was enabled, the stop flow also stops the recorder pane and cleans up matching `ros2 bag record` processes as fallback.
 
 Useful stop overrides:
 
@@ -205,8 +212,10 @@ UGV camera: ``/a201_0000/sensors/camera_0/color/image``
 YOLO debug image: ``/coord/leader_debug_image``
 
 Overlay fields:
-- `perception=detector|tracker|none`
-- `track_id=<id|none>`
+- `det_state=<state> reason=<reason> src=<detector|tracker|none> conf=<...> cls=<...>`
+- `track_id=<id|none> state=<raw|reacquire|tracked|na> hits=<...> age_s=<...> switched=<...>`
+- `est_range=<...> src=<depth|ground|const|none> bearing=<...>`
+- `heading_src=<...>`
 - `est=(x,y,yaw)`
 - `err=(dx,dy,planar)`
 
@@ -282,58 +291,49 @@ Useful examples:
 ./run.sh follow_control --mode random --focus-weight 0.8
 ```
 
-## Record Pose Alignment For AMCL Analysis
+## Record A Run
 
-Use this when you want to measure how raw `platform/odom` differs from the AMCL-derived pose during a real sim run.
-
-1. Start the normal sim stack:
+Recommended recorder path through tmux:
 
 ```bash
-./run.sh gazebo_sim warehouse
-./run.sh spawn_uav warehouse
-./run.sh localization warehouse
-./run.sh nav2
-./run.sh 1to1_follow warehouse
+./run.sh tmux_1to1 warehouse mode:=yolo record:=true
 ```
 
-2. In one extra terminal, start recording:
+Add image topics too:
 
 ```bash
-./run_record_pose_alignment.sh
+./run.sh tmux_1to1 warehouse mode:=yolo record:=true record_profile:=vision
 ```
 
-Default recorded topics:
-- `/clock`
-- `/<ugv>/platform/odom`
-- `/<ugv>/platform/odom/filtered`
-- `/<ugv>/amcl_pose`
-- `/<ugv>/amcl_pose_odom`
-- `/<ugv>/tf`
-- `/<ugv>/tf_static`
-- `/<uav>/pose`
-- `/<uav>/pose_cmd`
-- `/<uav>/camera/actual/center_pose`
-
-3. Let the UGV drive for a while, especially through turns and longer paths, then stop the recorder with `Ctrl-c`.
-
-4. Analyze the bag:
+Direct recorder wrapper:
 
 ```bash
-source /opt/ros/jazzy/setup.bash
-python3 ./run_analyze_pose_alignment.py runs/pose_alignment/<bag_dir>
+./run.sh record_experiment warehouse mode:=yolo profile:=vision
 ```
 
-Example with CSV export:
+Default recorder output:
+- `bags/experiments/<world>/<timestamp>_<mode>/`
 
-```bash
-source /opt/ros/jazzy/setup.bash
-python3 ./run_analyze_pose_alignment.py runs/pose_alignment/<bag_dir> \
-  --csv runs/pose_alignment/alignment_report.csv
-```
-
-Read the result like this:
-- small rigid-fit residuals mean a single 2D correction might approximate the run
-- large rigid-fit residuals mean the correction is time-varying, so old dataset boxes are not safely recoverable with one static transform
+Recorder topic groups:
+- default:
+  - `/clock`
+  - `/coord/events`
+  - `/<ugv>/amcl_pose_odom`
+  - `/<uav>/pose`
+  - `/<uav>/pose_cmd`
+  - `/<uav>/pose_cmd/odom`
+  - `/<uav>/camera/actual/center_pose`
+  - `/<uav>/camera/target/center_pose`
+  - `/<uav>/follow/target/anchor_pose`
+  - `/<uav>/follow/error/xy_distance_m`
+  - `/<uav>/follow/error/yaw_rad`
+- YOLO mode adds:
+  - `/coord/leader_estimate`
+  - `/coord/leader_estimate_status`
+  - `/coord/leader_estimate_error`
+- `profile:=vision` also adds:
+  - `/<uav>/camera0/image_raw`
+  - `/<uav>/camera0/camera_info`
 
 ## Capture Images For Datasets
 
@@ -454,23 +454,28 @@ Default behavior:
 - through `scripts/run_1to1_yolo.sh`, that startup pose defaults to `uav_start_x:=-7.0` and `uav_start_z:=7.0` in non-solar worlds
 - the shared follow/camera fallback tilt baseline stays at `-45.0`
 - held-estimate reuse is disabled by default, so rejected/missing detections now surface directly as `REJECT` / `NO_DET` instead of `*_HOLD`
-- shared YAML defaults already mute:
-  - `follow_uav.publish_debug_topics`
-  - `follow_uav.publish_pose_cmd_topics`
-  - `camera_tracker.publish_debug_topics`
+- `./run.sh 1to1_yolo ...` now defaults to `obb:=true`
+- with no explicit weights override, the current default weight is:
+  - `obb/mymodels/warehouse-v1-yolo26n-obb.pt`
+- wrapper launch defaults also force:
+  - `leader_range_mode:=auto`
 - truth/error and legacy debug topics are muted by default in the YOLO wrapper:
   - `leader_actual_pose_enable:=false`
   - `publish_follow_debug_topics:=false`
   - `publish_pose_cmd_topics:=false`
   - `publish_camera_debug_topics:=false`
+- estimate-mode YOLO also enables shared actual heading by default unless you override it:
+  - `leader_actual_heading_enable:=true`
+  - use `use_actual_heading:=false` if you want motion/estimate heading behavior instead
 - direct `ros2 launch lrs_halmstad run_follow.launch.py ...` does not inherit that quiet wrapper policy automatically
-- bare custom weight names resolve under `models/detection/mymodels/`
+- bare custom weight names resolve like this:
+  - `tracker:=false` -> under `models/detection/...`
+  - `tracker:=true` -> under `models/obb/...`
 
 Current live issue under investigation:
-- in detector/tracker mode, the UAV can detect/track correctly
-- then the camera can snap upward / near straight ahead
-- the UAV body surges forward briefly
-- then the camera points back down again
+- estimate-follow is much better than before, but the close-range case is still the active problem
+- when the UGV tries to pass underneath or cross the UAV path, the estimator/follow stack can still hold the wrong range or recover too slowly
+- camera/body centering and target-distance recovery are the main things to watch
 
 First topics to watch during that event:
 - `/coord/leader_estimate_status`
@@ -509,6 +514,12 @@ OBB-family default:
 
 ```bash
 ./run.sh 1to1_yolo warehouse obb:=true
+```
+
+Return to the plain detection-family default:
+
+```bash
+./run.sh 1to1_yolo warehouse obb:=false
 ```
 
 OBB-family with explicit subfolder:
@@ -616,6 +627,8 @@ This creates:
   - `rviz:=true|false`
   - `auto_start:=true|false`
   - `use_sim_time:=true|false`
+  - `rtf:=...`
+  - `real_time_factor:=...`
 
 ### `./run.sh spawn_uav`
 
@@ -707,15 +720,16 @@ This creates:
   - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
 - `weights:=...`
   - maps to `yolo_weights:=...`
-  - bare filenames default to `detection/mymodels/`
+  - bare filenames resolve under `detection/...` when `tracker:=false`
+  - bare filenames resolve under `obb/...` when `tracker:=true`
   - example: `weights:=yolo26v2.pt`
 - `folder:=...`
   - selects a subfolder under `detection/` or `obb/`
   - example: `folder:=yolo26`
 - `obb:=true|false`
-  - default `false`: unresolved `weights:=...` paths are resolved under `detection/`
-  - with no `folder:=...`, bare filenames resolve under `detection/mymodels/`
-  - `true`: default weights switch to the OBB family, and unresolved `weights:=...` paths are resolved under `obb/`
+  - default `true`
+  - with no explicit `weights:=...`, default weight is `obb/mymodels/warehouse-v1-yolo26n-obb.pt`
+  - `false`: default weights switch to `detection/mymodels/warehouse_v1-v2-yolo26n.pt`
 - `height:=...`
   - maps to `uav_start_z:=...`
 - `mount_pitch_deg:=...`
@@ -736,6 +750,9 @@ This creates:
 - `leader_actual_pose_enable:=true|false`
   - default `false` in `./run.sh 1to1_yolo`
   - enable `/coord/leader_estimate_error` truth diagnostics
+- `use_actual_heading:=true|false`
+  - default effective wrapper behavior in estimate mode is `true`
+  - pass `false` if you want to avoid using shared AMCL heading in follow
 - `publish_follow_debug_topics:=true|false`
   - default `false` in `./run.sh 1to1_yolo`
   - enable `/<uav>/follow/{target,actual,error,debug}/*`
