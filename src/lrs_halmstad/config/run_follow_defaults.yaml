@@ -115,6 +115,7 @@ leader_detector:
 
     event_topic: /coord/events    # Topic for detector lifecycle/debug event strings.
     out_topic: /coord/leader_detection  # Best-detection topic consumed by leader_estimator.
+    status_topic: /coord/leader_detection_status  # Detector-owned status/debug topic for detection state and track metadata.
     publish_events: true         # Publish detector lifecycle/debug events on event_topic.
 
     device: cpu             # YOLO inference device, e.g. cpu or cuda.
@@ -135,6 +136,7 @@ leader_tracker:
 
     event_topic: /coord/events    # Topic for tracker lifecycle/debug event strings.
     out_topic: /coord/leader_detection  # Best tracked detection topic consumed by leader_estimator.
+    status_topic: /coord/leader_detection_status  # Tracker-owned status/debug topic for detection state and track metadata.
     publish_events: true         # Publish tracker lifecycle/debug events on event_topic.
 
     device: cpu             # Ultralytics tracking device, e.g. cpu or cuda.
@@ -155,6 +157,7 @@ leader_estimator:
     event_topic: /coord/events  # Topic for estimator lifecycle/debug event strings.
     external_detection_timeout_s: 1.0  # Treat detector/tracker output as stale after this timeout.
     external_detection_topic: /coord/leader_detection  # Detection topic carrying bbox/OBB JSON from detector/tracker.
+    external_detection_status_topic: /coord/leader_detection_status  # Detector/tracker status topic used only for estimator debug-image overlay.
     leader_actual_pose_enable: true  # Enable optional truth/diagnostic leader pose input.
     leader_actual_pose_timeout_s: 2.0  # Treat truth pose as stale after this timeout.
     leader_actual_pose_topic: /a201_0000/amcl_pose_odom  # Optional truth leader pose used only for diagnostics/testing.

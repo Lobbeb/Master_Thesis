@@ -19,6 +19,7 @@ from std_msgs.msg import String
 
 from lrs_halmstad.follow.follow_math import coerce_bool, quat_from_yaw, wrap_pi, yaw_from_quat
 from lrs_halmstad.perception.detection_protocol import Detection2D, decode_detection_payload
+from lrs_halmstad.perception.detection_status import overlay_lines_from_status
 from lrs_halmstad.perception.yolo_common import cv2, image_to_bgr, order_quad
 
 @dataclass
@@ -52,6 +53,7 @@ class LeaderEstimator(Node):
         self.declare_parameter("depth_topic", "")
         self.declare_parameter("uav_pose_topic", "")
         self.declare_parameter("external_detection_topic", "/coord/leader_detection")
+        self.declare_parameter("external_detection_status_topic", "/coord/leader_detection_status")
         self.declare_parameter("out_topic", "/coord/leader_estimate")
         self.declare_parameter("status_topic", "/coord/leader_estimate_status")
         self.declare_parameter("fault_status_topic", "/coord/leader_estimate_fault")
@@ -96,6 +98,7 @@ class LeaderEstimator(Node):
         self.depth_topic = str(self.get_parameter("depth_topic").value).strip()
         self.uav_pose_topic = str(self.get_parameter("uav_pose_topic").value).strip() or f"/{self.uav_name}/pose"
         self.external_detection_topic = str(self.get_parameter("external_detection_topic").value).strip()
+        self.external_detection_status_topic = str(self.get_parameter("external_detection_status_topic").value).strip()
         self.out_topic = str(self.get_parameter("out_topic").value).strip()
         self.status_topic = str(self.get_parameter("status_topic").value).strip()
         self.fault_status_topic = str(self.get_parameter("fault_status_topic").value).strip()
@@ -159,6 +162,8 @@ class LeaderEstimator(Node):
         self.last_depth_stamp: Optional[Time] = None
         self.last_external_det: Optional[Detection2D] = None
         self.last_external_det_stamp: Optional[Time] = None
+        self.last_external_det_status_text: str = ""
+        self.last_external_det_status_stamp: Optional[Time] = None
         self.last_actual_leader_pose: Optional[Pose2D] = None
         self.last_actual_leader_pose_stamp: Optional[Time] = None
         self.last_estimate_pose: Optional[Pose2D] = None
@@ -188,6 +193,12 @@ class LeaderEstimator(Node):
         self.depth_sub = self.create_subscription(Image, self.depth_topic, self.on_depth, 10) if self.depth_topic else None
         self.uav_pose_sub = self.create_subscription(PoseStamped, self.uav_pose_topic, self.on_uav_pose, 10)
         self.external_detection_sub = self.create_subscription(String, self.external_detection_topic, self.on_external_detection, 10)
+        self.external_detection_status_sub = self.create_subscription(
+            String,
+            self.external_detection_status_topic,
+            self.on_external_detection_status,
+            10,
+        )
         self.actual_leader_pose_sub = (
             self.create_subscription(Odometry, self.leader_actual_pose_topic, self.on_actual_leader_pose, 10)
             if self.leader_actual_pose_enable
@@ -220,7 +231,8 @@ class LeaderEstimator(Node):
         self.get_logger().info(
             "[leader_estimator] Started: "
             f"image={self.camera_topic}, camera_info={self.camera_info_topic}, depth={self.depth_topic or 'disabled'}, "
-            f"uav_pose={self.uav_pose_topic}, detection={self.external_detection_topic}, out={self.out_topic}, "
+            f"uav_pose={self.uav_pose_topic}, detection={self.external_detection_topic}, "
+            f"detection_status={self.external_detection_status_topic}, out={self.out_topic}, "
             f"est_hz={self.est_hz}Hz, range_mode={self.range_mode}, constant_range_m={self.constant_range_m:.2f}"
         )
         self.publish_fault_status_msg(self._fault_line("none", "none", self.get_clock().now()))
@@ -346,6 +358,10 @@ class LeaderEstimator(Node):
             stamp = self.get_clock().now()
         self.last_external_det_stamp = stamp
         self.last_external_det = det_msg.detection
+
+    def on_external_detection_status(self, msg: String) -> None:
+        self.last_external_det_status_text = str(msg.data)
+        self.last_external_det_status_stamp = self.get_clock().now()
 
     def _is_fresh(self, last_stamp: Optional[Time], timeout_s: float, now: Time) -> bool:
         if last_stamp is None:
@@ -650,22 +666,22 @@ class LeaderEstimator(Node):
         err_dx = "na" if self.last_estimate_error_dx_m is None else f"{self.last_estimate_error_dx_m:.2f}"
         err_dy = "na" if self.last_estimate_error_dy_m is None else f"{self.last_estimate_error_dy_m:.2f}"
         err_planar = "na" if self.last_estimate_error_m is None else f"{self.last_estimate_error_m:.2f}"
-        perception = "none"
-        track_id = "none"
-        if self.last_external_det is not None:
-            perception = self.last_external_det.source or "external"
-            if self.last_external_det.track_id is not None:
-                track_id = str(self.last_external_det.track_id)
         return (
             f"state={state} reason={reason} "
-            f"perception={perception} detector_reason={self._detector_reason(now)} detector_age_ms={self._detector_age_ms(now):.1f} "
-            f"track_id={track_id} "
+            f"detector_reason={self._detector_reason(now)} detector_age_ms={self._detector_age_ms(now):.1f} "
             f"conf={self.last_det_conf:.3f} latency_ms={self.last_latency_ms:.1f} "
             f"range_src={self.last_range_source} range_mode={self.range_mode} range_m={self.last_range_used_m:.2f} "
             f"bearing_deg={self.last_bearing_used_deg:.1f} reject_reason={self.last_reject_reason} "
             f"heading_src={self.last_heading_source} "
             f"err_dx_m={err_dx} err_dy_m={err_dy} err_planar_m={err_planar}"
         )
+
+    def _detection_status_overlay_lines(self, now: Time) -> list[str]:
+        if not self.last_external_det_status_text:
+            return ["det_state=na reason=status_missing"]
+        if not self._is_fresh(self.last_external_det_status_stamp, self.external_detection_timeout_s, now):
+            return ["det_state=na reason=status_stale"]
+        return overlay_lines_from_status(self.last_external_det_status_text) or ["det_state=na reason=status_invalid"]
 
     def _bgr_to_image_msg(self, img_bgr: np.ndarray) -> Optional[Image]:
         if img_bgr.ndim != 3 or img_bgr.shape[2] != 3:
@@ -717,10 +733,10 @@ class LeaderEstimator(Node):
                     cv2.circle(out, (int(round(det.u)), int(round(det.v))), 3, color, -1)
                 lines = [
                     f"state={state} conf={self.last_det_conf:.2f} latency_ms={self.last_latency_ms:.1f}",
-                    f"perception={(det.source or 'none') if det is not None else 'none'} track_id={(det.track_id if det is not None and det.track_id is not None else 'none')}",
                     f"est_range={self.last_range_used_m:.2f}m src={self.last_range_source} bearing={self.last_bearing_used_deg:.1f}deg",
                     f"heading_src={self.last_heading_source}",
                 ]
+                lines.extend(self._detection_status_overlay_lines(self.get_clock().now()))
                 if self.last_estimate_pose is not None:
                     lines.append(f"est=({self.last_estimate_pose.x:.2f},{self.last_estimate_pose.y:.2f},{self.last_estimate_pose.yaw:.2f})")
                     lines.append(self._estimate_error_line())

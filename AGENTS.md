@@ -95,6 +95,7 @@ Preferred direction:
 - fewer hidden side effects
 - import existing helpers instead of redefining the same logic in multiple places
 - reduce dependency on giant files
+- if we are cleaning and something adds more code than it removes, it might not be worth it
 
 Avoid:
 - adding helper/debug functionality unless explicitly asked for it

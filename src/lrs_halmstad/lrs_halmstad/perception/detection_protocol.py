@@ -17,6 +17,10 @@ class Detection2D:
     cls_id: Optional[int] = None
     cls_name: str = ""
     track_id: Optional[int] = None
+    track_hits: int = 0
+    track_age_s: float = 0.0
+    track_state: str = "raw"
+    track_switched: bool = False
     obb_corners: Optional[Corners2D] = None
     obb_heading_yaw: Optional[float] = None
     source: str = ""
@@ -39,6 +43,10 @@ def encode_detection_payload(stamp_ns: int, det: Optional[Detection2D]) -> str:
         "cls_id": None if det is None else det.cls_id,
         "cls_name": "" if det is None else det.cls_name,
         "track_id": None if det is None else det.track_id,
+        "track_hits": 0 if det is None else int(det.track_hits),
+        "track_age_s": 0.0 if det is None else float(det.track_age_s),
+        "track_state": "raw" if det is None else str(det.track_state),
+        "track_switched": False if det is None else bool(det.track_switched),
         "obb_corners": [] if det is None or det.obb_corners is None else [[float(x), float(y)] for x, y in det.obb_corners],
         "obb_heading_yaw": None if det is None or det.obb_heading_yaw is None else float(det.obb_heading_yaw),
         "source": "" if det is None else str(det.source),
@@ -74,6 +82,10 @@ def decode_detection_payload(data: str) -> DetectionMessage:
         cls_id=None if payload.get("cls_id") is None else int(payload.get("cls_id")),
         cls_name=str(payload.get("cls_name", "")),
         track_id=None if payload.get("track_id") is None else int(payload.get("track_id")),
+        track_hits=int(payload.get("track_hits", 0) or 0),
+        track_age_s=float(payload.get("track_age_s", 0.0) or 0.0),
+        track_state=str(payload.get("track_state", "raw")),
+        track_switched=bool(payload.get("track_switched", False)),
         obb_corners=obb_corners,
         obb_heading_yaw=None if obb_heading_yaw is None else float(obb_heading_yaw),
         source=str(payload.get("source", "")),

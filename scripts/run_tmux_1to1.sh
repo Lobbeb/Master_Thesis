@@ -14,12 +14,18 @@ TMUX_ATTACH=true
 DRY_RUN=false
 LAYOUT="panes"
 MODE="follow"
+RECORD=false
+RECORD_PROFILE="default"
+RECORD_TAG=""
+RECORD_OUT=""
 BASE_DELAY_S=8
 BASE_DELAY_SET=false
 SPAWN_DELAY_OVERRIDE=""
 LOCALIZATION_DELAY_OVERRIDE=""
 NAV2_DELAY_OVERRIDE=""
 FOLLOW_DELAY_OVERRIDE=""
+RECORD_DELAY_OVERRIDE=""
+UAV_NAME="dji0"
 SPAWN_ARGS=()
 FOLLOW_ARGS=()
 GAZEBO_ARGS=()
@@ -55,6 +61,18 @@ for arg in "$@"; do
       ;;
     mode:=*|stack:=*)
       MODE="${arg#*:=}"
+      ;;
+    record:=*)
+      RECORD="${arg#record:=}"
+      ;;
+    record_profile:=*)
+      RECORD_PROFILE="${arg#record_profile:=}"
+      ;;
+    record_tag:=*)
+      RECORD_TAG="${arg#record_tag:=}"
+      ;;
+    record_out:=*)
+      RECORD_OUT="${arg#record_out:=}"
       ;;
     yolo:=*)
       case "${arg#yolo:=}" in
@@ -102,11 +120,17 @@ for arg in "$@"; do
     follow_delay_s:=*)
       FOLLOW_DELAY_OVERRIDE="${arg#follow_delay_s:=}"
       ;;
+    record_delay_s:=*)
+      RECORD_DELAY_OVERRIDE="${arg#record_delay_s:=}"
+      ;;
     camera_mode:=*|uav_camera_mode:=*)
       echo "Use camera:=attached or camera:=detached with $0." >&2
       exit 2
       ;;
     camera:=*|height:=*|mount_pitch_deg:=*|uav_name:=*)
+      if [[ "$arg" == uav_name:=* ]]; then
+        UAV_NAME="${arg#uav_name:=}"
+      fi
       SPAWN_ARGS+=("$arg")
       FOLLOW_ARGS+=("$arg")
       ;;
@@ -118,7 +142,7 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown argument: $arg" >&2
-      echo "Usage: $0 [world] [mode:=follow|yolo] [camera:=detached|attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [use_actual_heading:=true|false] [leader_actual_pose_enable:=true|false] [publish_follow_debug_topics:=true|false] [publish_pose_cmd_topics:=true|false] [publish_camera_debug_topics:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [use_estimate:=true|false] [obb:=true|false] [tracker:=true|false] [external_detection_node:=detector|tracker] [tracker_config:=botsort.yaml] [folder:=...] [map:=/path/map.yaml] [gui:=true|false] [rtf:=1.0] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes]" >&2
+      echo "Usage: $0 [world] [mode:=follow|yolo] [record:=true|false] [record_profile:=default|vision] [record_tag:=name] [record_out:=bags/experiments/...] [camera:=detached|attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [use_actual_heading:=true|false] [leader_actual_pose_enable:=true|false] [publish_follow_debug_topics:=true|false] [publish_pose_cmd_topics:=true|false] [publish_camera_debug_topics:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [use_estimate:=true|false] [obb:=true|false] [tracker:=true|false] [external_detection_node:=detector|tracker] [tracker_config:=botsort.yaml] [folder:=...] [map:=/path/map.yaml] [gui:=true|false] [rtf:=1.0] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [record_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes]" >&2
       exit 2
       ;;
   esac
@@ -158,6 +182,26 @@ else
       exit 2
       ;;
   esac
+
+case "$RECORD" in
+  true|false)
+    ;;
+  *)
+    echo "Invalid record option: $RECORD" >&2
+    echo "Use record:=true or record:=false" >&2
+    exit 2
+    ;;
+esac
+
+case "$RECORD_PROFILE" in
+  default|vision)
+    ;;
+  *)
+    echo "Invalid record_profile: $RECORD_PROFILE" >&2
+    echo "Use record_profile:=default or record_profile:=vision" >&2
+    exit 2
+    ;;
+esac
 fi
 
 case "$LAYOUT" in
@@ -172,6 +216,7 @@ esac
 
 SESSION_SAFE="$(printf '%s' "$SESSION" | tr -c 'A-Za-z0-9_.-' '_')"
 SESSION_STATE_FILE="$TMUX_STATE_DIR/${SESSION_SAFE}.env"
+record_pane=""
 
 apply_default_delays() {
   if [ "$EFFECTIVE_GUI" = false ]; then
@@ -184,6 +229,7 @@ apply_default_delays() {
   LOCALIZATION_DELAY_S=$((BASE_DELAY_S + 2))
   NAV2_DELAY_S="$LOCALIZATION_DELAY_S"
   FOLLOW_DELAY_S=$((LOCALIZATION_DELAY_S + 2))
+  RECORD_DELAY_S="$FOLLOW_DELAY_S"
 
   if [ -n "$SPAWN_DELAY_OVERRIDE" ]; then
     SPAWN_DELAY_S="$SPAWN_DELAY_OVERRIDE"
@@ -196,6 +242,9 @@ apply_default_delays() {
   fi
   if [ -n "$FOLLOW_DELAY_OVERRIDE" ]; then
     FOLLOW_DELAY_S="$FOLLOW_DELAY_OVERRIDE"
+  fi
+  if [ -n "$RECORD_DELAY_OVERRIDE" ]; then
+    RECORD_DELAY_S="$RECORD_DELAY_OVERRIDE"
   fi
 }
 
@@ -235,6 +284,7 @@ write_session_state() {
     printf 'LOCALIZATION_PANE_ID=%q\n' "$localization_pane"
     printf 'NAV2_PANE_ID=%q\n' "$nav2_pane"
     printf 'FOLLOW_PANE_ID=%q\n' "$follow_pane"
+    printf 'RECORD_PANE_ID=%q\n' "$record_pane"
   } > "$SESSION_STATE_FILE"
 }
 
@@ -260,11 +310,24 @@ else
   FOLLOW_CMD=(./run.sh 1to1_follow "$WORLD" "${FOLLOW_ARGS[@]}")
 fi
 
+if [ "$RECORD" = true ]; then
+  RECORD_CMD=(./run.sh record_experiment "$WORLD" "mode:=$MODE" "uav_name:=$UAV_NAME" "profile:=$RECORD_PROFILE")
+  if [ -n "$RECORD_TAG" ]; then
+    RECORD_CMD+=("tag:=$RECORD_TAG")
+  fi
+  if [ -n "$RECORD_OUT" ]; then
+    RECORD_CMD+=("out:=$RECORD_OUT")
+  fi
+fi
+
 GAZEBO_LINE="$(build_line 0 false "${GAZEBO_CMD[@]}")"
 SPAWN_LINE="$(build_line "$SPAWN_DELAY_S" true "${SPAWN_CMD[@]}")"
 LOCALIZATION_LINE="$(build_line "$LOCALIZATION_DELAY_S" true "${LOCALIZATION_CMD[@]}")"
 NAV2_LINE="$(build_line "$NAV2_DELAY_S" true "${NAV2_CMD[@]}")"
 FOLLOW_LINE="$(build_line "$FOLLOW_DELAY_S" true "${FOLLOW_CMD[@]}")"
+if [ "$RECORD" = true ]; then
+  RECORD_LINE="$(build_line "$RECORD_DELAY_S" true "${RECORD_CMD[@]}")"
+fi
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "tmux session already exists: $SESSION" >&2
@@ -277,14 +340,18 @@ if [ "$DRY_RUN" = true ]; then
   echo "Mode: $MODE"
   echo "Layout: $LAYOUT"
   echo "GUI: $EFFECTIVE_GUI"
+  echo "Record: $RECORD"
   echo "Base delay: $BASE_DELAY_S"
-  echo "Overrides: spawn=${SPAWN_DELAY_OVERRIDE:-default} localization=${LOCALIZATION_DELAY_OVERRIDE:-default} nav2=${NAV2_DELAY_OVERRIDE:-default} follow=${FOLLOW_DELAY_OVERRIDE:-default}"
-  echo "Delays: spawn=$SPAWN_DELAY_S localization=$LOCALIZATION_DELAY_S nav2=$NAV2_DELAY_S follow=$FOLLOW_DELAY_S"
+  echo "Overrides: spawn=${SPAWN_DELAY_OVERRIDE:-default} localization=${LOCALIZATION_DELAY_OVERRIDE:-default} nav2=${NAV2_DELAY_OVERRIDE:-default} follow=${FOLLOW_DELAY_OVERRIDE:-default} record=${RECORD_DELAY_OVERRIDE:-default}"
+  echo "Delays: spawn=$SPAWN_DELAY_S localization=$LOCALIZATION_DELAY_S nav2=$NAV2_DELAY_S follow=$FOLLOW_DELAY_S record=$RECORD_DELAY_S"
   echo "[gazebo]       $GAZEBO_LINE"
   echo "[spawn]        $SPAWN_LINE"
   echo "[localization] $LOCALIZATION_LINE"
   echo "[nav2]         $NAV2_LINE"
   echo "[follow]       $FOLLOW_LINE"
+  if [ "$RECORD" = true ]; then
+    echo "[record]       $RECORD_LINE"
+  fi
   exit 0
 fi
 
@@ -294,6 +361,9 @@ if [ "$LAYOUT" = "windows" ]; then
   tmux new-window -t "$SESSION" -n localization
   tmux new-window -t "$SESSION" -n nav2
   tmux new-window -t "$SESSION" -n follow
+  if [ "$RECORD" = true ]; then
+    tmux new-window -t "$SESSION" -n record
+  fi
 
   tmux setw -t "$SESSION" automatic-rename off
   tmux setw -t "$SESSION" allow-rename off
@@ -303,6 +373,9 @@ if [ "$LAYOUT" = "windows" ]; then
   localization_pane="$(tmux display-message -p -t "$SESSION:localization" '#{pane_id}')"
   nav2_pane="$(tmux display-message -p -t "$SESSION:nav2" '#{pane_id}')"
   follow_pane="$(tmux display-message -p -t "$SESSION:follow" '#{pane_id}')"
+  if [ "$RECORD" = true ]; then
+    record_pane="$(tmux display-message -p -t "$SESSION:record" '#{pane_id}')"
+  fi
 
   write_session_state
 
@@ -311,6 +384,9 @@ if [ "$LAYOUT" = "windows" ]; then
   tmux send-keys -t "$SESSION:localization" "$LOCALIZATION_LINE" C-m
   tmux send-keys -t "$SESSION:nav2" "$NAV2_LINE" C-m
   tmux send-keys -t "$SESSION:follow" "$FOLLOW_LINE" C-m
+  if [ "$RECORD" = true ]; then
+    tmux send-keys -t "$SESSION:record" "$RECORD_LINE" C-m
+  fi
   tmux select-window -t "$SESSION:gazebo"
 else
   tmux new-session -d -s "$SESSION" -n sim
@@ -325,6 +401,11 @@ else
   tmux select-pane -t "$localization_pane" -T localization
   tmux select-pane -t "$nav2_pane" -T nav2
   tmux select-pane -t "$follow_pane" -T follow
+  if [ "$RECORD" = true ]; then
+    tmux new-window -t "$SESSION" -n record
+    record_pane="$(tmux display-message -p -t "$SESSION:record" '#{pane_id}')"
+    tmux select-pane -t "$record_pane" -T record
+  fi
 
   write_session_state
 
@@ -333,6 +414,9 @@ else
   tmux send-keys -t "$localization_pane" "$LOCALIZATION_LINE" C-m
   tmux send-keys -t "$nav2_pane" "$NAV2_LINE" C-m
   tmux send-keys -t "$follow_pane" "$FOLLOW_LINE" C-m
+  if [ "$RECORD" = true ]; then
+    tmux send-keys -t "$record_pane" "$RECORD_LINE" C-m
+  fi
   tmux select-pane -t "$gazebo_pane"
 fi
 

@@ -14,6 +14,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 from lrs_halmstad.perception.detection_protocol import Detection2D, encode_detection_payload
+from lrs_halmstad.perception.detection_status import DetectionStatusPublisher
 from lrs_halmstad.perception.yolo_common import (
     YOLO,
     default_models_root,
@@ -33,6 +34,7 @@ class LeaderDetector(Node):
         self.declare_parameter("uav_name", "dji0")
         self.declare_parameter("camera_topic", "")
         self.declare_parameter("out_topic", "/coord/leader_detection")
+        self.declare_parameter("status_topic", "/coord/leader_detection_status")
         self.declare_parameter("models_root", default_models_root(__file__))
         self.declare_parameter("yolo_weights", "")
         self.declare_parameter("device", "cpu")
@@ -51,6 +53,7 @@ class LeaderDetector(Node):
         self.uav_name = str(self.get_parameter("uav_name").value)
         self.camera_topic = str(self.get_parameter("camera_topic").value) or f"/{self.uav_name}/camera0/image_raw"
         self.out_topic = str(self.get_parameter("out_topic").value)
+        self.status_topic = str(self.get_parameter("status_topic").value)
         self.models_root = os.path.expanduser(str(self.get_parameter("models_root").value).strip())
         self.yolo_weights = resolve_yolo_weights_path(
             str(self.get_parameter("yolo_weights").value).strip(),
@@ -82,11 +85,12 @@ class LeaderDetector(Node):
 
         self.image_sub = self.create_subscription(Image, self.camera_topic, self.on_image, 10)
         self.pub = self.create_publisher(String, self.out_topic, 10)
+        self.status_helper = DetectionStatusPublisher(self, self.status_topic)
         self.events_pub = self.create_publisher(String, self.event_topic, 10)
 
         self.get_logger().info(
             "[leader_detector] Started: "
-            f"image={self.camera_topic}, out={self.out_topic}, "
+            f"image={self.camera_topic}, out={self.out_topic}, status={self.status_topic}, "
             f"yolo_weights={self.yolo_weights or '<none>'}, "
             f"device={self.device}, predict_hz={self.predict_hz}"
         )
@@ -245,6 +249,9 @@ class LeaderDetector(Node):
         out.data = encode_detection_payload(stamp_ns(msg), det)
         self.pub.publish(out)
 
+    def _publish_status(self, state: str, reason: str, det: Optional[Detection2D]) -> None:
+        self.status_helper.publish(state=state, reason=reason, det=det)
+
     def on_image(self, msg: Image) -> None:
         now = self.get_clock().now()
         if self.last_predict_time is not None:
@@ -256,12 +263,22 @@ class LeaderDetector(Node):
         img_bgr = image_to_bgr(msg)
         if img_bgr is None:
             self._publish_detection(msg, None)
+            self._publish_status("DECODE_FAIL", "image_decode_failed", None)
+            return
+        if not self.yolo_ready or self.yolo_model is None:
+            self._publish_detection(msg, None)
+            self._publish_status("YOLO_DISABLED", self.yolo_error or "yolo_not_ready", None)
             return
         det = self._pick_detection(img_bgr)
         if det is not None:
             self.last_det_center = (det.u, det.v)
             self.last_det_cls_id = det.cls_id
+            self.yolo_error = None
         self._publish_detection(msg, det)
+        if det is not None:
+            self._publish_status("OK", "none", det)
+        else:
+            self._publish_status("NO_DET", self.yolo_error or "no_detection", None)
 
 
 def main(args=None):

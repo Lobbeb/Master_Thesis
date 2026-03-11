@@ -11,7 +11,7 @@ GROUP_GRACE_S=4
 FINAL_GRACE_S=4
 KILL_SESSION=true
 DRY_RUN=false
-CTRL_C_GROUP=(follow localization nav2)
+CTRL_C_GROUP=(record follow localization nav2)
 
 if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
   WORLD="$1"
@@ -53,6 +53,7 @@ SPAWN_PANE_ID=""
 LOCALIZATION_PANE_ID=""
 NAV2_PANE_ID=""
 FOLLOW_PANE_ID=""
+RECORD_PANE_ID=""
 
 load_state_file() {
   local path="$1"
@@ -133,6 +134,9 @@ lookup_saved_pane_id() {
     follow)
       printf '%s\n' "$FOLLOW_PANE_ID"
       ;;
+    record)
+      printf '%s\n' "$RECORD_PANE_ID"
+      ;;
     *)
       return 1
       ;;
@@ -190,6 +194,7 @@ signal_processes_by_pattern() {
 
 run_fallback_cleanup() {
   signal_process_group_from_pid_file "$SIM_PID_FILE" "Gazebo helper" || true
+  signal_processes_by_pattern "experiment recorder" 'ros2 bag record .*((runs|recordings|bags)/experiments/.*/bag)' || true
   signal_processes_by_pattern "follow launch" 'ros2 launch lrs_halmstad run_1to1_follow\.launch\.py' || true
   signal_processes_by_pattern "Nav2 launch" 'ros2 launch clearpath_nav2_demos nav2\.launch\.py' || true
   signal_processes_by_pattern "localization launch" 'ros2 launch clearpath_nav2_demos localization\.launch\.py' || true
