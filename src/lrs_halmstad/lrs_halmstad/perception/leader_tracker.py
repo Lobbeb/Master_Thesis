@@ -12,6 +12,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
+from lrs_halmstad.common.ros_params import yaml_param
 from lrs_halmstad.perception.detection_protocol import Detection2D, encode_detection_payload
 from lrs_halmstad.perception.detection_status import DetectionStatusPublisher
 from lrs_halmstad.perception.yolo_common import (
@@ -33,45 +34,28 @@ class LeaderTracker(Node):
         super().__init__("leader_tracker")
         dyn_num = ParameterDescriptor(dynamic_typing=True)
 
-        self.declare_parameter("uav_name", "dji0")
-        self.declare_parameter("camera_topic", "")
-        self.declare_parameter("out_topic", "/coord/leader_detection")
-        self.declare_parameter("status_topic", "/coord/leader_detection_status")
-        self.declare_parameter("models_root", default_models_root(__file__))
-        self.declare_parameter("yolo_weights", "")
-        self.declare_parameter("device", "cpu")
-        self.declare_parameter("conf_threshold", 0.05, dyn_num)
-        self.declare_parameter("iou_threshold", 0.45, dyn_num)
-        self.declare_parameter("imgsz", 640)
-        self.declare_parameter("target_class_id", -1)
-        self.declare_parameter("target_class_name", "")
-        self.declare_parameter("predict_hz", 20.0, dyn_num)
-        self.declare_parameter("tracker_config", "botsort.yaml")
-        self.declare_parameter("event_topic", "/coord/events")
-        self.declare_parameter("publish_events", False)
-
-        self.uav_name = str(self.get_parameter("uav_name").value)
-        self.camera_topic = str(self.get_parameter("camera_topic").value) or f"/{self.uav_name}/camera0/image_raw"
-        self.out_topic = str(self.get_parameter("out_topic").value)
-        self.status_topic = str(self.get_parameter("status_topic").value)
-        self.models_root = os.path.expanduser(str(self.get_parameter("models_root").value).strip())
+        self.uav_name = str(self.declare_parameter("uav_name", "dji0").value)
+        self.camera_topic = str(self.declare_parameter("camera_topic", "").value) or f"/{self.uav_name}/camera0/image_raw"
+        self.out_topic = str(yaml_param(self, "out_topic"))
+        self.status_topic = str(yaml_param(self, "status_topic"))
+        self.models_root = os.path.expanduser(str(self.declare_parameter("models_root", default_models_root(__file__)).value).strip())
         self.yolo_weights = resolve_yolo_weights_path(
-            str(self.get_parameter("yolo_weights").value).strip(),
+            str(self.declare_parameter("yolo_weights", "").value).strip(),
             self.models_root,
         )
-        self.device = str(self.get_parameter("device").value).strip() or "cpu"
-        self.conf_threshold = float(self.get_parameter("conf_threshold").value)
-        self.iou_threshold = float(self.get_parameter("iou_threshold").value)
-        self.imgsz = int(self.get_parameter("imgsz").value)
-        self.target_class_id = int(self.get_parameter("target_class_id").value)
-        self.target_class_name = str(self.get_parameter("target_class_name").value).strip()
-        self.predict_hz = float(self.get_parameter("predict_hz").value)
+        self.device = str(yaml_param(self, "device")).strip() or "cpu"
+        self.conf_threshold = float(yaml_param(self, "conf_threshold", descriptor=dyn_num))
+        self.iou_threshold = float(yaml_param(self, "iou_threshold", descriptor=dyn_num))
+        self.imgsz = int(yaml_param(self, "imgsz"))
+        self.target_class_id = int(yaml_param(self, "target_class_id"))
+        self.target_class_name = str(yaml_param(self, "target_class_name")).strip()
+        self.predict_hz = float(yaml_param(self, "predict_hz", descriptor=dyn_num))
         self.tracker_config = resolve_tracker_config(
-            str(self.get_parameter("tracker_config").value).strip(),
+            str(yaml_param(self, "tracker_config")).strip(),
             __file__,
         )
-        self.event_topic = str(self.get_parameter("event_topic").value)
-        self.publish_events = bool(self.get_parameter("publish_events").value)
+        self.event_topic = str(yaml_param(self, "event_topic"))
+        self.publish_events = bool(yaml_param(self, "publish_events"))
 
         if self.predict_hz <= 0.0:
             raise ValueError("predict_hz must be > 0")
@@ -85,6 +69,7 @@ class LeaderTracker(Node):
             raise ValueError("ultralytics is required for leader_tracker")
 
         self.model = load_ultralytics_model(self.yolo_weights)
+        self.task_type = self._resolve_task_type()
         self.last_predict_time: Optional[Time] = None
         self.active_track_id: Optional[int] = None
         self.active_track_hits = 0
@@ -102,6 +87,19 @@ class LeaderTracker(Node):
             f"weights={self.yolo_weights}, tracker={self.tracker_config}, device={self.device}, predict_hz={self.predict_hz}"
         )
         self.emit_event("TRACKER_NODE_START")
+
+    def _resolve_task_type(self) -> str:
+        model_task = getattr(self.model, "task", None)
+        if isinstance(model_task, str):
+            task = model_task.strip().lower()
+            if task == "obb":
+                return "obb"
+            if task in {"detect", "detection"}:
+                return "detection"
+        weights_lower = str(self.yolo_weights or "").lower()
+        if "/obb/" in weights_lower or weights_lower.endswith("-obb.pt") or weights_lower.endswith("_obb.pt"):
+            return "obb"
+        return "detection"
 
     def emit_event(self, name: str) -> None:
         if not self.publish_events:
@@ -282,7 +280,7 @@ class LeaderTracker(Node):
         self.pub.publish(out)
 
     def _publish_status(self, state: str, reason: str, det: Optional[Detection2D]) -> None:
-        self.status_helper.publish(state=state, reason=reason, det=det)
+        self.status_helper.publish(state=state, reason=reason, task=self.task_type, det=det)
 
     def on_image(self, msg: Image) -> None:
         now = self.get_clock().now()

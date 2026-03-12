@@ -16,9 +16,14 @@ class FollowDebugPublishers:
             f"/{uav_name}/follow/target/d_target_m",
             10,
         )
-        self.follow_target_z_alt_pub = node.create_publisher(
+        self.follow_target_xy_target_pub = node.create_publisher(
             Float32,
-            f"/{uav_name}/follow/target/z_alt_m",
+            f"/{uav_name}/follow/target/xy_target_m",
+            10,
+        )
+        self.follow_target_z_min_pub = node.create_publisher(
+            Float32,
+            f"/{uav_name}/follow/target/z_min_m",
             10,
         )
         self.follow_target_d_euclidean_pub = node.create_publisher(
@@ -143,9 +148,9 @@ class FollowDebugPublishers:
         stamp,
         frame_id: str,
         anchor_target: Pose2D,
+        xy_target: float,
+        z_min: float,
         d_target: float,
-        z_alt: float,
-        d_euclidean: float,
         actual_xy_distance: float,
         actual_distance_3d: float,
         actual_yaw: float,
@@ -174,7 +179,7 @@ class FollowDebugPublishers:
         anchor_msg.header.frame_id = frame_id
         anchor_msg.pose.position.x = float(anchor_target.x)
         anchor_msg.pose.position.y = float(anchor_target.y)
-        anchor_msg.pose.position.z = float(z_alt)
+        anchor_msg.pose.position.z = float(z_min)
         quat = quat_from_yaw(float(anchor_target.yaw))
         anchor_msg.pose.orientation.x = float(quat[0])
         anchor_msg.pose.orientation.y = float(quat[1])
@@ -183,8 +188,9 @@ class FollowDebugPublishers:
         self.follow_target_anchor_pub.publish(anchor_msg)
 
         self._publish_scalar(self.follow_target_d_target_pub, d_target)
-        self._publish_scalar(self.follow_target_z_alt_pub, z_alt)
-        self._publish_scalar(self.follow_target_d_euclidean_pub, d_euclidean)
+        self._publish_scalar(self.follow_target_xy_target_pub, xy_target)
+        self._publish_scalar(self.follow_target_z_min_pub, z_min)
+        self._publish_scalar(self.follow_target_d_euclidean_pub, d_target)
         self._publish_scalar(self.follow_target_yaw_pub, target_yaw)
 
         self._publish_scalar(self.follow_actual_xy_distance_pub, actual_xy_distance)

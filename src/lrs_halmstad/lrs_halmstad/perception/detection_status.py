@@ -21,6 +21,7 @@ def build_detection_status_line(
     *,
     state: str,
     reason: str,
+    task: str,
     det: Optional[Detection2D],
 ) -> str:
     perception = "none" if det is None else (det.source or "external")
@@ -33,6 +34,7 @@ def build_detection_status_line(
     track_state = "na" if det is None else str(det.track_state or "na")
     track_switched = False if det is None else bool(det.track_switched)
     return (
+        f"task={str(task).strip() or 'detection'} "
         f"state={str(state).strip() or 'UNKNOWN'} "
         f"reason={str(reason).strip() or 'none'} "
         f"perception={perception} "
@@ -57,12 +59,10 @@ def overlay_lines_from_status(line: str) -> list[str]:
     except Exception:
         age_text = f"{age_raw}s"
     return [
-        f"src={fields.get('perception', 'none')}",
-        (
-            f"id={fields.get('track_id', 'none')} "
-            f"hits={fields.get('track_hits', '0')} "
-            f"age={age_text}"
-        ),
+        f"src: {fields.get('perception', 'none')}",
+        f"id: {fields.get('track_id', 'none')}",
+        f"hits: {fields.get('track_hits', '0')}",
+        f"age: {age_text}",
     ]
 
 
@@ -70,7 +70,7 @@ class DetectionStatusPublisher:
     def __init__(self, node, topic: str):
         self._pub = node.create_publisher(String, str(topic).strip(), 10)
 
-    def publish(self, *, state: str, reason: str, det: Optional[Detection2D]) -> None:
+    def publish(self, *, state: str, reason: str, task: str, det: Optional[Detection2D]) -> None:
         msg = String()
-        msg.data = build_detection_status_line(state=state, reason=reason, det=det)
+        msg.data = build_detection_status_line(state=state, reason=reason, task=task, det=det)
         self._pub.publish(msg)

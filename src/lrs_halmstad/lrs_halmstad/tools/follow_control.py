@@ -18,19 +18,21 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
 
+from lrs_halmstad.follow.follow_math import horizontal_distance_for_euclidean
+
 
 @dataclass
 class FollowControlConfig:
     mode: str
     node_name: str
     timeout_s: float
-    step_z_alt: float
+    step_z_min: float
     step_d_target: float
     interval_s: float
     start_delay_s: float
     count: int
-    min_z_alt: float
-    max_z_alt: float
+    min_z_min: float
+    max_z_min: float
     min_d_target: float
     max_d_target: float
     focus_min: float
@@ -108,7 +110,7 @@ class RandomFollowParams(Node):
             "Random follow param sweep ready: "
             f"target={config.node_name} "
             f"interval={config.interval_s:.1f}s "
-            f"z_alt=[{config.min_z_alt}, {config.max_z_alt}] "
+            f"z_min=[{config.min_z_min}, {config.max_z_min}] "
             f"d_target=[{config.min_d_target}, {config.max_d_target}] "
             f"focus=[{config.focus_min}, {config.focus_max}] "
             f"focus_weight={config.focus_weight:.2f} "
@@ -124,8 +126,8 @@ class RandomFollowParams(Node):
             raise ValueError("interval must be > 0")
         if cfg.timeout_s <= 0.0:
             raise ValueError("timeout must be > 0")
-        if cfg.min_z_alt <= 0.0 or cfg.max_z_alt <= 0.0 or cfg.max_z_alt < cfg.min_z_alt:
-            raise ValueError("z_alt range must satisfy 0 < min <= max")
+        if cfg.min_z_min < 0.0 or cfg.max_z_min < cfg.min_z_min:
+            raise ValueError("z_min range must satisfy 0 <= min <= max")
         if cfg.min_d_target <= 0.0 or cfg.max_d_target <= 0.0 or cfg.max_d_target < cfg.min_d_target:
             raise ValueError("d_target range must satisfy 0 < min <= max")
         if cfg.focus_max < cfg.focus_min:
@@ -147,11 +149,11 @@ class RandomFollowParams(Node):
         if time.monotonic() < self.next_update_wall:
             return
 
-        z_alt = round(
+        z_min = round(
             sample_biased_range(
                 self.rng,
-                self.config.min_z_alt,
-                self.config.max_z_alt,
+                self.config.min_z_min,
+                self.config.max_z_min,
                 self.config.focus_min,
                 self.config.focus_max,
                 self.config.focus_weight,
@@ -169,23 +171,23 @@ class RandomFollowParams(Node):
             ),
             self.config.decimals,
         )
-        d_euclidean = math.hypot(d_target, z_alt)
+        xy_target = horizontal_distance_for_euclidean(d_target, z_min)
 
         params = [
             Parameter("d_target", Parameter.Type.DOUBLE, float(d_target)),
-            Parameter("z_alt", Parameter.Type.DOUBLE, float(z_alt)),
+            Parameter("z_min", Parameter.Type.DOUBLE, float(z_min)),
         ]
         self.pending_future = self.param_client.set_parameters_atomically(params)
         self.pending_future.add_done_callback(
-            lambda future, d_target=d_target, z_alt=z_alt, d_euclidean=d_euclidean: self._on_set_complete(
+            lambda future, d_target=d_target, z_min=z_min, xy_target=xy_target: self._on_set_complete(
                 future,
                 d_target,
-                z_alt,
-                d_euclidean,
+                z_min,
+                xy_target,
             )
         )
 
-    def _on_set_complete(self, future, d_target: float, z_alt: float, d_euclidean: float) -> None:
+    def _on_set_complete(self, future, d_target: float, z_min: float, xy_target: float) -> None:
         self.pending_future = None
         try:
             result = future.result()
@@ -204,8 +206,8 @@ class RandomFollowParams(Node):
         self.applied_count += 1
         self.next_update_wall = time.monotonic() + self.config.interval_s
         self.get_logger().info(
-            f"[{self.applied_count}] d_target={d_target:.2f} z_alt={z_alt:.2f} "
-            f"d_euclidean={d_euclidean:.2f}"
+            f"[{self.applied_count}] d_target={d_target:.2f} z_min={z_min:.2f} "
+            f"xy_target={xy_target:.2f}"
         )
 
         if self.config.count > 0 and self.applied_count >= self.config.count:
@@ -220,7 +222,7 @@ class KeyboardFollowParams(Node):
         self.param_client = AsyncParameterClient(self, config.node_name)
         self.pending_get = None
         self.pending_set = None
-        self.current_z_alt: Optional[float] = None
+        self.current_z_min: Optional[float] = None
         self.current_d_target: Optional[float] = None
         if not sys.stdin.isatty():
             raise RuntimeError("params mode requires an interactive terminal")
@@ -237,12 +239,12 @@ class KeyboardFollowParams(Node):
         cfg = self.config
         if cfg.timeout_s <= 0.0:
             raise ValueError("timeout must be > 0")
-        if cfg.step_z_alt <= 0.0:
-            raise ValueError("step-z-alt must be > 0")
+        if cfg.step_z_min <= 0.0:
+            raise ValueError("step-z-min must be > 0")
         if cfg.step_d_target <= 0.0:
             raise ValueError("step-d-target must be > 0")
-        if cfg.min_z_alt <= 0.0 or cfg.max_z_alt < cfg.min_z_alt:
-            raise ValueError("z_alt bounds must satisfy 0 < min <= max")
+        if cfg.min_z_min < 0.0 or cfg.max_z_min < cfg.min_z_min:
+            raise ValueError("z_min bounds must satisfy 0 <= min <= max")
         if cfg.min_d_target <= 0.0 or cfg.max_d_target < cfg.min_d_target:
             raise ValueError("d_target bounds must satisfy 0 < min <= max")
 
@@ -267,8 +269,8 @@ class KeyboardFollowParams(Node):
         print(
             "\nFollow parameter control\n"
             f"  target node: {self.config.node_name}\n"
-            f"  w: z_alt +{self.config.step_z_alt:g}\n"
-            f"  s: z_alt -{self.config.step_z_alt:g}\n"
+            f"  w: z_min +{self.config.step_z_min:g}\n"
+            f"  s: z_min -{self.config.step_z_min:g}\n"
             f"  d: d_target +{self.config.step_d_target:g}\n"
             f"  a: d_target -{self.config.step_d_target:g}\n"
             "  r: refresh current values\n"
@@ -301,18 +303,18 @@ class KeyboardFollowParams(Node):
             self._request_current_values()
             return
 
-        if self.current_z_alt is None or self.current_d_target is None:
+        if self.current_z_min is None or self.current_d_target is None:
             self.get_logger().warn("Current follow params not loaded yet; press 'r' in a moment")
             self._request_current_values()
             return
 
-        z_alt = self.current_z_alt
+        z_min = self.current_z_min
         d_target = self.current_d_target
 
         if char == "w":
-            z_alt += self.config.step_z_alt
+            z_min += self.config.step_z_min
         elif char == "s":
-            z_alt -= self.config.step_z_alt
+            z_min -= self.config.step_z_min
         elif char == "d":
             d_target += self.config.step_d_target
         elif char == "a":
@@ -320,12 +322,12 @@ class KeyboardFollowParams(Node):
         else:
             return
 
-        z_alt = min(max(z_alt, self.config.min_z_alt), self.config.max_z_alt)
+        z_min = min(max(z_min, self.config.min_z_min), self.config.max_z_min)
         d_target = min(max(d_target, self.config.min_d_target), self.config.max_d_target)
-        self._set_follow_values(d_target=d_target, z_alt=z_alt)
+        self._set_follow_values(d_target=d_target, z_min=z_min)
 
     def _request_current_values(self) -> None:
-        future = self.param_client.get_parameters(["d_target", "z_alt"])
+        future = self.param_client.get_parameters(["d_target", "z_min"])
         self.pending_get = future
         future.add_done_callback(self._on_get_complete)
 
@@ -348,23 +350,24 @@ class KeyboardFollowParams(Node):
             return
 
         d_target = float(values[0].double_value)
-        z_alt = float(values[1].double_value)
+        z_min = float(values[1].double_value)
         self.current_d_target = d_target
-        self.current_z_alt = z_alt
-        print(f"Current values: d_target={d_target:.2f} z_alt={z_alt:.2f}", flush=True)
+        self.current_z_min = z_min
+        xy_target = horizontal_distance_for_euclidean(d_target, z_min)
+        print(f"Current values: d_target={d_target:.2f} xy_target={xy_target:.2f} z_min={z_min:.2f}", flush=True)
 
-    def _set_follow_values(self, d_target: float, z_alt: float) -> None:
+    def _set_follow_values(self, d_target: float, z_min: float) -> None:
         params = [
             Parameter("d_target", Parameter.Type.DOUBLE, float(d_target)),
-            Parameter("z_alt", Parameter.Type.DOUBLE, float(z_alt)),
+            Parameter("z_min", Parameter.Type.DOUBLE, float(z_min)),
         ]
         future = self.param_client.set_parameters_atomically(params)
         self.pending_set = future
         future.add_done_callback(
-            lambda done, d_target=d_target, z_alt=z_alt: self._on_set_complete(done, d_target, z_alt)
+            lambda done, d_target=d_target, z_min=z_min: self._on_set_complete(done, d_target, z_min)
         )
 
-    def _on_set_complete(self, future, d_target: float, z_alt: float) -> None:
+    def _on_set_complete(self, future, d_target: float, z_min: float) -> None:
         self.pending_set = None
         try:
             result = future.result()
@@ -380,8 +383,9 @@ class KeyboardFollowParams(Node):
             return
 
         self.current_d_target = d_target
-        self.current_z_alt = z_alt
-        print(f"Applied: d_target={d_target:.2f} z_alt={z_alt:.2f}", flush=True)
+        self.current_z_min = z_min
+        xy_target = horizontal_distance_for_euclidean(d_target, z_min)
+        print(f"Applied: d_target={d_target:.2f} xy_target={xy_target:.2f} z_min={z_min:.2f}", flush=True)
 
 
 def parse_args() -> FollowControlConfig:
@@ -392,17 +396,20 @@ def parse_args() -> FollowControlConfig:
         "--mode",
         choices=("keyboard", "params", "random"),
         default="keyboard",
-        help="keyboard/params: keyboard d_target/z_alt tuning; random: random d_target/z_alt updates",
+        help="keyboard/params: keyboard d_target/z_min tuning; random: random d_target/z_min updates",
     )
     parser.add_argument("--node", default="/follow_uav", help="Target follow node, default: /follow_uav")
     parser.add_argument("--timeout", type=float, default=1.0, help="Service wait timeout in seconds, default: 1")
-    parser.add_argument("--step-z-alt", type=float, default=5.0, help="Keyboard z_alt change per keypress, default: 5")
+    parser.add_argument("--step-z-min", type=float, default=5.0, help="Keyboard z_min change per keypress, default: 5")
+    parser.add_argument("--step-z-alt", dest="step_z_min", type=float, help=argparse.SUPPRESS)
     parser.add_argument("--step-d-target", type=float, default=5.0, help="Keyboard d_target change per keypress, default: 5")
     parser.add_argument("--interval", type=float, default=10.0, help="Seconds between random updates, default: 10")
     parser.add_argument("--start-delay", type=float, default=0.0, help="Initial delay before the first random update, default: 0")
     parser.add_argument("--count", type=int, default=0, help="Number of random updates to apply, default: 0 (infinite)")
-    parser.add_argument("--min-z-alt", type=float, default=2.0, help="Minimum z_alt in params/random mode, default: 2")
-    parser.add_argument("--max-z-alt", type=float, default=40.0, help="Maximum z_alt in params/random mode, default: 40")
+    parser.add_argument("--min-z-min", type=float, default=2.0, help="Minimum z_min in params/random mode, default: 2")
+    parser.add_argument("--max-z-min", type=float, default=40.0, help="Maximum z_min in params/random mode, default: 40")
+    parser.add_argument("--min-z-alt", dest="min_z_min", type=float, help=argparse.SUPPRESS)
+    parser.add_argument("--max-z-alt", dest="max_z_min", type=float, help=argparse.SUPPRESS)
     parser.add_argument("--min-d-target", type=float, default=1.0, help="Minimum d_target in params/random mode, default: 1")
     parser.add_argument("--max-d-target", type=float, default=20.0, help="Maximum d_target in params/random mode, default: 20")
     parser.add_argument("--focus-min", type=float, default=5.0, help="Lower edge of the preferred random sampling band, default: 5")
@@ -416,13 +423,13 @@ def parse_args() -> FollowControlConfig:
         mode=mode,
         node_name=args.node,
         timeout_s=float(args.timeout),
-        step_z_alt=float(args.step_z_alt),
+        step_z_min=float(args.step_z_min),
         step_d_target=float(args.step_d_target),
         interval_s=float(args.interval),
         start_delay_s=float(args.start_delay),
         count=int(args.count),
-        min_z_alt=float(args.min_z_alt),
-        max_z_alt=float(args.max_z_alt),
+        min_z_min=float(args.min_z_min),
+        max_z_min=float(args.max_z_min),
         min_d_target=float(args.min_d_target),
         max_d_target=float(args.max_d_target),
         focus_min=float(args.focus_min),

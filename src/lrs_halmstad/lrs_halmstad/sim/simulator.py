@@ -14,6 +14,7 @@ from tf_transformations import quaternion_from_euler
 from sensor_msgs.msg import Joy
 from ros_gz_interfaces.srv import SetEntityPose
 
+from lrs_halmstad.common.ros_params import yaml_param
 from lrs_halmstad.common.world_names import gazebo_world_name
 from lrs_halmstad.follow.follow_math import rotate_body_offset, wrap_pi, yaw_from_quat
 
@@ -28,12 +29,12 @@ class Simulator(Node):
         self.declare_parameter("update_rate_hz", 20.0)
         self.declare_parameter("camera_mode", "detached_model")
         self.declare_parameter("camera_name", "camera0")
-        self.declare_parameter("camera_x_offset_m", 0.0)
-        self.declare_parameter("camera_y_offset_m", 0.0)
-        self.declare_parameter("camera_z_offset_m", 0.27)
-        self.declare_parameter("camera_mount_pitch_deg", 45.0)
-        self.declare_parameter("camera_yaw_offset_deg", 0.0)
-        self.declare_parameter("camera_pan_sign", 1.0)
+        yaml_param(self, "camera_x_offset_m")
+        yaml_param(self, "camera_y_offset_m")
+        yaml_param(self, "camera_z_offset_m")
+        yaml_param(self, "camera_mount_pitch_deg")
+        yaml_param(self, "camera_yaw_offset_deg")
+        yaml_param(self, "camera_pan_sign")
         self.declare_parameter("gimbal_pitch_min_rad", -1.5708)
         self.declare_parameter("gimbal_pitch_max_rad", 0.7854)
         self.declare_parameter("sync_detached_camera_pose", True)
@@ -288,13 +289,6 @@ class Simulator(Node):
             x = self.world_position.x
             y = self.world_position.y
             z = self.world_position.z
-            if (
-                self.camera_mode == "detached_model"
-                and self.sync_detached_camera_pose
-                and ((self.future1 is not None and not self.future1.done()) or
-                     (self.future2 is not None and not self.future2.done()))
-            ):
-                return
             self.set_pose(self.name, x, y, z, self.yaw)
             if self.camera_mode == "detached_model":
                 self.set_camera_model_pose(x, y, z, self.pan, self.tilt)

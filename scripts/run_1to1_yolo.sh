@@ -17,7 +17,6 @@ WEIGHTS_REL=""
 MODEL_SUBDIR=""
 HAVE_UAV_START_X="false"
 HAVE_UAV_START_Z="false"
-HAVE_STARTUP_REPOSITION_ENABLE="false"
 HAVE_LEADER_ACTUAL_POSE_ENABLE="false"
 HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="false"
 HAVE_PUBLISH_POSE_CMD_TOPICS="false"
@@ -142,10 +141,6 @@ for arg in "$@"; do
       HAVE_UAV_START_Z="true"
       EXTRA_ARGS+=("$arg")
       ;;
-    startup_reposition_enable:=*)
-      HAVE_STARTUP_REPOSITION_ENABLE="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
     *)
       EXTRA_ARGS+=("$arg")
       ;;
@@ -263,9 +258,6 @@ if [ ! -f "$WEIGHTS_PATH" ]; then
 fi
 
 if [ "$USE_ESTIMATE" = true ]; then
-  if [ "$HAVE_STARTUP_REPOSITION_ENABLE" != true ]; then
-    EXTRA_ARGS+=("startup_reposition_enable:=true")
-  fi
   if [ -z "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then
     EXTRA_ARGS+=("leader_actual_heading_enable:=true")
   elif [ -n "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then

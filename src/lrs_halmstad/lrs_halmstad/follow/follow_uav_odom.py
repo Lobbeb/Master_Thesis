@@ -12,10 +12,14 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32, String
 
+from lrs_halmstad.common.ros_params import declare_yaml_param, required_param_value
+from lrs_halmstad.follow.follow_core import (
+    FollowControllerCoreMixin,
+    compute_rate_limited_axis_value,
+)
 from lrs_halmstad.follow.follow_debug import FollowDebugPublishers
 from lrs_halmstad.follow.follow_math import (
     Pose2D,
-    camera_xy_from_uav_pose,
     clamp_point_to_radius,
     coerce_bool,
     compute_leader_look_target,
@@ -24,36 +28,7 @@ from lrs_halmstad.follow.follow_math import (
     yaw_from_quat,
 )
 
-
-def compute_rate_limited_axis_value(
-    current_value: float,
-    target_value: float,
-    *,
-    tick_hz: float,
-    max_speed_per_s: float,
-    gain: float,
-    snap_tolerance: float = 0.01,
-) -> float:
-    if tick_hz <= 0.0:
-        return float(target_value)
-
-    error = float(target_value) - float(current_value)
-    if abs(error) <= max(0.0, float(snap_tolerance)):
-        return float(target_value)
-
-    axis_speed_per_s = min(
-        max(float(max_speed_per_s), 0.0),
-        max(float(gain), 0.0) * abs(error),
-    )
-    step_limit = axis_speed_per_s / float(tick_hz) if axis_speed_per_s > 0.0 else 0.0
-    if step_limit <= 0.0:
-        return float(current_value)
-    if abs(error) <= step_limit:
-        return float(target_value)
-    return float(current_value) + math.copysign(step_limit, error)
-
-
-class FollowUavOdom(Node):
+class FollowUavOdom(FollowControllerCoreMixin, Node):
     def __init__(self):
         super().__init__("follow_uav")
         dyn_num = ParameterDescriptor(dynamic_typing=True)
@@ -62,96 +37,111 @@ class FollowUavOdom(Node):
         self.declare_parameter("uav_name", "dji0")
         self.declare_parameter("leader_odom_topic", "/a201_0000/platform/odom/filtered")
 
-        self.declare_parameter("tick_hz", 10.0, dyn_num)
-        self.declare_parameter("d_target", 7.0, dyn_num)
+        declare_yaml_param(self, "tick_hz", descriptor=dyn_num)
+        declare_yaml_param(self, "d_target", descriptor=dyn_num)
         self.declare_parameter("d_max", 100.0)
-        self.declare_parameter("z_alt", 7.0, dyn_num)
+        declare_yaml_param(self, "xy_anchor_max", descriptor=dyn_num)
+        declare_yaml_param(self, "xy_min", descriptor=dyn_num)
+        declare_yaml_param(self, "z_min", descriptor=dyn_num)
+        self.declare_parameter("z_max", 0.0, dyn_num)
+        self.declare_parameter("xy_max", 0.0, dyn_num)
         self.declare_parameter("d_euclidean", 0.0, dyn_num)
-        self.declare_parameter("manual_override_enable", False)
+        declare_yaml_param(self, "seed_uav_cmd_on_start")
+        declare_yaml_param(self, "uav_start_x")
+        declare_yaml_param(self, "uav_start_y")
+        declare_yaml_param(self, "uav_start_z")
+        declare_yaml_param(self, "uav_start_yaw_deg")
 
-        self.declare_parameter("seed_uav_cmd_on_start", True)
-        self.declare_parameter("uav_start_x", -2.0)
-        self.declare_parameter("uav_start_y", 0.0)
-        self.declare_parameter("uav_start_yaw_deg", 0.0)
-        self.declare_parameter("startup_nudge_enable", False)
-        self.declare_parameter("startup_nudge_dx_m", 0.30)
-        self.declare_parameter("startup_nudge_dy_m", 0.0)
+        declare_yaml_param(self, "follow_yaw")
+        declare_yaml_param(self, "pose_timeout_s")
+        declare_yaml_param(self, "min_cmd_period_s")
+        declare_yaml_param(self, "smooth_alpha")
+        declare_yaml_param(self, "follow_speed_mps")
+        declare_yaml_param(self, "follow_speed_gain")
+        declare_yaml_param(self, "follow_z_speed_mps")
+        declare_yaml_param(self, "follow_z_speed_gain")
+        declare_yaml_param(self, "cmd_xy_deadband_m")
+        declare_yaml_param(self, "follow_yaw_rate_rad_s")
+        declare_yaml_param(self, "follow_yaw_rate_gain")
+        declare_yaml_param(self, "yaw_deadband_rad")
+        declare_yaml_param(self, "yaw_update_xy_gate_m")
 
-        self.declare_parameter("follow_yaw", True)
-        self.declare_parameter("pose_timeout_s", 3.0)
-        self.declare_parameter("min_cmd_period_s", 0.05)
-        self.declare_parameter("smooth_alpha", 1.0)
-        self.declare_parameter("follow_speed_mps", 1.0)
-        self.declare_parameter("follow_speed_gain", 2.0)
-        self.declare_parameter("follow_z_speed_mps", 1.0)
-        self.declare_parameter("follow_z_speed_gain", 2.0)
-        self.declare_parameter("cmd_xy_deadband_m", 0.02)
-        self.declare_parameter("follow_yaw_rate_rad_s", 1.0)
-        self.declare_parameter("follow_yaw_rate_gain", 2.0)
-        self.declare_parameter("yaw_deadband_rad", 0.01)
-        self.declare_parameter("yaw_update_xy_gate_m", 0.0)
-
-        self.declare_parameter("event_topic", "/coord/events")
-        self.declare_parameter("publish_events", False)
-        self.declare_parameter("publish_metrics", False)
-        self.declare_parameter("publish_debug_topics", True)
-        self.declare_parameter("publish_pose_cmd_topics", True)
-        self.declare_parameter("metrics_prefix", "/coord")
-        self.declare_parameter("camera_x_offset_m", 0.0)
-        self.declare_parameter("camera_y_offset_m", 0.0)
-        self.declare_parameter("camera_z_offset_m", 0.27)
-        self.declare_parameter("leader_look_target_x_m", 0.0)
-        self.declare_parameter("leader_look_target_y_m", 0.0)
+        declare_yaml_param(self, "event_topic")
+        declare_yaml_param(self, "publish_events")
+        declare_yaml_param(self, "publish_metrics")
+        declare_yaml_param(self, "publish_debug_topics")
+        declare_yaml_param(self, "publish_pose_cmd_topics")
+        declare_yaml_param(self, "metrics_prefix")
+        declare_yaml_param(self, "camera_x_offset_m")
+        declare_yaml_param(self, "camera_y_offset_m")
+        declare_yaml_param(self, "camera_z_offset_m")
+        declare_yaml_param(self, "leader_look_target_x_m")
+        declare_yaml_param(self, "leader_look_target_y_m")
 
         self.world = str(self.get_parameter("world").value)
         self.uav_name = str(self.get_parameter("uav_name").value)
         self.leader_odom_topic = str(self.get_parameter("leader_odom_topic").value)
 
-        self.tick_hz = float(self.get_parameter("tick_hz").value)
-        self.d_target = float(self.get_parameter("d_target").value)
-        self.d_max = float(self.get_parameter("d_max").value)
-        self.z_alt = float(self.get_parameter("z_alt").value)
-        self.d_euclidean = float(self.get_parameter("d_euclidean").value)
-        self.manual_override_enable = coerce_bool(self.get_parameter("manual_override_enable").value)
+        self.tick_hz = float(required_param_value(self, "tick_hz"))
+        self.d_target = float(required_param_value(self, "d_target"))
+        legacy_d_max = float(self.get_parameter("d_max").value)
+        xy_anchor_max_param = float(required_param_value(self, "xy_anchor_max"))
+        self.xy_anchor_max = xy_anchor_max_param if xy_anchor_max_param > 0.0 else legacy_d_max
+        self.xy_min = float(required_param_value(self, "xy_min"))
+        self.z_min = float(required_param_value(self, "z_min"))
+        self.z_max = float(self.get_parameter("z_max").value)
+        self.xy_max = float(self.get_parameter("xy_max").value)
+        legacy_d_target = float(self.get_parameter("d_euclidean").value)
+        if legacy_d_target > 0.0:
+            self.d_target = legacy_d_target
+        self.d_target = max(self.d_target, 0.01)
+        self.xy_target = 0.0
+        self.seed_uav_cmd_on_start = coerce_bool(required_param_value(self, "seed_uav_cmd_on_start"))
+        self.uav_start_x = float(required_param_value(self, "uav_start_x"))
+        self.uav_start_y = float(required_param_value(self, "uav_start_y"))
+        self.uav_start_z = float(required_param_value(self, "uav_start_z"))
+        self.uav_start_yaw = math.radians(float(required_param_value(self, "uav_start_yaw_deg")))
 
-        self.seed_uav_cmd_on_start = coerce_bool(self.get_parameter("seed_uav_cmd_on_start").value)
-        self.uav_start_x = float(self.get_parameter("uav_start_x").value)
-        self.uav_start_y = float(self.get_parameter("uav_start_y").value)
-        self.uav_start_yaw = math.radians(float(self.get_parameter("uav_start_yaw_deg").value))
-        self.startup_nudge_enable = coerce_bool(self.get_parameter("startup_nudge_enable").value)
-        self.startup_nudge_dx_m = float(self.get_parameter("startup_nudge_dx_m").value)
-        self.startup_nudge_dy_m = float(self.get_parameter("startup_nudge_dy_m").value)
+        self.follow_yaw = coerce_bool(required_param_value(self, "follow_yaw"))
+        self.pose_timeout_s = float(required_param_value(self, "pose_timeout_s"))
+        self.min_cmd_period_s = float(required_param_value(self, "min_cmd_period_s"))
+        self.smooth_alpha = float(required_param_value(self, "smooth_alpha"))
+        self.follow_speed_mps = float(required_param_value(self, "follow_speed_mps"))
+        self.follow_speed_gain = float(required_param_value(self, "follow_speed_gain"))
+        self.follow_z_speed_mps = float(required_param_value(self, "follow_z_speed_mps"))
+        self.follow_z_speed_gain = float(required_param_value(self, "follow_z_speed_gain"))
+        self.cmd_xy_deadband_m = float(required_param_value(self, "cmd_xy_deadband_m"))
+        self.follow_yaw_rate_rad_s = float(required_param_value(self, "follow_yaw_rate_rad_s"))
+        self.follow_yaw_rate_gain = float(required_param_value(self, "follow_yaw_rate_gain"))
+        self.yaw_deadband_rad = float(required_param_value(self, "yaw_deadband_rad"))
+        self.yaw_update_xy_gate_m = float(required_param_value(self, "yaw_update_xy_gate_m"))
 
-        self.follow_yaw = coerce_bool(self.get_parameter("follow_yaw").value)
-        self.pose_timeout_s = float(self.get_parameter("pose_timeout_s").value)
-        self.min_cmd_period_s = float(self.get_parameter("min_cmd_period_s").value)
-        self.smooth_alpha = float(self.get_parameter("smooth_alpha").value)
-        self.follow_speed_mps = float(self.get_parameter("follow_speed_mps").value)
-        self.follow_speed_gain = float(self.get_parameter("follow_speed_gain").value)
-        self.follow_z_speed_mps = float(self.get_parameter("follow_z_speed_mps").value)
-        self.follow_z_speed_gain = float(self.get_parameter("follow_z_speed_gain").value)
-        self.cmd_xy_deadband_m = float(self.get_parameter("cmd_xy_deadband_m").value)
-        self.follow_yaw_rate_rad_s = float(self.get_parameter("follow_yaw_rate_rad_s").value)
-        self.follow_yaw_rate_gain = float(self.get_parameter("follow_yaw_rate_gain").value)
-        self.yaw_deadband_rad = float(self.get_parameter("yaw_deadband_rad").value)
-        self.yaw_update_xy_gate_m = float(self.get_parameter("yaw_update_xy_gate_m").value)
-
-        self.event_topic = str(self.get_parameter("event_topic").value)
-        self.publish_events = coerce_bool(self.get_parameter("publish_events").value)
-        self.publish_metrics = coerce_bool(self.get_parameter("publish_metrics").value)
-        self.publish_debug_topics = coerce_bool(self.get_parameter("publish_debug_topics").value)
-        self.publish_pose_cmd_topics = coerce_bool(self.get_parameter("publish_pose_cmd_topics").value)
-        self.metrics_prefix = str(self.get_parameter("metrics_prefix").value).rstrip("/") or "/coord"
-        self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
-        self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
-        self.camera_z_offset_m = float(self.get_parameter("camera_z_offset_m").value)
-        self.leader_look_target_x_m = float(self.get_parameter("leader_look_target_x_m").value)
-        self.leader_look_target_y_m = float(self.get_parameter("leader_look_target_y_m").value)
+        self.event_topic = str(required_param_value(self, "event_topic"))
+        self.publish_events = coerce_bool(required_param_value(self, "publish_events"))
+        self.publish_metrics = coerce_bool(required_param_value(self, "publish_metrics"))
+        self.publish_debug_topics = coerce_bool(required_param_value(self, "publish_debug_topics"))
+        self.publish_pose_cmd_topics = coerce_bool(required_param_value(self, "publish_pose_cmd_topics"))
+        self.metrics_prefix = str(required_param_value(self, "metrics_prefix")).rstrip("/") or "/coord"
+        self.camera_x_offset_m = float(required_param_value(self, "camera_x_offset_m"))
+        self.camera_y_offset_m = float(required_param_value(self, "camera_y_offset_m"))
+        self.camera_z_offset_m = float(required_param_value(self, "camera_z_offset_m"))
+        self.leader_look_target_x_m = float(required_param_value(self, "leader_look_target_x_m"))
+        self.leader_look_target_y_m = float(required_param_value(self, "leader_look_target_y_m"))
 
         if self.tick_hz <= 0.0:
             raise ValueError("tick_hz must be > 0")
-        if self.d_target <= 0.0 or self.d_max <= 0.0:
-            raise ValueError("d_target and d_max must be > 0")
+        if self.z_min < 0.0:
+            raise ValueError("z_min must be >= 0")
+        if self.xy_min < 0.0:
+            raise ValueError("xy_min must be >= 0")
+        if self.z_max > 0.0 and self.z_max < self.z_min:
+            raise ValueError("z_max must be >= z_min when enabled")
+        if self.xy_max < 0.0:
+            raise ValueError("xy_max must be >= 0")
+        if self.xy_max > 0.0 and self.xy_max < self.xy_min:
+            raise ValueError("xy_max must be >= xy_min when enabled")
+        if self.xy_anchor_max <= 0.0:
+            raise ValueError("xy_anchor_max must be > 0")
         if (
             self.follow_speed_mps < 0.0
             or self.follow_speed_gain < 0.0
@@ -166,13 +156,7 @@ class FollowUavOdom(Node):
                 "follow_yaw_rate_gain must be >= 0"
             )
 
-        if self.d_euclidean <= 0.0:
-            self.d_euclidean = math.hypot(self.d_target, self.z_alt)
-        self.d_euclidean = max(self.d_euclidean, 0.01)
-        self.d_euclidean_xy_ratio = self.d_target / self.d_euclidean
-        self.d_euclidean_z_ratio = self.z_alt / self.d_euclidean
-        self.base_d_target = self.d_target
-        self.base_d_euclidean = self.d_euclidean
+        self._refresh_xy_target()
         self.base_follow_speed_mps = self.follow_speed_mps
 
         self.have_ugv = False
@@ -182,24 +166,20 @@ class FollowUavOdom(Node):
         self.last_ugv_stamp: Optional[Time] = None
 
         self.uav_cmd = Pose2D(self.uav_start_x, self.uav_start_y, self.uav_start_yaw)
-        self.uav_cmd_z = self.z_alt
+        self.uav_cmd_z = self.uav_start_z
         self.have_uav_cmd = bool(self.seed_uav_cmd_on_start)
 
         self.uav_actual = Pose2D(self.uav_start_x, self.uav_start_y, self.uav_start_yaw)
-        self.uav_actual_z = self.z_alt
+        self.uav_actual_z = self.uav_start_z
         self.have_uav_actual = False
         self.last_uav_actual_time: Optional[Time] = None
         self.last_debug_actual_yaw_unwrapped: Optional[float] = None
 
         self.current_leader_distance_xy_m = max(
             0.01,
-            math.hypot(self.d_target - self.camera_x_offset_m, self.camera_y_offset_m),
+            math.hypot(self.xy_target - self.camera_x_offset_m, self.camera_y_offset_m),
         )
-        self.current_leader_distance_3d_m = math.hypot(self.current_leader_distance_xy_m, self.z_alt)
-        self.startup_nudge_pending = (
-            self.startup_nudge_enable
-            and math.hypot(self.startup_nudge_dx_m, self.startup_nudge_dy_m) > 1e-9
-        )
+        self.current_leader_distance_3d_m = math.hypot(self.current_leader_distance_xy_m, self.uav_start_z)
         self.last_cmd_time: Optional[Time] = None
 
         self.leader_sub = self.create_subscription(
@@ -257,9 +237,9 @@ class FollowUavOdom(Node):
         self.get_logger().info(
             f"[follow_uav_odom] Started: world={self.world}, uav={self.uav_name}, "
             f"leader_odom={self.leader_odom_topic}, tick={self.tick_hz}Hz, "
-            f"d_target={self.d_target}, d_max={self.d_max}, z_alt={self.z_alt}, "
-            f"d_euclidean={self.d_euclidean}, follow_speed_mps={self.follow_speed_mps}, "
-            f"manual_override_enable={self.manual_override_enable}, "
+            f"d_target={self.d_target}, xy_target={self.xy_target}, xy_min={self.xy_min}, "
+            f"xy_anchor_max={self.xy_anchor_max}, z_min={self.z_min}, z_max={self.z_max}, xy_max={self.xy_max}, "
+            f"follow_speed_mps={self.follow_speed_mps}, "
             f"follow_speed_gain={self.follow_speed_gain}, "
             f"follow_z_speed_mps={self.follow_z_speed_mps}, "
             f"follow_z_speed_gain={self.follow_z_speed_gain}, "
@@ -269,7 +249,7 @@ class FollowUavOdom(Node):
             f"publish_debug_topics={self.publish_debug_topics}, publish_pose_cmd_topics={self.publish_pose_cmd_topics}, "
             f"camera_offset_m=({self.camera_x_offset_m}, {self.camera_y_offset_m}, {self.camera_z_offset_m}), "
             f"leader_look_target_xy_m=({self.leader_look_target_x_m}, {self.leader_look_target_y_m}), "
-            f"startup_nudge={'on' if self.startup_nudge_pending else 'off'}"
+            f"uav_start=({self.uav_start_x:.2f},{self.uav_start_y:.2f},{self.uav_start_z:.2f},{math.degrees(self.uav_start_yaw):.1f}deg)"
         )
         self.emit_event("FOLLOW_ODOM_NODE_START")
 
@@ -283,18 +263,17 @@ class FollowUavOdom(Node):
     def _on_set_parameters(self, params):
         updates = {}
         runtime_updates = {}
-        bool_updates = {}
         for param in params:
-            if param.name == "manual_override_enable":
-                bool_updates[param.name] = coerce_bool(param.value)
-                continue
             try:
                 value = float(param.value)
             except Exception as exc:
                 if param.name in (
                     "d_euclidean",
                     "d_target",
-                    "z_alt",
+                    "xy_min",
+                    "z_min",
+                    "z_max",
+                    "xy_max",
                     "follow_speed_mps",
                     "follow_speed_gain",
                     "follow_z_speed_mps",
@@ -309,8 +288,11 @@ class FollowUavOdom(Node):
                     return SetParametersResult(successful=False, reason=f"invalid {param.name}: {exc}")
                 continue
 
-            if param.name in ("d_euclidean", "d_target", "z_alt"):
-                if value <= 0.0:
+            if param.name in ("d_euclidean", "d_target", "xy_min", "z_min", "z_max", "xy_max"):
+                if param.name in ("xy_min", "z_min", "z_max", "xy_max"):
+                    if value < 0.0:
+                        return SetParametersResult(successful=False, reason=f"{param.name} must be >= 0")
+                elif value <= 0.0:
                     return SetParametersResult(successful=False, reason=f"{param.name} must be > 0")
                 updates[param.name] = value
             elif param.name in (
@@ -332,40 +314,77 @@ class FollowUavOdom(Node):
                     return SetParametersResult(successful=False, reason="smooth_alpha must be within [0, 1]")
                 runtime_updates[param.name] = value
 
-        if not updates and not runtime_updates and not bool_updates:
+        if not updates and not runtime_updates:
             return SetParametersResult(successful=True)
 
         if updates:
-            if "d_target" in updates or "z_alt" in updates:
-                new_d_target = updates.get("d_target", self.d_target)
-                new_z_alt = updates.get("z_alt", self.z_alt)
-                new_d_euclidean = math.hypot(new_d_target, new_z_alt)
-            else:
-                new_d_euclidean = updates["d_euclidean"]
-                new_d_target = new_d_euclidean * self.d_euclidean_xy_ratio
-                new_z_alt = new_d_euclidean * self.d_euclidean_z_ratio
+            new_z_min = updates.get("z_min", self.z_min)
+            new_z_max = updates.get("z_max", self.z_max)
+            new_xy_min = updates.get("xy_min", self.xy_min)
+            new_xy_max = updates.get("xy_max", self.xy_max)
+            if new_z_max > 0.0 and new_z_max < new_z_min:
+                return SetParametersResult(successful=False, reason="z_max must be >= z_min")
+            if new_xy_max > 0.0 and new_xy_max < new_xy_min:
+                return SetParametersResult(successful=False, reason="xy_max must be >= xy_min")
+            explicit_d_target = updates.get("d_target")
+            legacy_d_target = updates.get("d_euclidean")
+            if explicit_d_target is not None and legacy_d_target is not None:
+                if not math.isclose(
+                    explicit_d_target,
+                    legacy_d_target,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                ):
+                    return SetParametersResult(
+                        successful=False,
+                        reason="d_target and d_euclidean conflict",
+                    )
+            new_d_target = (
+                explicit_d_target
+                if explicit_d_target is not None
+                else legacy_d_target
+                if legacy_d_target is not None
+                else self.d_target
+            )
+            derived_z_cap = vertical_distance_for_euclidean(new_d_target, new_xy_min)
+            effective_z_cap = max(new_z_min, derived_z_cap)
+            if new_z_max > 0.0:
+                effective_z_cap = min(effective_z_cap, new_z_max)
+            preferred_z = min(max(new_z_min, self.uav_start_z), effective_z_cap)
+            effective_xy_target = horizontal_distance_for_euclidean(new_d_target, preferred_z)
+            derived_xy_cap = horizontal_distance_for_euclidean(new_d_target, new_z_min)
+            if derived_xy_cap > 0.0:
+                effective_xy_target = min(effective_xy_target, derived_xy_cap)
+            if new_xy_max > 0.0:
+                effective_xy_target = min(effective_xy_target, new_xy_max)
+            effective_xy_target = max(effective_xy_target, new_xy_min)
 
-            if new_d_target >= self.d_max:
-                return SetParametersResult(successful=False, reason="d_target must remain < d_max")
+            if effective_xy_target >= self.xy_anchor_max:
+                return SetParametersResult(
+                    successful=False,
+                    reason="bounded xy target must remain < xy_anchor_max",
+                )
 
             self.d_target = max(new_d_target, 0.01)
-            self.z_alt = max(new_z_alt, 0.01)
-            self.d_euclidean = max(new_d_euclidean, 0.01)
-            self.d_euclidean_xy_ratio = self.d_target / self.d_euclidean
-            self.d_euclidean_z_ratio = self.z_alt / self.d_euclidean
+            self.z_min = max(new_z_min, 0.0)
+            self.z_max = max(new_z_max, 0.0)
+            self.xy_min = max(new_xy_min, 0.0)
+            self.xy_max = max(new_xy_max, 0.0)
+            self._refresh_xy_target()
             self._update_follow_response_from_distance()
             self._apply_runtime_distance_update()
 
         if runtime_updates:
             for name, value in runtime_updates.items():
                 setattr(self, name, float(value))
-        if bool_updates:
-            self.manual_override_enable = bool_updates["manual_override_enable"]
         update_parts = []
         if runtime_updates:
             update_parts.append(", ".join(f"{name}={value}" for name, value in sorted(runtime_updates.items())))
-        if bool_updates:
-            update_parts.append(f"manual_override_enable={self.manual_override_enable}")
+        if updates:
+            update_parts.append(
+                f"d_target={self.d_target:.2f}, xy_target={self.xy_target:.2f}, xy_min={self.xy_min:.2f}, "
+                f"z_min={self.z_min:.2f}, z_max={self.z_max:.2f}, xy_max={self.xy_max:.2f}"
+            )
         if update_parts:
             self.get_logger().info(f"[follow_uav_odom] Runtime parameter update: {', '.join(update_parts)}")
         return SetParametersResult(successful=True)
@@ -420,78 +439,6 @@ class FollowUavOdom(Node):
         except Exception:
             self.last_ugv_stamp = self.get_clock().now()
 
-    def on_uav_pose(self, msg: PoseStamped) -> None:
-        p = msg.pose.position
-        q = msg.pose.orientation
-        self.uav_actual = Pose2D(float(p.x), float(p.y), yaw_from_quat(float(q.x), float(q.y), float(q.z), float(q.w)))
-        self.uav_actual_z = float(p.z)
-        self.have_uav_actual = True
-        try:
-            self.last_uav_actual_time = Time.from_msg(msg.header.stamp)
-        except Exception:
-            self.last_uav_actual_time = self.get_clock().now()
-
-    def ugv_pose_is_fresh(self, now: Time) -> bool:
-        if not self.have_ugv or self.last_ugv_stamp is None:
-            return False
-        age_s = (now - self.last_ugv_stamp).nanoseconds * 1e-9
-        return age_s <= self.pose_timeout_s
-
-    def can_send_command_now(self, now: Time) -> bool:
-        if self.last_cmd_time is None:
-            return True
-        dt = (now - self.last_cmd_time).nanoseconds * 1e-9
-        return dt >= self.min_cmd_period_s
-
-    def publish_legacy_uav_command(self, x: float, y: float, z: float, yaw_rad: float) -> None:
-        msg = Joy()
-        msg.axes = [float(x), float(y), float(z), float(yaw_rad)]
-        self.uav_cmd_pub.publish(msg)
-
-    def publish_pose_cmd(self, x: float, y: float, z: float, yaw_rad: float) -> None:
-        if self.pose_pub is None:
-            return
-        ps = PoseStamped()
-        ps.header.stamp = self.get_clock().now().to_msg()
-        ps.header.frame_id = "map"
-        ps.pose.position.x = float(x)
-        ps.pose.position.y = float(y)
-        ps.pose.position.z = float(z)
-        qx, qy, qz, qw = (0.0, 0.0, math.sin(0.5 * yaw_rad), math.cos(0.5 * yaw_rad))
-        ps.pose.orientation.x = qx
-        ps.pose.orientation.y = qy
-        ps.pose.orientation.z = qz
-        ps.pose.orientation.w = qw
-        self.pose_pub.publish(ps)
-
-    def publish_pose_cmd_odom(self, x: float, y: float, z: float, yaw_rad: float) -> None:
-        if self.pose_odom_pub is None:
-            self.uav_cmd_z = float(z)
-            return
-        odom = Odometry()
-        odom.header.stamp = self.get_clock().now().to_msg()
-        odom.header.frame_id = "map"
-        odom.child_frame_id = f"{self.uav_name}/base_link"
-        odom.pose.pose.position.x = float(x)
-        odom.pose.pose.position.y = float(y)
-        odom.pose.pose.position.z = float(z)
-        qx, qy, qz, qw = (0.0, 0.0, math.sin(0.5 * yaw_rad), math.cos(0.5 * yaw_rad))
-        odom.pose.pose.orientation.x = qx
-        odom.pose.pose.orientation.y = qy
-        odom.pose.pose.orientation.z = qz
-        odom.pose.pose.orientation.w = qw
-        self.pose_odom_pub.publish(odom)
-        self.uav_cmd_z = float(z)
-
-    def _camera_xy_from_uav_pose(self, x: float, y: float, yaw: float):
-        return camera_xy_from_uav_pose(
-            x,
-            y,
-            yaw,
-            self.camera_x_offset_m,
-            self.camera_y_offset_m,
-        )
-
     def _current_follow_geometry(self):
         current_uav = self._current_uav_pose()
         camera_x, camera_y = self._camera_xy_from_uav_pose(current_uav.x, current_uav.y, current_uav.yaw)
@@ -514,10 +461,20 @@ class FollowUavOdom(Node):
         )
         return target_x, target_y
 
-    def _compute_anchor_target(self) -> Pose2D:
-        xt = self.ugv_pose.x - self.d_target * math.cos(self.ugv_follow_heading)
-        yt = self.ugv_pose.y - self.d_target * math.sin(self.ugv_follow_heading)
-        xt, yt = clamp_point_to_radius(self.ugv_pose.x, self.ugv_pose.y, xt, yt, self.d_max)
+    def _distance_targets_for_geometry(self, horizontal_distance: float, leader_z: float) -> tuple[float, float]:
+        _ = horizontal_distance
+        return self._nominal_target_pair(leader_z)
+
+    def _compute_anchor_target(self, target_horizontal_distance: float) -> Pose2D:
+        xt = self.ugv_pose.x - target_horizontal_distance * math.cos(self.ugv_follow_heading)
+        yt = self.ugv_pose.y - target_horizontal_distance * math.sin(self.ugv_follow_heading)
+        xt, yt = clamp_point_to_radius(
+            self.ugv_pose.x,
+            self.ugv_pose.y,
+            xt,
+            yt,
+            self.xy_anchor_max,
+        )
         target_x, target_y = self._leader_look_target_xy()
         yaw_cmd = solve_yaw_to_target(
             xt,
@@ -556,25 +513,20 @@ class FollowUavOdom(Node):
             self.follow_speed_gain * max(anchor_distance_error, 0.0),
         )
 
-    def _compute_command_z(self, current_z: float) -> float:
+    def _compute_command_z(self, current_z: float, target_z: float) -> float:
         return compute_rate_limited_axis_value(
             current_z,
-            self.z_alt,
+            target_z,
             tick_hz=self.tick_hz,
             max_speed_per_s=self.follow_z_speed_mps,
             gain=self.follow_z_speed_gain,
         )
 
-    @staticmethod
-    def _unwrap_angle_near(raw_angle: float, reference_angle: Optional[float]) -> float:
-        if reference_angle is None:
-            return float(raw_angle)
-        return float(reference_angle + wrap_pi(raw_angle - reference_angle))
-
     def _publish_follow_debug(
         self,
         anchor_target: Pose2D,
         *,
+        target_horizontal_distance: float,
         current_uav: Pose2D,
         target_yaw: float,
         yaw_error: float,
@@ -594,14 +546,14 @@ class FollowUavOdom(Node):
             stamp=now_msg,
             frame_id="map",
             anchor_target=anchor_target,
+            xy_target=target_horizontal_distance,
+            z_min=self.z_min,
             d_target=self.d_target,
-            z_alt=self.z_alt,
-            d_euclidean=self.d_euclidean,
             actual_xy_distance=self.current_leader_distance_xy_m,
             actual_distance_3d=self.current_leader_distance_3d_m,
             actual_yaw=current_uav.yaw,
             target_yaw=target_yaw,
-            xy_distance_error=self.current_leader_distance_xy_m - self.d_target,
+            xy_distance_error=self.current_leader_distance_xy_m - target_horizontal_distance,
             anchor_distance_error=anchor_distance_error,
             anchor_along_error=anchor_along_error,
             anchor_cross_error=anchor_cross_error,
@@ -623,6 +575,7 @@ class FollowUavOdom(Node):
         now = self.get_clock().now()
         current_uav = self._control_uav_pose()
         current_uav_z = self._control_uav_z()
+        horizontal_distance, _distance_3d = self._current_follow_geometry()
         target_x, target_y = self._leader_look_target_xy()
         yaw_cmd = solve_yaw_to_target(
             current_uav.x,
@@ -632,7 +585,11 @@ class FollowUavOdom(Node):
             self.camera_x_offset_m,
             self.camera_y_offset_m,
         )
-        z_cmd = self._compute_command_z(current_uav_z)
+        _target_horizontal_distance, z_target = self._distance_targets_for_geometry(horizontal_distance, self.ugv_z)
+        z_cmd = self._compute_command_z(
+            current_uav_z,
+            z_target,
+        )
         self.publish_legacy_uav_command(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
         self.publish_pose_cmd(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
         self.publish_pose_cmd_odom(current_uav.x, current_uav.y, z_cmd, yaw_cmd)
@@ -640,27 +597,15 @@ class FollowUavOdom(Node):
         self.have_uav_cmd = True
         self.last_cmd_time = now
 
-    def _maybe_publish_startup_nudge(self, now: Time) -> bool:
-        if not self.startup_nudge_pending:
-            return False
-        current_uav = self._control_uav_pose()
-        xn = current_uav.x + self.startup_nudge_dx_m
-        yn = current_uav.y + self.startup_nudge_dy_m
-        self.publish_legacy_uav_command(xn, yn, self.z_alt, current_uav.yaw)
-        self.publish_pose_cmd(xn, yn, self.z_alt, current_uav.yaw)
-        self.publish_pose_cmd_odom(xn, yn, self.z_alt, current_uav.yaw)
-        self.uav_cmd = Pose2D(xn, yn, current_uav.yaw)
-        self.have_uav_cmd = True
-        self.last_cmd_time = now
-        self.startup_nudge_pending = False
-        self.emit_event("FOLLOW_STARTUP_NUDGE")
-        return True
-
     def publish_metrics_cmd(self, leader: Pose2D, cmd_x: float, cmd_y: float) -> None:
         if not self.publish_metrics:
             return
         d_cmd = math.hypot(cmd_x - leader.x, cmd_y - leader.y)
-        err = abs(d_cmd - self.d_target)
+        target_horizontal_distance, _target_z = self._distance_targets_for_geometry(
+            self.current_leader_distance_xy_m,
+            self.ugv_z,
+        )
+        err = abs(d_cmd - target_horizontal_distance)
         msg1 = Float32()
         msg1.data = float(d_cmd)
         self.metric_dist_pub.publish(msg1)
@@ -670,19 +615,20 @@ class FollowUavOdom(Node):
 
     def on_tick(self) -> None:
         now = self.get_clock().now()
-        if self.manual_override_enable:
-            return
         current_uav = self._control_uav_pose()
         current_uav_z = self._control_uav_z()
+        current_horizontal_distance, _current_distance_3d = self._current_follow_geometry()
 
-        if self.can_send_command_now(now) and self._maybe_publish_startup_nudge(now):
-            return
         if not self.ugv_pose_is_fresh(now):
             return
         if not self.can_send_command_now(now):
             return
 
-        anchor_target = self._compute_anchor_target()
+        target_horizontal_distance, z_target = self._distance_targets_for_geometry(
+            current_horizontal_distance,
+            self.ugv_z,
+        )
+        anchor_target = self._compute_anchor_target(target_horizontal_distance)
         xt, yt = anchor_target.x, anchor_target.y
 
         if (self.have_uav_actual or self.have_uav_cmd) and self.smooth_alpha < 1.0:
@@ -749,7 +695,10 @@ class FollowUavOdom(Node):
             xt = current_uav.x
             yt = current_uav.y
 
-        z_cmd = self._compute_command_z(current_uav_z)
+        z_cmd = self._compute_command_z(
+            current_uav_z,
+            z_target,
+        )
         self.publish_legacy_uav_command(xt, yt, z_cmd, yaw_cmd)
         self.publish_pose_cmd(xt, yt, z_cmd, yaw_cmd)
         self.publish_pose_cmd_odom(xt, yt, z_cmd, yaw_cmd)
@@ -762,6 +711,7 @@ class FollowUavOdom(Node):
         self._current_follow_geometry()
         self._publish_follow_debug(
             anchor_target,
+            target_horizontal_distance=target_horizontal_distance,
             current_uav=current_uav,
             target_yaw=yaw_target,
             yaw_error=yaw_error,

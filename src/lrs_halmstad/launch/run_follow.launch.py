@@ -1,3 +1,5 @@
+import yaml
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition
@@ -133,6 +135,7 @@ def _optional_bool_from_launch(context, name: str):
 
 def _build_camera_tracker_node(context, *args, **kwargs):
     camera_params = {
+        'use_sim_time': True,
         'uav_name': LaunchConfiguration('uav_name'),
         'leader_input_type': LaunchConfiguration('leader_mode'),
         'leader_odom_topic': LaunchConfiguration('ugv_odom_topic'),
@@ -165,6 +168,50 @@ def _build_camera_tracker_node(context, *args, **kwargs):
     ]
 
 
+def _load_node_params_from_yaml(context, node_name: str) -> dict:
+    params_file = LaunchConfiguration('params_file').perform(context).strip()
+    if not params_file:
+        return {}
+    with open(params_file, 'r', encoding='utf-8') as fh:
+        data = yaml.safe_load(fh) or {}
+    merged = {}
+    merged.update(((data.get('/**') or {}).get('ros__parameters')) or {})
+    merged.update(((data.get(node_name) or {}).get('ros__parameters')) or {})
+    return merged
+
+
+def _launch_bool(context, name: str) -> bool:
+    raw = LaunchConfiguration(name).perform(context).strip().lower()
+    return raw in ('1', 'true', 'yes', 'on')
+
+
+def _build_ugv_nav2_node(context, *args, **kwargs):
+    nav2_params = _load_node_params_from_yaml(context, 'ugv_nav2_driver')
+    nav2_params.update(
+        {
+            'use_sim_time': True,
+            'start_delay_s': float(LaunchConfiguration('ugv_start_delay_s').perform(context)),
+            'set_initial_pose_enable': _launch_bool(context, 'ugv_set_initial_pose'),
+            'initial_pose_x': float(LaunchConfiguration('ugv_initial_pose_x').perform(context)),
+            'initial_pose_y': float(LaunchConfiguration('ugv_initial_pose_y').perform(context)),
+            'initial_pose_yaw_deg': float(LaunchConfiguration('ugv_initial_pose_yaw_deg').perform(context)),
+            'goal_sequence_csv': LaunchConfiguration('ugv_goal_sequence_csv').perform(context),
+            'goal_sequence_file': LaunchConfiguration('ugv_goal_sequence_file').perform(context),
+        }
+    )
+    return [
+        Node(
+            package='lrs_halmstad',
+            executable='ugv_nav2_driver',
+            name='ugv_nav2_driver',
+            namespace=LaunchConfiguration('ugv_namespace').perform(context),
+            output='screen',
+            condition=_nav2_ugv_condition(),
+            parameters=[nav2_params],
+        )
+    ]
+
+
 def generate_launch_description():
     params_default = PathJoinSubstitution(
         [FindPackageShare('lrs_halmstad'), 'config', 'run_follow_defaults.yaml']
@@ -187,7 +234,6 @@ def generate_launch_description():
         default_value='auto',
         description="auto|true|false; auto starts estimator for pose/estimate, perception mode, or when yolo_weights is set",
     )
-    startup_reposition_enable_arg = DeclareLaunchArgument('startup_reposition_enable', default_value='false')
     follow_yaw_arg = DeclareLaunchArgument('follow_yaw', default_value='true')
     publish_follow_debug_topics_arg = DeclareLaunchArgument('publish_follow_debug_topics', default_value='true')
     publish_pose_cmd_topics_arg = DeclareLaunchArgument('publish_pose_cmd_topics', default_value='true')
@@ -293,7 +339,6 @@ def generate_launch_description():
         default_value=['/', LaunchConfiguration('uav_name'), '/pose'],
     )
     leader_range_mode_arg = DeclareLaunchArgument('leader_range_mode', default_value='auto')
-    leader_constant_range_m_arg = DeclareLaunchArgument('leader_constant_range_m', default_value='7.0')
     target_class_name_arg = DeclareLaunchArgument('target_class_name', default_value='')
     target_class_id_arg = DeclareLaunchArgument('target_class_id', default_value='-1')
     yolo_weights_arg = DeclareLaunchArgument(
@@ -314,6 +359,7 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
                 'uav_name': LaunchConfiguration('uav_name'),
                 'camera_mode': LaunchConfiguration('uav_camera_mode'),
@@ -337,6 +383,7 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
                 'camera_topic': LaunchConfiguration('leader_image_topic'),
                 'out_topic': LaunchConfiguration('external_detection_topic'),
@@ -358,6 +405,7 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
                 'camera_topic': LaunchConfiguration('leader_image_topic'),
                 'out_topic': LaunchConfiguration('external_detection_topic'),
@@ -380,13 +428,13 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
                 'camera_topic': LaunchConfiguration('leader_image_topic'),
                 'camera_info_topic': LaunchConfiguration('leader_camera_info_topic'),
                 'depth_topic': LaunchConfiguration('leader_depth_topic'),
                 'uav_pose_topic': LaunchConfiguration('leader_uav_pose_topic'),
                 'range_mode': LaunchConfiguration('leader_range_mode'),
-                'constant_range_m': LaunchConfiguration('leader_constant_range_m'),
                 'leader_actual_pose_topic': LaunchConfiguration('leader_actual_pose_topic'),
                 'leader_actual_pose_enable': _bool_param('leader_actual_pose_enable'),
                 'external_detection_topic': LaunchConfiguration('external_detection_topic'),
@@ -404,10 +452,11 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
                 'uav_name': LaunchConfiguration('uav_name'),
                 'leader_odom_topic': LaunchConfiguration('ugv_odom_topic'),
-                'z_alt': LaunchConfiguration('uav_start_z'),
+                'uav_start_z': LaunchConfiguration('uav_start_z'),
                 'event_topic': LaunchConfiguration('event_topic'),
                 'follow_yaw': _bool_param('follow_yaw'),
                 'publish_debug_topics': _bool_param('publish_follow_debug_topics'),
@@ -425,43 +474,24 @@ def generate_launch_description():
         parameters=[
             LaunchConfiguration('params_file'),
             {
+                'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
                 'uav_name': LaunchConfiguration('uav_name'),
                 'leader_input_type': LaunchConfiguration('leader_mode'),
                 'leader_pose_topic': LaunchConfiguration('leader_pose_topic'),
                 'leader_actual_heading_enable': _bool_param('leader_actual_heading_enable'),
                 'leader_actual_heading_topic': LaunchConfiguration('leader_actual_heading_topic'),
-                'z_alt': LaunchConfiguration('uav_start_z'),
+                'uav_start_z': LaunchConfiguration('uav_start_z'),
                 'follow_yaw': _bool_param('follow_yaw'),
                 'publish_debug_topics': _bool_param('publish_follow_debug_topics'),
                 'publish_pose_cmd_topics': _bool_param('publish_pose_cmd_topics'),
-                'startup_reposition_enable': _bool_param('startup_reposition_enable'),
             },
         ],
     )
 
     camera_tracker_node = OpaqueFunction(function=_build_camera_tracker_node)
 
-    ugv_nav2_node = Node(
-        package='lrs_halmstad',
-        executable='ugv_nav2_driver',
-        name='ugv_nav2_driver',
-        namespace=LaunchConfiguration('ugv_namespace'),
-        output='screen',
-        condition=_nav2_ugv_condition(),
-        parameters=[
-            LaunchConfiguration('params_file'),
-            {
-                'start_delay_s': LaunchConfiguration('ugv_start_delay_s'),
-                'set_initial_pose_enable': _bool_param('ugv_set_initial_pose'),
-                'initial_pose_x': LaunchConfiguration('ugv_initial_pose_x'),
-                'initial_pose_y': LaunchConfiguration('ugv_initial_pose_y'),
-                'initial_pose_yaw_deg': LaunchConfiguration('ugv_initial_pose_yaw_deg'),
-                'goal_sequence_csv': LaunchConfiguration('ugv_goal_sequence_csv'),
-                'goal_sequence_file': LaunchConfiguration('ugv_goal_sequence_file'),
-            },
-        ],
-    )
+    ugv_nav2_node = OpaqueFunction(function=_build_ugv_nav2_node)
 
     ugv_amcl_to_odom_node = Node(
         package='lrs_halmstad',
@@ -471,6 +501,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {
+                'use_sim_time': True,
                 'pose_topic': 'amcl_pose',
                 'odom_topic': 'amcl_pose_odom',
                 'frame_id': 'map',
@@ -508,7 +539,6 @@ def generate_launch_description():
         leader_mode_arg,
         leader_perception_enable_arg,
         start_estimator_arg,
-        startup_reposition_enable_arg,
         follow_yaw_arg,
         publish_follow_debug_topics_arg,
         publish_pose_cmd_topics_arg,
@@ -547,7 +577,6 @@ def generate_launch_description():
         leader_depth_topic_arg,
         leader_uav_pose_topic_arg,
         leader_range_mode_arg,
-        leader_constant_range_m_arg,
         target_class_name_arg,
         target_class_id_arg,
         yolo_weights_arg,

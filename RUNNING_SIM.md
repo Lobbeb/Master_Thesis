@@ -229,26 +229,26 @@ Only use the YOLO debug image when you started the YOLO flow from the section be
 These work while `./run.sh 1to1_follow` or `./run.sh 1to1_yolo` is running.
 
 Recommended live control:
-- change `d_euclidean` during runtime
-- this updates the derived `d_target` and `z_alt` together
+- change `d_target` during runtime
+- this updates the derived `xy_target` from the current `z_min`
 - no restart is needed for this control
 - the direct `ros2` commands below assume the terminal is already sourced
 
 Change the 3D UAV-to-UGV follow distance:
 
 ```bash
-ros2 param set /follow_uav d_euclidean x.xx
+ros2 param set /follow_uav d_target x.xx
 ```
 
 Examples:
 
 ```bash
-ros2 param set /follow_uav d_euclidean 5.0
 ros2 param set /follow_uav d_target 9.0
-ros2 param set /follow_uav z_alt 9.0
+ros2 param set /follow_uav xy_min 5.0
+ros2 param set /follow_uav z_min 9.0
 ```
 
-Use `d_target` and `z_alt` only if you explicitly want to control horizontal distance and altitude separately.
+Use `xy_min`, `xy_max`, `z_min`, and `z_max` if you want to constrain the working range around the shared `d_target`.
 
 Runtime follow control helper:
 
@@ -260,9 +260,9 @@ exist under `./scripts/run_<name>.sh` if you want direct file completion.
 ```
 
 Default keyboard mode:
-- this is the live tuning path for `d_target` and `z_alt`
-- `w` raises `z_alt`
-- `s` lowers `z_alt`
+- this is the live tuning path for `d_target` and `z_min`
+- `w` raises `z_min`
+- `s` lowers `z_min`
 - `d` increases `d_target`
 - `a` decreases `d_target`
 - `r` refreshes the current values
@@ -273,7 +273,7 @@ Random sweep mode:
 - pass `--mode random`
 - current defaults:
 - updates every `10s`
-- `z_alt` sampled uniformly in `[2, 40]`
+- `z_min` sampled uniformly in `[2, 40]`
 - `d_target` sampled uniformly in `[1, 20]`
 - sampling is biased toward the `5-15` band by default
 - runs until you stop it with `Ctrl-c`
@@ -346,7 +346,7 @@ Recommended workflow:
 1. start the sim
 2. start the UAV and follow stack
 3. start dataset capture
-4. change `d_euclidean` during runtime
+4. change `d_target` during runtime
 5. let Nav2 drive the UGV through the route
 6. once happy, switch world / map campaign and restart all terminals if needed
 
@@ -441,7 +441,7 @@ For YOLO mode, detailed follow-debug topics are now muted by default. Re-enable 
 ./run.sh 1to1_yolo warehouse publish_follow_debug_topics:=true publish_pose_cmd_topics:=true publish_camera_debug_topics:=true
 ```
 
-Default `run.sh follow_control` mode is keyboard tuning for `d_target` and `z_alt`. If you want the same parameter path explicitly, use:
+Default `run.sh follow_control` mode is keyboard tuning for `d_target` and `z_min`. If you want the same parameter path explicitly, use:
 
 ```bash
 ./run.sh follow_control --mode params
@@ -699,7 +699,6 @@ This creates:
   - `start_leader_estimator:=auto|true|false`
   - `leader_perception_enable:=true|false`
   - `leader_range_mode:=ground|const|auto|depth`
-  - `leader_constant_range_m:=...`
   - `target_class_name:=...`
   - `target_class_id:=-1|<non-negative>`
   - `yolo_weights:=...`

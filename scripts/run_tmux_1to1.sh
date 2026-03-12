@@ -18,7 +18,7 @@ RECORD=false
 RECORD_PROFILE="default"
 RECORD_TAG=""
 RECORD_OUT=""
-BASE_DELAY_S=8
+BASE_DELAY_S=7
 BASE_DELAY_SET=false
 SPAWN_DELAY_OVERRIDE=""
 LOCALIZATION_DELAY_OVERRIDE=""
@@ -220,7 +220,7 @@ record_pane=""
 
 apply_default_delays() {
   if [ "$EFFECTIVE_GUI" = false ]; then
-    [ "$BASE_DELAY_SET" = true ] || BASE_DELAY_S=8
+    [ "$BASE_DELAY_SET" = true ] || BASE_DELAY_S=7
   else
     [ "$BASE_DELAY_SET" = true ] || BASE_DELAY_S=6
   fi

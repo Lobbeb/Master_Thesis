@@ -17,9 +17,16 @@ from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Float32, String
 
-from lrs_halmstad.follow.follow_math import coerce_bool, quat_from_yaw, wrap_pi, yaw_from_quat
+from lrs_halmstad.common.ros_params import yaml_param
+from lrs_halmstad.follow.follow_math import (
+    coerce_bool,
+    horizontal_distance_for_euclidean,
+    quat_from_yaw,
+    wrap_pi,
+    yaw_from_quat,
+)
 from lrs_halmstad.perception.detection_protocol import Detection2D, decode_detection_payload
-from lrs_halmstad.perception.detection_status import parse_status_line
+from lrs_halmstad.perception.detection_status import overlay_lines_from_status, parse_status_line
 from lrs_halmstad.perception.yolo_common import cv2, image_to_bgr, order_quad
 
 @dataclass
@@ -47,95 +54,53 @@ class LeaderEstimator(Node):
         super().__init__("leader_estimator")
         dyn_num = ParameterDescriptor(dynamic_typing=True)
 
-        self.declare_parameter("uav_name", "dji0")
-        self.declare_parameter("camera_topic", "")
-        self.declare_parameter("camera_info_topic", "")
-        self.declare_parameter("depth_topic", "")
-        self.declare_parameter("uav_pose_topic", "")
-        self.declare_parameter("external_detection_topic", "/coord/leader_detection")
-        self.declare_parameter("external_detection_status_topic", "/coord/leader_detection_status")
-        self.declare_parameter("out_topic", "/coord/leader_estimate")
-        self.declare_parameter("status_topic", "/coord/leader_estimate_status")
-        self.declare_parameter("fault_status_topic", "/coord/leader_estimate_fault")
-        self.declare_parameter("estimate_error_topic", "/coord/leader_estimate_error")
-        self.declare_parameter("event_topic", "/coord/events")
-        self.declare_parameter("debug_image_topic", "/coord/leader_debug_image")
+        self.uav_name = str(self.declare_parameter("uav_name", "dji0").value)
+        self.camera_topic = str(self.declare_parameter("camera_topic", "").value).strip() or f"/{self.uav_name}/camera0/image_raw"
+        self.camera_info_topic = str(self.declare_parameter("camera_info_topic", "").value).strip() or f"/{self.uav_name}/camera0/camera_info"
+        self.depth_topic = str(self.declare_parameter("depth_topic", "").value).strip()
+        self.uav_pose_topic = str(self.declare_parameter("uav_pose_topic", "").value).strip() or f"/{self.uav_name}/pose"
+        self.external_detection_topic = str(yaml_param(self, "external_detection_topic")).strip()
+        self.external_detection_status_topic = str(yaml_param(self, "external_detection_status_topic")).strip()
+        self.out_topic = str(yaml_param(self, "out_topic")).strip()
+        self.status_topic = str(yaml_param(self, "status_topic")).strip()
+        self.fault_status_topic = str(yaml_param(self, "fault_status_topic")).strip()
+        self.estimate_error_topic = str(yaml_param(self, "estimate_error_topic")).strip()
+        self.event_topic = str(yaml_param(self, "event_topic")).strip()
+        self.debug_image_topic = str(yaml_param(self, "debug_image_topic")).strip()
 
-        self.declare_parameter("publish_status", True)
-        self.declare_parameter("publish_fault_status", True)
-        self.declare_parameter("publish_debug_image", True)
-        self.declare_parameter("publish_events", False)
+        self.publish_status = coerce_bool(yaml_param(self, "publish_status"))
+        self.publish_fault_status = coerce_bool(yaml_param(self, "publish_fault_status"))
+        self.publish_debug_image = coerce_bool(yaml_param(self, "publish_debug_image"))
+        self.publish_events = coerce_bool(yaml_param(self, "publish_events"))
 
-        self.declare_parameter("leader_actual_pose_enable", True)
-        self.declare_parameter("leader_actual_pose_topic", "/a201_0000/amcl_pose_odom")
-        self.declare_parameter("leader_actual_pose_timeout_s", 2.0, dyn_num)
+        self.leader_actual_pose_enable = coerce_bool(yaml_param(self, "leader_actual_pose_enable"))
+        self.leader_actual_pose_topic = str(yaml_param(self, "leader_actual_pose_topic")).strip()
+        self.leader_actual_pose_timeout_s = float(yaml_param(self, "leader_actual_pose_timeout_s", descriptor=dyn_num))
 
-        self.declare_parameter("est_hz", 20.0, dyn_num)
-        self.declare_parameter("image_timeout_s", 1.0, dyn_num)
-        self.declare_parameter("uav_pose_timeout_s", 1.0, dyn_num)
-        self.declare_parameter("external_detection_timeout_s", 1.0, dyn_num)
+        self.est_hz = float(yaml_param(self, "est_hz", descriptor=dyn_num))
+        self.image_timeout_s = float(yaml_param(self, "image_timeout_s", descriptor=dyn_num))
+        self.uav_pose_timeout_s = float(yaml_param(self, "uav_pose_timeout_s", descriptor=dyn_num))
+        self.external_detection_timeout_s = float(yaml_param(self, "external_detection_timeout_s", descriptor=dyn_num))
 
+        self.d_target = float(yaml_param(self, "d_target", descriptor=dyn_num))
         self.declare_parameter("constant_range_m", 5.0, dyn_num)
-        self.declare_parameter("range_mode", "auto")
-        self.declare_parameter("use_depth_range", True)
-        self.declare_parameter("depth_scale", 0.001, dyn_num)
-        self.declare_parameter("depth_min_m", 0.2, dyn_num)
-        self.declare_parameter("depth_max_m", 100.0, dyn_num)
-        self.declare_parameter("target_ground_z_m", 0.0, dyn_num)
-        self.declare_parameter("ground_min_range_m", 0.25, dyn_num)
-        self.declare_parameter("ground_max_range_m", 50.0, dyn_num)
+        self.range_mode = str(yaml_param(self, "range_mode")).strip().lower()
+        self.use_depth_range = coerce_bool(yaml_param(self, "use_depth_range"))
+        self.depth_scale = float(yaml_param(self, "depth_scale", descriptor=dyn_num))
+        self.depth_min_m = float(yaml_param(self, "depth_min_m", descriptor=dyn_num))
+        self.depth_max_m = float(yaml_param(self, "depth_max_m", descriptor=dyn_num))
+        self.target_ground_z_m = float(yaml_param(self, "target_ground_z_m", descriptor=dyn_num))
+        self.ground_min_range_m = float(yaml_param(self, "ground_min_range_m", descriptor=dyn_num))
+        self.ground_max_range_m = float(yaml_param(self, "ground_max_range_m", descriptor=dyn_num))
 
-        self.declare_parameter("cam_yaw_offset_deg", 0.0, dyn_num)
-        self.declare_parameter("cam_pitch_offset_deg", 0.0, dyn_num)
-        self.declare_parameter("cam_roll_offset_deg", 0.0, dyn_num)
-        self.declare_parameter("cam_x_offset_m", 0.0, dyn_num)
-        self.declare_parameter("cam_y_offset_m", 0.0, dyn_num)
-        self.declare_parameter("cam_z_offset_m", 0.0, dyn_num)
-
-        self.uav_name = str(self.get_parameter("uav_name").value)
-        self.camera_topic = str(self.get_parameter("camera_topic").value).strip() or f"/{self.uav_name}/camera0/image_raw"
-        self.camera_info_topic = str(self.get_parameter("camera_info_topic").value).strip() or f"/{self.uav_name}/camera0/camera_info"
-        self.depth_topic = str(self.get_parameter("depth_topic").value).strip()
-        self.uav_pose_topic = str(self.get_parameter("uav_pose_topic").value).strip() or f"/{self.uav_name}/pose"
-        self.external_detection_topic = str(self.get_parameter("external_detection_topic").value).strip()
-        self.external_detection_status_topic = str(self.get_parameter("external_detection_status_topic").value).strip()
-        self.out_topic = str(self.get_parameter("out_topic").value).strip()
-        self.status_topic = str(self.get_parameter("status_topic").value).strip()
-        self.fault_status_topic = str(self.get_parameter("fault_status_topic").value).strip()
-        self.estimate_error_topic = str(self.get_parameter("estimate_error_topic").value).strip()
-        self.event_topic = str(self.get_parameter("event_topic").value).strip()
-        self.debug_image_topic = str(self.get_parameter("debug_image_topic").value).strip()
-
-        self.publish_status = coerce_bool(self.get_parameter("publish_status").value)
-        self.publish_fault_status = coerce_bool(self.get_parameter("publish_fault_status").value)
-        self.publish_debug_image = coerce_bool(self.get_parameter("publish_debug_image").value)
-        self.publish_events = coerce_bool(self.get_parameter("publish_events").value)
-
-        self.leader_actual_pose_enable = coerce_bool(self.get_parameter("leader_actual_pose_enable").value)
-        self.leader_actual_pose_topic = str(self.get_parameter("leader_actual_pose_topic").value).strip()
-        self.leader_actual_pose_timeout_s = float(self.get_parameter("leader_actual_pose_timeout_s").value)
-
-        self.est_hz = float(self.get_parameter("est_hz").value)
-        self.image_timeout_s = float(self.get_parameter("image_timeout_s").value)
-        self.uav_pose_timeout_s = float(self.get_parameter("uav_pose_timeout_s").value)
-        self.external_detection_timeout_s = float(self.get_parameter("external_detection_timeout_s").value)
+        self.cam_yaw_offset_rad = math.radians(float(yaml_param(self, "cam_yaw_offset_deg", descriptor=dyn_num)))
+        self.cam_pitch_offset_rad = math.radians(float(yaml_param(self, "cam_pitch_offset_deg", descriptor=dyn_num)))
+        self.cam_roll_offset_rad = math.radians(float(yaml_param(self, "cam_roll_offset_deg", descriptor=dyn_num)))
+        self.cam_x_offset_m = float(yaml_param(self, "cam_x_offset_m", descriptor=dyn_num))
+        self.cam_y_offset_m = float(yaml_param(self, "cam_y_offset_m", descriptor=dyn_num))
+        self.cam_z_offset_m = float(yaml_param(self, "cam_z_offset_m", descriptor=dyn_num))
 
         self.constant_range_m = float(self.get_parameter("constant_range_m").value)
-        self.range_mode = str(self.get_parameter("range_mode").value).strip().lower()
-        self.use_depth_range = coerce_bool(self.get_parameter("use_depth_range").value)
-        self.depth_scale = float(self.get_parameter("depth_scale").value)
-        self.depth_min_m = float(self.get_parameter("depth_min_m").value)
-        self.depth_max_m = float(self.get_parameter("depth_max_m").value)
-        self.target_ground_z_m = float(self.get_parameter("target_ground_z_m").value)
-        self.ground_min_range_m = float(self.get_parameter("ground_min_range_m").value)
-        self.ground_max_range_m = float(self.get_parameter("ground_max_range_m").value)
-
-        self.cam_yaw_offset_rad = math.radians(float(self.get_parameter("cam_yaw_offset_deg").value))
-        self.cam_pitch_offset_rad = math.radians(float(self.get_parameter("cam_pitch_offset_deg").value))
-        self.cam_roll_offset_rad = math.radians(float(self.get_parameter("cam_roll_offset_deg").value))
-        self.cam_x_offset_m = float(self.get_parameter("cam_x_offset_m").value)
-        self.cam_y_offset_m = float(self.get_parameter("cam_y_offset_m").value)
-        self.cam_z_offset_m = float(self.get_parameter("cam_z_offset_m").value)
 
         if self.est_hz <= 0.0:
             raise ValueError("est_hz must be > 0")
@@ -147,8 +112,8 @@ class LeaderEstimator(Node):
             raise ValueError("external_detection_timeout_s must be > 0")
         if self.leader_actual_pose_timeout_s <= 0.0:
             raise ValueError("leader_actual_pose_timeout_s must be > 0")
-        if self.constant_range_m <= 0.0:
-            raise ValueError("constant_range_m must be > 0")
+        if self.constant_range_m <= 0.0 and self.d_target <= 0.0:
+            raise ValueError("either d_target or constant_range_m must be > 0")
         if self.range_mode not in ("auto", "depth", "ground", "const"):
             raise ValueError("range_mode must be one of: auto, depth, ground, const")
 
@@ -172,6 +137,7 @@ class LeaderEstimator(Node):
         self.last_estimate_pose: Optional[Pose2D] = None
         self.last_estimate_stamp: Optional[Time] = None
         self.last_estimate_track_id: Optional[int] = None
+        self.last_measured_range_m: Optional[float] = None
 
         self.last_estimate_error_dx_m: Optional[float] = None
         self.last_estimate_error_dy_m: Optional[float] = None
@@ -248,7 +214,7 @@ class LeaderEstimator(Node):
             f"image={self.camera_topic}, camera_info={self.camera_info_topic}, depth={self.depth_topic or 'disabled'}, "
             f"uav_pose={self.uav_pose_topic}, detection={self.external_detection_topic}, "
             f"detection_status={self.external_detection_status_topic}, out={self.out_topic}, "
-            f"est_hz={self.est_hz}Hz, range_mode={self.range_mode}, constant_range_m={self.constant_range_m:.2f}"
+            f"est_hz={self.est_hz}Hz, range_mode={self.range_mode}, const_target_m={self._constant_target_range()[0]:.2f}"
         )
         self.publish_fault_status_msg(self._fault_line("none", "none", self.get_clock().now()))
         self.emit_event("ESTIMATOR_NODE_START")
@@ -568,6 +534,31 @@ class LeaderEstimator(Node):
             return "ground_jump"
         return "none"
 
+    def _held_estimate_range_m(self) -> Optional[float]:
+        if self.last_estimate_pose is None or self.uav_pose is None:
+            return None
+        cam_world_x, cam_world_y = self._cam_world_xy()
+        held = math.hypot(
+            self.last_estimate_pose.x - cam_world_x,
+            self.last_estimate_pose.y - cam_world_y,
+        )
+        if not math.isfinite(held) or held <= 0.0:
+            return None
+        return float(held)
+
+    def _constant_target_range(self) -> tuple[float, str]:
+        if self.last_measured_range_m is not None and self.last_measured_range_m > 0.0:
+            return float(self.last_measured_range_m), "const_hold"
+        held = self._held_estimate_range_m()
+        if held is not None:
+            return held, "const_hold"
+        if self.d_target > 0.0:
+            vertical_delta = 0.0
+            if self.uav_pose is not None:
+                vertical_delta = self.uav_pose.z - self.target_ground_z_m
+            return float(horizontal_distance_for_euclidean(self.d_target, vertical_delta)), "const_seed"
+        return float(self.constant_range_m), "const_seed"
+
     def _estimate_from_detection(self, det: Detection2D, cam: CameraModel, now: Time) -> Tuple[Pose2D, str]:
         assert self.uav_pose is not None
         center_x_n = (det.u - cam.cx) / cam.fx
@@ -603,8 +594,7 @@ class LeaderEstimator(Node):
             range_m = ground_range
             range_source = "ground"
         elif self.range_mode == "const":
-            range_m = self.constant_range_m
-            range_source = "const"
+            range_m, range_source = self._constant_target_range()
         else:
             if depth_range is not None:
                 range_m = depth_range
@@ -613,8 +603,7 @@ class LeaderEstimator(Node):
                 range_m = ground_range
                 range_source = "ground"
             else:
-                range_m = self.constant_range_m
-                range_source = "const"
+                range_m, range_source = self._constant_target_range()
 
         bearing = ground_bearing if range_source == "ground" and ground_bearing is not None else center_bearing
         x = cam_world_x + range_m * math.cos(self.uav_pose.yaw + bearing)
@@ -633,6 +622,8 @@ class LeaderEstimator(Node):
                 heading_source = "obb"
 
         self.last_det_conf = float(det.conf)
+        if range_source in {"depth", "ground"}:
+            self.last_measured_range_m = float(range_m)
         self.last_range_source = range_source
         self.last_range_used_m = float(range_m)
         self.last_bearing_used_deg = math.degrees(bearing)
@@ -699,12 +690,20 @@ class LeaderEstimator(Node):
             f"err_dx_m={err_dx} err_dy_m={err_dy} err_planar_m={err_planar}"
         )
 
-    def _detection_status_fields(self, now: Time) -> dict[str, str]:
+    def _detection_status_overlay_lines(self, now: Time) -> list[str]:
         if not self.last_external_det_status_text:
-            return {}
+            return ["src=none"]
         if not self._is_fresh(self.last_external_det_status_stamp, self.external_detection_timeout_s, now):
-            return {}
-        return parse_status_line(self.last_external_det_status_text)
+            return ["src=none"]
+        return overlay_lines_from_status(self.last_external_det_status_text) or ["src=none"]
+
+    def _detection_task_label(self, now: Time) -> str:
+        if not self.last_external_det_status_text:
+            return "na"
+        if not self._is_fresh(self.last_external_det_status_stamp, self.external_detection_timeout_s, now):
+            return "na"
+        fields = parse_status_line(self.last_external_det_status_text)
+        return fields.get("task", "na")
 
     def _resolved_debug_heading(self, now: Time) -> tuple[Optional[float], str]:
         if (
@@ -761,11 +760,47 @@ class LeaderEstimator(Node):
             return (0, 165, 255)
         return (0, 0, 255)
 
-    def _estimate_error_line(self) -> str:
-        err_dx = "na" if self.last_estimate_error_dx_m is None else f"{self.last_estimate_error_dx_m:.2f}"
-        err_dy = "na" if self.last_estimate_error_dy_m is None else f"{self.last_estimate_error_dy_m:.2f}"
-        err_planar = "na" if self.last_estimate_error_m is None else f"{self.last_estimate_error_m:.2f}"
-        return f"err=({err_dx},{err_dy},{err_planar})"
+    def _actual_pose_line(self, now: Time) -> str:
+        if self.last_actual_leader_pose is None or not self.actual_leader_pose_fresh(now):
+            return "actual: na"
+        return (
+            f"actual: ("
+            f"{self.last_actual_leader_pose.x:.2f},"
+            f"{self.last_actual_leader_pose.y:.2f},"
+            f"{self.last_actual_leader_pose.yaw:.2f})"
+        )
+
+    def _estimated_distance_lines(self, now: Time) -> list[str]:
+        if self.uav_pose is None or not self.uav_pose_fresh(now):
+            return ["est_d: na", "est_xy: na"]
+        if self.last_estimate_pose is None:
+            return ["est_d: na", "est_xy: na"]
+        dx = self.last_estimate_pose.x - self.uav_pose.x
+        dy = self.last_estimate_pose.y - self.uav_pose.y
+        dz = self.last_estimate_pose.z - self.uav_pose.z
+        est_xy = math.hypot(dx, dy)
+        est_d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        return [
+            f"est_d: {est_d:.2f}m",
+            f"est_xy: {est_xy:.2f}m",
+        ]
+
+    def _actual_range_lines(self, now: Time) -> list[str]:
+        if self.uav_pose is None or not self.uav_pose_fresh(now):
+            return ["real_d: na", "real_xy: na", "real_z: na"]
+        if self.last_actual_leader_pose is None or not self.actual_leader_pose_fresh(now):
+            return ["real_d: na", "real_xy: na", "real_z: na"]
+        dx = self.last_actual_leader_pose.x - self.uav_pose.x
+        dy = self.last_actual_leader_pose.y - self.uav_pose.y
+        dz = self.last_actual_leader_pose.z - self.uav_pose.z
+        real_xy = math.hypot(dx, dy)
+        real_z = abs(dz)
+        real_d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        return [
+            f"real_d: {real_d:.2f}m",
+            f"real_xy: {real_xy:.2f}m",
+            f"real_z: {real_z:.2f}m",
+        ]
 
     def _draw_debug_text(
         self,
@@ -783,17 +818,19 @@ class LeaderEstimator(Node):
         cv2.putText(img_bgr, text, (draw_x, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 3, cv2.LINE_AA)
         cv2.putText(img_bgr, text, (draw_x, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
-    def _draw_debug_field_row(
+    def _draw_debug_lines(
         self,
         img_bgr: np.ndarray,
-        fields: list[tuple[int, str]],
-        y: int,
+        lines: list[str],
+        x: int,
+        y_start: int,
         *,
         align_right: bool = False,
     ) -> None:
-        for x, text in fields:
-            if text:
-                self._draw_debug_text(img_bgr, text, x, y, align_right=align_right)
+        y = int(y_start)
+        for line in lines:
+            self._draw_debug_text(img_bgr, line, x, y, align_right=align_right)
+            y += 18
 
     def _publish_debug_image(self, state: str, reason: str, det: Optional[Detection2D]) -> None:
         if not self.publish_debug_image or self.debug_image_pub is None or self.last_image_msg is None:
@@ -815,83 +852,33 @@ class LeaderEstimator(Node):
                     cv2.circle(out, (int(round(det.u)), int(round(det.v))), 3, color, -1)
                 resolved_heading_yaw, resolved_heading_src = self._resolved_debug_heading(now)
                 resolved_heading_label = self._heading_direction_label(self.last_estimate_pose, resolved_heading_yaw)
-                det_fields = self._detection_status_fields(now)
-                det_src = det_fields.get("perception", "none")
-                det_id = det_fields.get("track_id", "none")
-                det_hits = det_fields.get("track_hits", "0")
-                det_age_raw = det_fields.get("track_age_s", "0.0")
-                try:
-                    det_age = f"{float(det_age_raw):.1f}s"
-                except Exception:
-                    det_age = f"{det_age_raw}s"
-
                 h, w = out.shape[:2]
-                est_col_1 = 8
-                est_col_2 = max(165, int(w * 0.27))
-                est_col_3 = max(305, int(w * 0.45))
-                det_col_1 = max(0, int(w * 0.67))
-                det_col_2 = max(0, int(w * 0.86))
-                det_col_3 = w - 8
-                y1 = 20
-                y2 = y1 + 18
-                y3 = y2 + 18
-                y4 = y3 + 18
-
-                self._draw_debug_field_row(
-                    out,
-                    [
-                        (est_col_1, f"est_range={self.last_range_used_m:.2f}m"),
-                        (est_col_2, f"src={self.last_range_source}"),
-                        (est_col_3, f"bearing={self.last_bearing_used_deg:.1f}deg"),
-                    ],
-                    y1,
-                )
-                self._draw_debug_field_row(
-                    out,
-                    [
-                        (est_col_1, f"est_heading={resolved_heading_label}"),
-                        (est_col_2, f"src={resolved_heading_src}"),
-                    ],
-                    y2,
-                )
+                estimate_lines = []
                 if self.last_estimate_pose is not None:
-                    self._draw_debug_text(
-                        out,
-                        f"est=({self.last_estimate_pose.x:.2f},{self.last_estimate_pose.y:.2f},{self.last_estimate_pose.yaw:.2f})",
-                        est_col_1,
-                        y3,
+                    estimate_lines.append(
+                        f"est: ({self.last_estimate_pose.x:.2f},{self.last_estimate_pose.y:.2f},{self.last_estimate_pose.yaw:.2f})"
                     )
-                    self._draw_debug_text(out, self._estimate_error_line(), est_col_1, y4)
+                estimate_lines.append(self._actual_pose_line(now))
+                estimate_lines.extend(self._estimated_distance_lines(now))
+                estimate_lines.extend(self._actual_range_lines(now))
+                estimate_lines.extend([
+                    f"range_src: {self.last_range_source}",
+                    f"bearing: {self.last_bearing_used_deg:.1f}deg",
+                    f"est_heading: {resolved_heading_label}",
+                    f"heading_src: {resolved_heading_src}",
+                ])
 
-                self._draw_debug_field_row(
-                    out,
-                    [
-                        (det_col_1, f"state={state}"),
-                        (det_col_2, f"reason={reason}"),
-                        (det_col_3, f"conf={self.last_det_conf:.2f}"),
-                    ],
-                    y1,
-                    align_right=True,
-                )
-                self._draw_debug_field_row(
-                    out,
-                    [
-                        (det_col_3, f"src={det_src}"),
-                    ],
-                    y2,
-                    align_right=True,
-                )
-                self._draw_debug_field_row(
-                    out,
-                    [
-                        (det_col_1, f"id={det_id}"),
-                        (det_col_2, f"hits={det_hits}"),
-                        (det_col_3, f"age={det_age}"),
-                    ],
-                    y3,
-                    align_right=True,
-                )
-                self._draw_debug_text(out, f"latency_ms={self.last_latency_ms:.1f}", 8, h - 12)
+                detection_lines = [
+                    f"task: {self._detection_task_label(now)}",
+                    f"state: {state}",
+                    f"reason: {reason}",
+                    f"conf: {self.last_det_conf:.2f}",
+                ]
+                detection_lines.extend(self._detection_status_overlay_lines(now))
+
+                self._draw_debug_lines(out, estimate_lines, 8, 20)
+                self._draw_debug_lines(out, detection_lines, w - 8, 20, align_right=True)
+                self._draw_debug_text(out, f"latency_ms: {self.last_latency_ms:.1f}", 8, h - 12)
             msg = self._bgr_to_image_msg(out)
             if msg is not None:
                 self.debug_image_pub.publish(msg)

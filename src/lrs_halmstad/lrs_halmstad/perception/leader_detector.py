@@ -13,6 +13,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
+from lrs_halmstad.common.ros_params import yaml_param
 from lrs_halmstad.perception.detection_protocol import Detection2D, encode_detection_payload
 from lrs_halmstad.perception.detection_status import DetectionStatusPublisher
 from lrs_halmstad.perception.yolo_common import (
@@ -31,46 +32,27 @@ class LeaderDetector(Node):
         super().__init__("leader_detector")
         dyn_num = ParameterDescriptor(dynamic_typing=True)
 
-        self.declare_parameter("uav_name", "dji0")
-        self.declare_parameter("camera_topic", "")
-        self.declare_parameter("out_topic", "/coord/leader_detection")
-        self.declare_parameter("status_topic", "/coord/leader_detection_status")
-        self.declare_parameter("models_root", default_models_root(__file__))
-        self.declare_parameter("yolo_weights", "")
-        self.declare_parameter("device", "cpu")
-        self.declare_parameter("conf_threshold", 0.05, dyn_num)
-        self.declare_parameter("iou_threshold", 0.45, dyn_num)
-        self.declare_parameter("imgsz", 640)
-        self.declare_parameter("target_class_id", -1)
-        self.declare_parameter("target_class_name", "")
-        self.declare_parameter("bbox_continuity_weight", 0.15, dyn_num)
-        self.declare_parameter("bbox_continuity_class_bonus", 0.05, dyn_num)
-        self.declare_parameter("bbox_continuity_max_px", 400.0, dyn_num)
-        self.declare_parameter("predict_hz", 20.0, dyn_num)
-        self.declare_parameter("event_topic", "/coord/events")
-        self.declare_parameter("publish_events", False)
-
-        self.uav_name = str(self.get_parameter("uav_name").value)
-        self.camera_topic = str(self.get_parameter("camera_topic").value) or f"/{self.uav_name}/camera0/image_raw"
-        self.out_topic = str(self.get_parameter("out_topic").value)
-        self.status_topic = str(self.get_parameter("status_topic").value)
-        self.models_root = os.path.expanduser(str(self.get_parameter("models_root").value).strip())
+        self.uav_name = str(self.declare_parameter("uav_name", "dji0").value)
+        self.camera_topic = str(self.declare_parameter("camera_topic", "").value) or f"/{self.uav_name}/camera0/image_raw"
+        self.out_topic = str(yaml_param(self, "out_topic"))
+        self.status_topic = str(yaml_param(self, "status_topic"))
+        self.models_root = os.path.expanduser(str(self.declare_parameter("models_root", default_models_root(__file__)).value).strip())
         self.yolo_weights = resolve_yolo_weights_path(
-            str(self.get_parameter("yolo_weights").value).strip(),
+            str(self.declare_parameter("yolo_weights", "").value).strip(),
             self.models_root,
         )
-        self.device = str(self.get_parameter("device").value)
-        self.conf_threshold = float(self.get_parameter("conf_threshold").value)
-        self.iou_threshold = float(self.get_parameter("iou_threshold").value)
-        self.imgsz = int(self.get_parameter("imgsz").value)
-        self.target_class_id = int(self.get_parameter("target_class_id").value)
-        self.target_class_name = str(self.get_parameter("target_class_name").value).strip()
-        self.bbox_continuity_weight = float(self.get_parameter("bbox_continuity_weight").value)
-        self.bbox_continuity_class_bonus = float(self.get_parameter("bbox_continuity_class_bonus").value)
-        self.bbox_continuity_max_px = float(self.get_parameter("bbox_continuity_max_px").value)
-        self.predict_hz = float(self.get_parameter("predict_hz").value)
-        self.event_topic = str(self.get_parameter("event_topic").value)
-        self.publish_events = bool(self.get_parameter("publish_events").value)
+        self.device = str(yaml_param(self, "device"))
+        self.conf_threshold = float(yaml_param(self, "conf_threshold", descriptor=dyn_num))
+        self.iou_threshold = float(yaml_param(self, "iou_threshold", descriptor=dyn_num))
+        self.imgsz = int(yaml_param(self, "imgsz"))
+        self.target_class_id = int(yaml_param(self, "target_class_id"))
+        self.target_class_name = str(yaml_param(self, "target_class_name")).strip()
+        self.bbox_continuity_weight = float(yaml_param(self, "bbox_continuity_weight", descriptor=dyn_num))
+        self.bbox_continuity_class_bonus = float(yaml_param(self, "bbox_continuity_class_bonus", descriptor=dyn_num))
+        self.bbox_continuity_max_px = float(yaml_param(self, "bbox_continuity_max_px", descriptor=dyn_num))
+        self.predict_hz = float(yaml_param(self, "predict_hz", descriptor=dyn_num))
+        self.event_topic = str(yaml_param(self, "event_topic"))
+        self.publish_events = bool(yaml_param(self, "publish_events"))
 
         if self.predict_hz <= 0.0:
             raise ValueError("predict_hz must be > 0")
@@ -81,6 +63,7 @@ class LeaderDetector(Node):
         self.yolo_model = None
         self.yolo_ready = False
         self.yolo_error: Optional[str] = None
+        self.task_type = self._resolve_task_type()
         self._init_yolo()
 
         self.image_sub = self.create_subscription(Image, self.camera_topic, self.on_image, 10)
@@ -107,6 +90,7 @@ class LeaderDetector(Node):
         try:
             self.yolo_model = load_ultralytics_model(self.yolo_weights)
             self.yolo_ready = True
+            self.task_type = self._resolve_task_type()
             return True
         except RuntimeError as exc:
             self.yolo_error = str(exc)
@@ -125,6 +109,19 @@ class LeaderDetector(Node):
             self.get_logger().warn(f"[leader_detector] YOLO weights file not found: {self.yolo_weights}")
             return
         self._init_yolo_ultralytics()
+
+    def _resolve_task_type(self) -> str:
+        model_task = getattr(self.yolo_model, "task", None)
+        if isinstance(model_task, str):
+            task = model_task.strip().lower()
+            if task == "obb":
+                return "obb"
+            if task in {"detect", "detection"}:
+                return "detection"
+        weights_lower = str(self.yolo_weights or "").lower()
+        if "/obb/" in weights_lower or weights_lower.endswith("-obb.pt") or weights_lower.endswith("_obb.pt"):
+            return "obb"
+        return "detection"
 
     def _score_candidate(self, cand: Detection2D) -> float:
         score = cand.conf
@@ -250,7 +247,7 @@ class LeaderDetector(Node):
         self.pub.publish(out)
 
     def _publish_status(self, state: str, reason: str, det: Optional[Detection2D]) -> None:
-        self.status_helper.publish(state=state, reason=reason, det=det)
+        self.status_helper.publish(state=state, reason=reason, task=self.task_type, det=det)
 
     def on_image(self, msg: Image) -> None:
         now = self.get_clock().now()

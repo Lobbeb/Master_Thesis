@@ -118,7 +118,6 @@ Current Python package layout under `src/lrs_halmstad/lrs_halmstad`:
   - `sync_check.py`
 - `tools/`
   - `follow_control.py`
-  - `follow_debug_cli.py`
   - `uav_command_logger.py`
 - `common/`
   - `world_names.py`
@@ -210,7 +209,6 @@ Current default behavior of `scripts/run_1to1_yolo.sh`:
 - `publish_pose_cmd_topics:=false`
 - `publish_camera_debug_topics:=false`
 - if `use_estimate:=true` and not overridden:
-  - `startup_reposition_enable:=true`
   - `uav_start_x:=-7.0`
   - `uav_start_z:=7.0`
   - `leader_actual_heading_enable:=true`
@@ -329,7 +327,7 @@ From `run_follow_defaults.yaml`:
 
 Follow controller:
 - `d_target: 7.0`
-- `z_alt: 7.0`
+- `z_min: 7.0`
 - `tick_hz: 20.0`
 - `follow_speed_mps: 5.0`
 - `follow_speed_gain: 2.0`
@@ -356,9 +354,9 @@ Camera tracker:
 
 Estimator:
 - `est_hz: 20.0`
-- `range_mode: auto`
-- `constant_range_m: 7.0`
-- `use_depth_range: true`
+- `range_mode: const`
+- `d_target` now seeds the estimator const-range target too; the old explicit `constant_range_m` launch override is no longer part of the normal run path
+- `use_depth_range: false`
 - `external_detection_timeout_s: 1.0`
 
 Detector:
@@ -391,16 +389,15 @@ directly as `./scripts/run_<name>.sh` or through the root dispatcher as
 - live tuning helper for follow parameters
 - wrapper now resolves the installed `run_follow_control` entrypoint from `lrs_halmstad.tools.follow_control`
 - current useful modes:
-  - default keyboard mode for `d_target` / `z_alt`
+  - default keyboard mode for `d_target` / `z_min`
   - `--mode params`
   - `--mode random`
 - the temporary direct manual pose-steering override path was removed
 
-`scripts/run_follow_debug.sh`
-- runtime analyzer for follow/camera behavior
-- wrapper now resolves the installed `run_follow_debug` entrypoint from `lrs_halmstad.tools.follow_debug_cli`
+`uav_command_logger.py`
+- the preferred runtime command logger for follow/camera behavior
 - logs under:
-  - `debug_logs/follow_debug/`
+  - `debug_logs/uav_commands/`
 - useful for:
   - body yaw vs camera pan separation
   - anchor/XY error

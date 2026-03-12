@@ -59,6 +59,24 @@ def clamp_point_to_radius(center_x: float, center_y: float, x: float, y: float, 
     return center_x + dx * s, center_y + dy * s
 
 
+def horizontal_distance_for_euclidean(target_distance: float, vertical_delta: float) -> float:
+    target_distance = max(0.0, float(target_distance))
+    vertical_delta = abs(float(vertical_delta))
+    horizontal_sq = target_distance * target_distance - vertical_delta * vertical_delta
+    if horizontal_sq <= 0.0:
+        return 0.0
+    return math.sqrt(horizontal_sq)
+
+
+def vertical_distance_for_euclidean(target_distance: float, horizontal_delta: float) -> float:
+    target_distance = max(0.0, float(target_distance))
+    horizontal_delta = abs(float(horizontal_delta))
+    vertical_sq = target_distance * target_distance - horizontal_delta * horizontal_delta
+    if vertical_sq <= 0.0:
+        return 0.0
+    return math.sqrt(vertical_sq)
+
+
 def rotate_body_offset(x_body: float, y_body: float, yaw: float) -> Tuple[float, float]:
     c = math.cos(yaw)
     s = math.sin(yaw)

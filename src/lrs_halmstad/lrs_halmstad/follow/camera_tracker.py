@@ -13,6 +13,7 @@ from sensor_msgs.msg import CameraInfo
 from std_msgs.msg import Float32, Float64, String
 from tf_transformations import quaternion_from_euler
 
+from lrs_halmstad.common.ros_params import yaml_param
 from lrs_halmstad.follow.follow_math import (
     Pose2D,
     camera_xy_from_uav_pose,
@@ -58,6 +59,9 @@ def apply_deadband_command(
 
 
 TRACKABLE_ESTIMATOR_STATES = frozenset({"OK"})
+CMD_POSE_PREFER_XY_GAP_M = 0.05
+CMD_POSE_PREFER_Z_GAP_M = 0.02
+CMD_POSE_PREFER_YAW_GAP_RAD = 0.02
 
 
 def parse_status_field(status_line: str, key: str) -> Optional[str]:
@@ -71,80 +75,43 @@ class CameraTracker(Node):
     def __init__(self):
         super().__init__("camera_tracker")
 
-        self.declare_parameter("uav_name", "dji0")
-        self.declare_parameter("leader_input_type", "odom")
-        self.declare_parameter("leader_odom_topic", "/a201_0000/platform/odom/filtered")
-        self.declare_parameter("leader_pose_topic", "/coord/leader_estimate")
-        self.declare_parameter("leader_status_topic", "/coord/leader_estimate_status")
-        self.declare_parameter("leader_detection_topic", "/coord/leader_detection")
-        self.declare_parameter("camera_info_topic", "")
-        self.declare_parameter("uav_camera_mode", "integrated_joint")
-        self.declare_parameter("camera_mount_pitch_deg", 45.0)
-        self.declare_parameter("uav_pose_cmd_topic", "")
-        self.declare_parameter("tick_hz", 10.0)
-        self.declare_parameter("pose_timeout_s", 3.0)
-        self.declare_parameter("camera_x_offset_m", 0.0)
-        self.declare_parameter("camera_y_offset_m", 0.0)
-        self.declare_parameter("camera_z_offset_m", 0.27)
-        self.declare_parameter("leader_look_target_x_m", 0.0)
-        self.declare_parameter("leader_look_target_y_m", 0.0)
-        self.declare_parameter("camera_look_target_z_m", 0.0)
-        self.declare_parameter("camera_yaw_offset_deg", 0.0)
-        self.declare_parameter("camera_pan_sign", 1.0)
-        self.declare_parameter("default_pan_deg", 0.0)
-        self.declare_parameter("pan_enable", True)
-        self.declare_parameter("default_tilt_deg", 0.0)
-        self.declare_parameter("tilt_enable", True)
-        self.declare_parameter("tilt_deadband_deg", 0.0)
-        self.declare_parameter("image_center_correction_enable", False)
-        self.declare_parameter("image_center_correction_timeout_s", 0.25)
-        self.declare_parameter("image_center_deadband_deg", 0.75)
-        self.declare_parameter("pan_image_center_gain", 0.0)
-        self.declare_parameter("pan_image_center_max_deg", 12.0)
-        self.declare_parameter("tilt_image_center_gain", 0.0)
-        self.declare_parameter("tilt_image_center_max_deg", 8.0)
-        self.declare_parameter("publish_debug_topics", True)
-
-        self.uav_name = str(self.get_parameter("uav_name").value)
-        self.leader_input_type = str(self.get_parameter("leader_input_type").value).strip().lower()
-        self.leader_odom_topic = str(self.get_parameter("leader_odom_topic").value)
-        self.leader_pose_topic = str(self.get_parameter("leader_pose_topic").value)
-        self.leader_status_topic = str(self.get_parameter("leader_status_topic").value).strip()
-        self.leader_detection_topic = str(self.get_parameter("leader_detection_topic").value).strip()
+        self.uav_name = str(self.declare_parameter("uav_name", "dji0").value)
+        self.leader_input_type = str(self.declare_parameter("leader_input_type", "odom").value).strip().lower()
+        self.leader_odom_topic = str(self.declare_parameter("leader_odom_topic", "/a201_0000/platform/odom/filtered").value)
+        self.leader_pose_topic = str(self.declare_parameter("leader_pose_topic", "/coord/leader_estimate").value)
+        self.leader_status_topic = str(self.declare_parameter("leader_status_topic", "/coord/leader_estimate_status").value).strip()
+        self.leader_detection_topic = str(self.declare_parameter("leader_detection_topic", "/coord/leader_detection").value).strip()
         self.camera_info_topic = (
-            str(self.get_parameter("camera_info_topic").value).strip()
+            str(self.declare_parameter("camera_info_topic", "").value).strip()
             or f"/{self.uav_name}/camera0/camera_info"
         )
-        self.uav_camera_mode = str(self.get_parameter("uav_camera_mode").value).strip().lower()
-        self.camera_mount_pitch_deg = float(self.get_parameter("camera_mount_pitch_deg").value)
-        self.uav_pose_cmd_topic = str(self.get_parameter("uav_pose_cmd_topic").value).strip()
-        self.tick_hz = max(1.0, float(self.get_parameter("tick_hz").value))
-        self.pose_timeout_s = float(self.get_parameter("pose_timeout_s").value)
-        self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
-        self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
-        self.camera_z_offset_m = float(self.get_parameter("camera_z_offset_m").value)
-        self.leader_look_target_x_m = float(self.get_parameter("leader_look_target_x_m").value)
-        self.leader_look_target_y_m = float(self.get_parameter("leader_look_target_y_m").value)
-        self.camera_look_target_z_m = float(self.get_parameter("camera_look_target_z_m").value)
-        self.camera_yaw_offset_deg = float(self.get_parameter("camera_yaw_offset_deg").value)
-        self.camera_pan_sign = float(self.get_parameter("camera_pan_sign").value)
-        self.default_pan_deg = float(self.get_parameter("default_pan_deg").value)
-        self.pan_enable = coerce_bool(self.get_parameter("pan_enable").value)
-        self.default_tilt_deg = float(self.get_parameter("default_tilt_deg").value)
-        self.tilt_enable = coerce_bool(self.get_parameter("tilt_enable").value)
-        self.tilt_deadband_deg = max(0.0, float(self.get_parameter("tilt_deadband_deg").value))
-        self.image_center_correction_enable = coerce_bool(
-            self.get_parameter("image_center_correction_enable").value
-        )
-        self.image_center_correction_timeout_s = max(
-            0.0, float(self.get_parameter("image_center_correction_timeout_s").value)
-        )
-        self.image_center_deadband_deg = max(0.0, float(self.get_parameter("image_center_deadband_deg").value))
-        self.pan_image_center_gain = float(self.get_parameter("pan_image_center_gain").value)
-        self.pan_image_center_max_deg = max(0.0, float(self.get_parameter("pan_image_center_max_deg").value))
-        self.tilt_image_center_gain = float(self.get_parameter("tilt_image_center_gain").value)
-        self.tilt_image_center_max_deg = max(0.0, float(self.get_parameter("tilt_image_center_max_deg").value))
-        self.publish_debug_topics = coerce_bool(self.get_parameter("publish_debug_topics").value)
+        self.uav_camera_mode = str(self.declare_parameter("uav_camera_mode", "integrated_joint").value).strip().lower()
+        self.camera_mount_pitch_deg = float(yaml_param(self, "camera_mount_pitch_deg"))
+        self.uav_pose_cmd_topic = str(self.declare_parameter("uav_pose_cmd_topic", "").value).strip()
+        self.tick_hz = max(1.0, float(yaml_param(self, "tick_hz")))
+        self.pose_timeout_s = float(yaml_param(self, "pose_timeout_s"))
+        self.camera_x_offset_m = float(yaml_param(self, "camera_x_offset_m"))
+        self.camera_y_offset_m = float(yaml_param(self, "camera_y_offset_m"))
+        self.camera_z_offset_m = float(yaml_param(self, "camera_z_offset_m"))
+        self.leader_look_target_x_m = float(yaml_param(self, "leader_look_target_x_m"))
+        self.leader_look_target_y_m = float(yaml_param(self, "leader_look_target_y_m"))
+        self.camera_look_target_z_m = float(yaml_param(self, "camera_look_target_z_m"))
+        self.camera_yaw_offset_deg = float(yaml_param(self, "camera_yaw_offset_deg"))
+        self.camera_pan_sign = float(yaml_param(self, "camera_pan_sign"))
+        self.default_pan_deg = float(yaml_param(self, "default_pan_deg"))
+        self.pan_enable = coerce_bool(yaml_param(self, "pan_enable"))
+        self.default_tilt_deg = float(yaml_param(self, "default_tilt_deg"))
+        self.tilt_enable = coerce_bool(yaml_param(self, "tilt_enable"))
+        self.pan_deadband_deg = max(0.0, float(yaml_param(self, "pan_deadband_deg")))
+        self.tilt_deadband_deg = max(0.0, float(yaml_param(self, "tilt_deadband_deg")))
+        self.image_center_correction_enable = coerce_bool(yaml_param(self, "image_center_correction_enable"))
+        self.image_center_correction_timeout_s = max(0.0, float(yaml_param(self, "image_center_correction_timeout_s")))
+        self.image_center_deadband_deg = max(0.0, float(yaml_param(self, "image_center_deadband_deg")))
+        self.pan_image_center_gain = float(yaml_param(self, "pan_image_center_gain"))
+        self.pan_image_center_max_deg = max(0.0, float(yaml_param(self, "pan_image_center_max_deg")))
+        self.tilt_image_center_gain = float(yaml_param(self, "tilt_image_center_gain"))
+        self.tilt_image_center_max_deg = max(0.0, float(yaml_param(self, "tilt_image_center_max_deg")))
+        self.publish_debug_topics = coerce_bool(yaml_param(self, "publish_debug_topics"))
 
         if self.leader_input_type == "estimate":
             self.leader_input_type = "pose"
@@ -165,6 +132,7 @@ class CameraTracker(Node):
         self.last_leader_status_stamp: Optional[Time] = None
         self.last_trackable_leader_pose: Optional[Pose2D] = None
         self.last_trackable_leader_z: Optional[float] = None
+        self.last_trackable_leader_stamp: Optional[Time] = None
         self.last_detection: Optional[Detection2D] = None
         self.last_detection_stamp: Optional[Time] = None
         self.camera_fx: Optional[float] = None
@@ -382,6 +350,7 @@ class CameraTracker(Node):
         self.get_logger().info(
             f"[camera_tracker] Started: uav={self.uav_name}, leader_input={self.leader_input_type}, "
             f"pan_enable={self.pan_enable}, default_pan_deg={self.default_pan_deg}, "
+            f"pan_deadband_deg={self.pan_deadband_deg}, "
             f"tilt_enable={self.tilt_enable}, default_tilt_deg={self.default_tilt_deg}, "
             f"tilt_deadband_deg={self.tilt_deadband_deg}, "
             f"image_center_correction_enable={self.image_center_correction_enable}, "
@@ -503,8 +472,24 @@ class CameraTracker(Node):
         # trackable gate to avoid yaw swings from weak estimates.
         return self.leader_pose_is_fresh(now)
 
+    def leader_pose_is_pan_trackable(self, now: Time) -> bool:
+        # Keep horizontal framing alive from the freshest estimate pose during
+        # brief NO_DET windows so search climb/translation can keep the leader
+        # in frame instead of freezing pan until status recovers.
+        return self.leader_pose_is_fresh(now)
+
+    def last_trackable_leader_is_fresh(self, now: Time) -> bool:
+        if (
+            self.last_trackable_leader_pose is None
+            or self.last_trackable_leader_z is None
+            or self.last_trackable_leader_stamp is None
+        ):
+            return False
+        age_s = (now - self.last_trackable_leader_stamp).nanoseconds * 1e-9
+        return age_s <= self.pose_timeout_s
+
     def _prefer_uav_cmd_pose(self, now: Time) -> bool:
-        return should_prefer_command_pose(
+        prefer_by_freshness = should_prefer_command_pose(
             have_cmd=self.have_uav_cmd,
             cmd_stamp_ns=(
                 None if self.last_uav_cmd_stamp is None else int(self.last_uav_cmd_stamp.nanoseconds)
@@ -517,6 +502,30 @@ class CameraTracker(Node):
             ),
             now_ns=int(now.nanoseconds),
             pose_timeout_s=self.pose_timeout_s,
+        )
+        if prefer_by_freshness:
+            return True
+        if (
+            not self.have_uav_cmd
+            or not self.have_uav_actual
+            or self.last_uav_cmd_stamp is None
+            or self.last_uav_actual_stamp is None
+        ):
+            return False
+        cmd_age_s = (now - self.last_uav_cmd_stamp).nanoseconds * 1e-9
+        actual_age_s = (now - self.last_uav_actual_stamp).nanoseconds * 1e-9
+        if cmd_age_s > self.pose_timeout_s or actual_age_s > self.pose_timeout_s:
+            return False
+        xy_gap = math.hypot(
+            self.uav_cmd_pose.x - self.uav_actual_pose.x,
+            self.uav_cmd_pose.y - self.uav_actual_pose.y,
+        )
+        z_gap = abs(self.uav_cmd_z - self.uav_actual_z)
+        yaw_gap = abs(wrap_pi(self.uav_cmd_pose.yaw - self.uav_actual_pose.yaw))
+        return (
+            xy_gap > CMD_POSE_PREFER_XY_GAP_M
+            or z_gap > CMD_POSE_PREFER_Z_GAP_M
+            or yaw_gap > CMD_POSE_PREFER_YAW_GAP_RAD
         )
 
     def _tracking_uav_pose(self, now: Time) -> Optional[Pose2D]:
@@ -808,19 +817,23 @@ class CameraTracker(Node):
         pan_image_correction_deg, tilt_image_correction_deg, image_err_x_deg, image_err_y_deg = (
             self._image_center_corrections(now)
         )
-        leader_trackable = self.leader_pose_is_trackable(now)
+        leader_pan_trackable = self.leader_pose_is_pan_trackable(now)
         leader_tilt_trackable = self.leader_pose_is_tilt_trackable(now)
         tracked_leader_pose: Optional[Pose2D] = None
         tracked_leader_z: Optional[float] = None
         tilt_leader_pose: Optional[Pose2D] = None
         tilt_leader_z: Optional[float] = None
-        if leader_trackable:
+        if leader_pan_trackable:
             self.last_trackable_leader_pose = Pose2D(
                 self.leader_pose.x,
                 self.leader_pose.y,
                 self.leader_pose.yaw,
             )
             self.last_trackable_leader_z = float(self.leader_z)
+            self.last_trackable_leader_stamp = self.last_leader_stamp or now
+            tracked_leader_pose = self.last_trackable_leader_pose
+            tracked_leader_z = self.last_trackable_leader_z
+        elif self.last_trackable_leader_is_fresh(now):
             tracked_leader_pose = self.last_trackable_leader_pose
             tracked_leader_z = self.last_trackable_leader_z
         if leader_tilt_trackable:
@@ -830,6 +843,9 @@ class CameraTracker(Node):
                 self.leader_pose.yaw,
             )
             tilt_leader_z = float(self.leader_z)
+        elif self.last_trackable_leader_is_fresh(now):
+            tilt_leader_pose = self.last_trackable_leader_pose
+            tilt_leader_z = self.last_trackable_leader_z
 
         if tracked_leader_pose is not None and tracked_leader_z is not None:
             self._publish_camera_debug_for_target(uav_pose, uav_z, tracked_leader_pose, tracked_leader_z)
@@ -887,13 +903,18 @@ class CameraTracker(Node):
 
         pan_msg = Float64()
         if self.pan_enable and tracked_leader_pose is not None and tracked_leader_z is not None:
-            pan_msg.data = float(
+            raw_pan_cmd = float(
                 self._compute_pan_deg_for_target(
                     uav_pose,
                     tracked_leader_pose,
                     tracked_leader_z,
                 )
                 + pan_image_correction_deg
+            )
+            pan_msg.data = apply_deadband_command(
+                raw_pan_cmd,
+                self.last_pan_cmd_deg,
+                self.pan_deadband_deg,
             )
         elif self.pan_enable and self.last_pan_cmd_deg is not None:
             pan_msg.data = float(self.last_pan_cmd_deg)
