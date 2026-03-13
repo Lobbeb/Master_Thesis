@@ -165,11 +165,10 @@ leader_estimator:
 
     est_hz: 20.0  # Main estimator loop rate.
 
-    range_mode: auto  # Range source: auto, depth, ground, or const.
+    range_mode: depth  # Range source: auto, depth, ground, or const.
     d_target: 10.0  # Shared target distance reused by the estimator in const mode.
-    use_depth_range: false  # Allow depth to override constant range when available.
-    depth_max_m: 100.0  # Maximum valid depth sample.
-    depth_min_m: 0.2  # Minimum valid depth sample.
+    depth_max_m: 20.0  # Maximum valid depth sample.
+    depth_min_m: 0.1  # Minimum valid depth sample.
     depth_scale: 0.001  # Scale factor for 16UC1 depth images.
     ground_max_range_m: 50.0  # Maximum ground-plane intersection range accepted as valid.
     ground_min_range_m: 0.25  # Minimum ground-plane intersection range accepted as valid; keep this low enough for the UGV to pass under the UAV without forcing const fallback.

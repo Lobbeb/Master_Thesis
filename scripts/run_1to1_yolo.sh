@@ -13,6 +13,7 @@ HAVE_LEADER_ACTUAL_HEADING_ENABLE="false"
 USE_OBB="true"
 USE_TRACKER="false"
 EXTERNAL_DETECTION_NODE="detector"
+LEADER_RANGE_MODE="auto"
 WEIGHTS_REL=""
 MODEL_SUBDIR=""
 HAVE_UAV_START_X="false"
@@ -133,6 +134,12 @@ for arg in "$@"; do
     tracker_config:=*)
       EXTRA_ARGS+=("$arg")
       ;;
+    range_mode:=*)
+      LEADER_RANGE_MODE="${arg#range_mode:=}"
+      ;;
+    leader_range_mode:=*)
+      LEADER_RANGE_MODE="${arg#leader_range_mode:=}"
+      ;;
     uav_start_x:=*)
       HAVE_UAV_START_X="true"
       EXTRA_ARGS+=("$arg")
@@ -188,6 +195,16 @@ case "$USE_TRACKER" in
   *)
     echo "Invalid tracker option: $USE_TRACKER" >&2
     echo "Use tracker:=true or tracker:=false" >&2
+    exit 2
+    ;;
+esac
+
+case "$LEADER_RANGE_MODE" in
+  auto|depth|ground|const)
+    ;;
+  *)
+    echo "Invalid range_mode option: $LEADER_RANGE_MODE" >&2
+    echo "Use range_mode:=auto|depth|ground|const" >&2
     exit 2
     ;;
 esac
@@ -296,7 +313,7 @@ ros2 launch lrs_halmstad run_follow.launch.py \
   start_leader_estimator:=true \
   external_detection_enable:=true \
   external_detection_node:="$EXTERNAL_DETECTION_NODE" \
-  leader_range_mode:=auto \
+  leader_range_mode:="$LEADER_RANGE_MODE" \
   yolo_weights:="$WEIGHTS_REL" \
   "${EXTRA_ARGS[@]}" \
   world:="$WORLD"

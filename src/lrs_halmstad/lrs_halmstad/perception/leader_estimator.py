@@ -86,7 +86,6 @@ class LeaderEstimator(Node):
         self.d_target = float(yaml_param(self, "d_target", descriptor=dyn_num))
         self.declare_parameter("constant_range_m", 5.0, dyn_num)
         self.range_mode = str(yaml_param(self, "range_mode")).strip().lower()
-        self.use_depth_range = coerce_bool(yaml_param(self, "use_depth_range"))
         self.depth_scale = float(yaml_param(self, "depth_scale", descriptor=dyn_num))
         self.depth_min_m = float(yaml_param(self, "depth_min_m", descriptor=dyn_num))
         self.depth_max_m = float(yaml_param(self, "depth_max_m", descriptor=dyn_num))
@@ -405,7 +404,7 @@ class LeaderEstimator(Node):
         return None
 
     def _depth_range_at(self, det: Detection2D) -> Optional[float]:
-        if not self.use_depth_range or self.last_depth_msg is None:
+        if self.last_depth_msg is None:
             return None
         depth = self._depth_to_array_m(self.last_depth_msg)
         if depth is None:

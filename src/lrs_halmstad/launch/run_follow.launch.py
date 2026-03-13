@@ -161,8 +161,8 @@ def _build_camera_tracker_node(context, *args, **kwargs):
             name='camera_tracker',
             output='screen',
             parameters=[
-                LaunchConfiguration('params_file'),
                 camera_params,
+                LaunchConfiguration('params_file'),
             ],
         )
     ]
@@ -333,7 +333,10 @@ def generate_launch_description():
         'leader_camera_info_topic',
         default_value=['/', LaunchConfiguration('uav_name'), '/camera0/camera_info'],
     )
-    leader_depth_topic_arg = DeclareLaunchArgument('leader_depth_topic', default_value='')
+    leader_depth_topic_arg = DeclareLaunchArgument(
+        'leader_depth_topic',
+        default_value=['/', LaunchConfiguration('uav_name'), '/camera0/depth_image'],
+    )
     leader_uav_pose_topic_arg = DeclareLaunchArgument(
         'leader_uav_pose_topic',
         default_value=['/', LaunchConfiguration('uav_name'), '/pose'],
@@ -357,7 +360,6 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(LaunchConfiguration('start_uav_simulator')),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
@@ -371,6 +373,7 @@ def generate_launch_description():
                 'camera_yaw_offset_deg': LaunchConfiguration('camera_yaw_offset_deg'),
                 'camera_pan_sign': LaunchConfiguration('camera_pan_sign'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 
@@ -381,7 +384,6 @@ def generate_launch_description():
         output='screen',
         condition=_external_perception_condition('detector'),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
@@ -393,6 +395,7 @@ def generate_launch_description():
                 'yolo_weights': LaunchConfiguration('yolo_weights'),
                 'event_topic': LaunchConfiguration('event_topic'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 
@@ -403,7 +406,6 @@ def generate_launch_description():
         output='screen',
         condition=_external_perception_condition('tracker'),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
@@ -416,6 +418,7 @@ def generate_launch_description():
                 'tracker_config': LaunchConfiguration('tracker_config'),
                 'event_topic': LaunchConfiguration('event_topic'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 
@@ -426,7 +429,6 @@ def generate_launch_description():
         output='screen',
         condition=_estimator_condition(),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'uav_name': LaunchConfiguration('uav_name'),
@@ -440,6 +442,7 @@ def generate_launch_description():
                 'external_detection_topic': LaunchConfiguration('external_detection_topic'),
                 'event_topic': LaunchConfiguration('event_topic'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 
@@ -450,7 +453,6 @@ def generate_launch_description():
         output='screen',
         condition=_leader_odom_condition(),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
@@ -462,6 +464,7 @@ def generate_launch_description():
                 'publish_debug_topics': _bool_param('publish_follow_debug_topics'),
                 'publish_pose_cmd_topics': _bool_param('publish_pose_cmd_topics'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 
@@ -472,7 +475,6 @@ def generate_launch_description():
         output='screen',
         condition=_leader_nonodom_condition(),
         parameters=[
-            LaunchConfiguration('params_file'),
             {
                 'use_sim_time': True,
                 'world': LaunchConfiguration('world'),
@@ -486,6 +488,7 @@ def generate_launch_description():
                 'publish_debug_topics': _bool_param('publish_follow_debug_topics'),
                 'publish_pose_cmd_topics': _bool_param('publish_pose_cmd_topics'),
             },
+            LaunchConfiguration('params_file'),
         ],
     )
 

@@ -1,0 +1,14 @@
+/clock
+/coord/events
+/a201_0000/amcl_pose_odom
+/dji0/pose
+/dji0/pose_cmd
+/dji0/pose_cmd/odom
+/dji0/camera/actual/center_pose
+/dji0/camera/target/center_pose
+/dji0/follow/actual/anchor_pose
+/dji0/follow/target/anchor_pose
+/coord/leader_estimate
+/coord/leader_distance_debug
+/coord/leader_estimate_status
+/coord/leader_estimate_error

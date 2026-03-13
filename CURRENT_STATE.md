@@ -4,6 +4,7 @@ Assumption:
 - start in the workspace root
 - wrapper files now live under `scripts/`
 - user-facing entrypoints are `./run.sh <name>` and `./stop.sh <name>`
+- recorded experiment bags live under `bags/experiments/`, and `./run.sh monitor_bag ...` replays them with automatic `ros2 topic echo` subscribers for the topics you pass
 
 ### Active Baseline
 
@@ -366,7 +367,7 @@ Estimator:
 - `est_hz: 20.0`
 - `range_mode: auto`
 - `d_target` now seeds the estimator const-mode target too; the old explicit `constant_range_m` launch override is no longer part of the normal run path
-- `use_depth_range: false`
+- depth sampling is always available when a depth topic is configured; `range_mode` alone decides whether depth is used (`auto|depth|ground|const`)
 - `external_detection_timeout_s: 2.0`
 - const fallback now uses a recomputed target-based range (`const_target`), not the old shrinking `const_hold` XY reuse
 

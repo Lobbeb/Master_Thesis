@@ -80,11 +80,11 @@ case "$DRY_RUN" in
     ;;
 esac
 
-timestamp="$(date +%Y%m%d-%H%M%S)"
+timestamp="$(date +%m%d-%H%M%S)"
 safe_tag="$(printf '%s' "$TAG" | tr -c 'A-Za-z0-9_.-' '_')"
-run_name="${timestamp}_${MODE}"
+run_name="${MODE}_${timestamp}"
 if [ -n "$safe_tag" ]; then
-  run_name="${run_name}_${safe_tag}"
+  run_name="${safe_tag}_${run_name}"
 fi
 
 if [ -n "$RUN_DIR" ]; then
@@ -113,16 +113,20 @@ TOPICS=(
   "/$UAV_NAME/pose_cmd/odom"
   "/$UAV_NAME/camera/actual/center_pose"
   "/$UAV_NAME/camera/target/center_pose"
-  "/$UAV_NAME/follow/target/anchor_pose"
-  "/$UAV_NAME/follow/error/xy_distance_m"
-  "/$UAV_NAME/follow/error/yaw_rad"
 )
 
 if [ "$MODE" = "yolo" ]; then
   TOPICS+=(
     "/coord/leader_estimate"
+    "/coord/leader_distance_debug"
     "/coord/leader_estimate_status"
     "/coord/leader_estimate_error"
+    "/$UAV_NAME/follow/target/d_target_m"
+    "/$UAV_NAME/follow/target/xy_target_m"
+    "/$UAV_NAME/follow/actual/xy_distance_m"
+    "/$UAV_NAME/follow/actual/distance_3d_m"
+    "/$UAV_NAME/follow/error/xy_distance_m"
+    "/$UAV_NAME/follow/error/anchor_distance_m"
   )
 fi
 

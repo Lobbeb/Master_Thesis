@@ -330,6 +330,14 @@ Direct recorder wrapper:
 ./run.sh record_experiment warehouse mode:=yolo profile:=vision
 ```
 
+Bag monitor helper:
+
+```bash
+./run.sh monitor_bag warehouse/const_test_yolo_0313-015514 /coord/leader_estimate_status /coord/leader_distance_debug
+```
+
+`monitor_bag` resolves relative bag paths under `bags/experiments/`. You can pass either the experiment run directory or its `bag/` subdirectory.
+
 Default recorder output:
 - `bags/experiments/<world>/<timestamp>_<mode>/`
 
@@ -343,13 +351,19 @@ Recorder topic groups:
   - `/<uav>/pose_cmd/odom`
   - `/<uav>/camera/actual/center_pose`
   - `/<uav>/camera/target/center_pose`
+  - `/<uav>/follow/actual/anchor_pose`
   - `/<uav>/follow/target/anchor_pose`
-  - `/<uav>/follow/error/xy_distance_m`
-  - `/<uav>/follow/error/yaw_rad`
 - YOLO mode adds:
   - `/coord/leader_estimate`
+  - `/coord/leader_distance_debug`
   - `/coord/leader_estimate_status`
   - `/coord/leader_estimate_error`
+  - `/<uav>/follow/target/d_target_m`
+  - `/<uav>/follow/target/xy_target_m`
+  - `/<uav>/follow/actual/xy_distance_m`
+  - `/<uav>/follow/actual/distance_3d_m`
+  - `/<uav>/follow/error/xy_distance_m`
+  - `/<uav>/follow/error/anchor_distance_m`
 - `profile:=vision` also adds:
   - `/<uav>/camera0/image_raw`
   - `/<uav>/camera0/camera_info`
