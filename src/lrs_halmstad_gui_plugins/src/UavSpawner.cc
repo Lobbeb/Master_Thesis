@@ -3,13 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
-#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <queue>
 #include <set>
 #include <string>
-#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -37,8 +35,6 @@ namespace
 {
 
 constexpr double kEpsilon = 1e-6;
-constexpr auto kGuiDetachedSpawnDelay = std::chrono::milliseconds(250);
-
 bool ParseEnvDouble(const char *_name, double &_value)
 {
   const char *raw = std::getenv(_name);
@@ -459,8 +455,6 @@ void UavSpawner::LoadConfig(const tinyxml2::XMLElement *_pluginElem)
 
   this->configuredWorldName_ = ReadText(_pluginElem, "world_name");
   this->withCamera_ = ReadBool(_pluginElem, "with_camera", this->withCamera_);
-  this->detachedCamera_ =
-      ReadBool(_pluginElem, "detached_camera", this->detachedCamera_);
   this->modelStatic_ = ReadBool(_pluginElem, "model_static", this->modelStatic_);
   this->allowRenaming_ = ReadBool(_pluginElem, "allow_renaming", this->allowRenaming_);
   this->bridgeCamera_ = ReadBool(_pluginElem, "bridge_camera", this->bridgeCamera_);
@@ -513,11 +507,8 @@ void UavSpawner::Spawn()
   }
 
   const auto spawnName = this->NextName();
-  const auto cameraModelName =
-      QString::fromStdString(this->CameraModelName(spawnName.toStdString()));
   const auto spawnPose = this->SpawnPoseForIndex(this->nextIndex_);
   QString uavSdf;
-  QString cameraSdf;
   QString error;
 
   this->SetBusy(true);
@@ -537,37 +528,7 @@ void UavSpawner::Spawn()
     return;
   }
 
-  // The launch-based spawn path has process boundaries between model spawns.
-  // Add a short delay here so detached camera sensors do not race Ogre resource
-  // initialization from the GUI thread.
-  std::this_thread::sleep_for(kGuiDetachedSpawnDelay);
-
-  if (this->withCamera_ && this->detachedCamera_)
-  {
-    if (!this->GenerateDetachedCameraSdf(spawnName, cameraSdf, error))
-    {
-      QString cleanupError;
-      this->RequestRemove(spawnName.toStdString(), cleanupError);
-      this->SetStatus(error);
-      this->SetBusy(false);
-      return;
-    }
-
-    if (!this->RequestSpawn(cameraSdf, cameraModelName.toStdString(), spawnPose, error))
-    {
-      QString cleanupError;
-      this->RequestRemove(spawnName.toStdString(), cleanupError);
-      this->SetStatus(error);
-      this->SetBusy(false);
-      return;
-    }
-
-    std::this_thread::sleep_for(kGuiDetachedSpawnDelay);
-  }
-
   this->spawnedUavNames_.push_back(spawnName.toStdString());
-  this->spawnedCameraNames_.push_back(
-      (this->withCamera_ && this->detachedCamera_) ? cameraModelName.toStdString() : "");
   ++this->nextIndex_;
   emit this->nextNameChanged();
   emit this->placementChanged();
@@ -624,30 +585,13 @@ void UavSpawner::RemoveLast()
   }
 
   const auto name = this->spawnedUavNames_.back();
-  const auto cameraName =
-      this->spawnedCameraNames_.empty() ? std::string{} : this->spawnedCameraNames_.back();
   QString error;
-  QString cameraError;
 
   this->SetBusy(true);
   this->SetStatus(QString("Removing %1...").arg(QString::fromStdString(name)));
 
-  if (!cameraName.empty())
-  {
-    if (!this->RequestRemove(cameraName, cameraError))
-    {
-      cameraError = QString("Could not remove detached camera %1: %2")
-                        .arg(QString::fromStdString(cameraName))
-                        .arg(cameraError);
-    }
-  }
-
   if (!this->RequestRemove(name, error))
   {
-    if (!cameraError.isEmpty())
-    {
-      error = QString("%1. %2").arg(error, cameraError);
-    }
     this->SetStatus(error);
     this->SetBusy(false);
     return;
@@ -655,10 +599,6 @@ void UavSpawner::RemoveLast()
 
   this->StopCameraBridge(name);
   this->spawnedUavNames_.pop_back();
-  if (!this->spawnedCameraNames_.empty())
-  {
-    this->spawnedCameraNames_.pop_back();
-  }
   if (this->nextIndex_ > 0)
   {
     --this->nextIndex_;
@@ -672,10 +612,6 @@ void UavSpawner::RemoveLast()
           .arg(QString::fromStdString(name))
           .arg(QString::fromStdString(worldName))
           .arg(this->NextSpawnSummary());
-  if (!cameraError.isEmpty())
-  {
-    status += QString(" (%1)").arg(cameraError);
-  }
   this->SetStatus(status);
   this->SetBusy(false);
 }
@@ -685,26 +621,10 @@ bool UavSpawner::GenerateRobotSdf(
     QString &_sdf,
     QString &_error) const
 {
-  const bool attachIntegratedCamera = this->withCamera_ && !this->detachedCamera_;
   return this->GenerateSdf(
       _name,
       _name,
-      attachIntegratedCamera,
-      false,
-      _sdf,
-      _error);
-}
-
-bool UavSpawner::GenerateDetachedCameraSdf(
-    const QString &_uavName,
-    QString &_sdf,
-    QString &_error) const
-{
-  return this->GenerateSdf(
-      QString::fromStdString(this->CameraModelName(_uavName.toStdString())),
-      _uavName,
-      false,
-      true,
+      this->withCamera_,
       _sdf,
       _error);
 }
@@ -713,7 +633,6 @@ bool UavSpawner::GenerateSdf(
     const QString &_name,
     const QString &_robotName,
     bool _withCamera,
-    bool _gimbal,
     QString &_sdf,
     QString &_error) const
 {
@@ -742,20 +661,12 @@ bool UavSpawner::GenerateSdf(
       "--ros-args",
       "-p", QString("type:=%1").arg(QString::fromStdString(this->robotType_)),
       "-p", QString("name:=%1").arg(_name),
-      "-p", QString("robot:=%1").arg(_gimbal ? "False" : "True"),
+      "-p", "robot:=True",
       "-p", QString("with_camera:=%1").arg(_withCamera ? "true" : "false"),
       "-p", QString("model_static:=%1").arg(this->modelStatic_ ? "true" : "false"),
       "-p", QString("camera_name:=%1").arg(QString::fromStdString(this->cameraName_)),
+      "-p", QString("robot_name:=%1").arg(_robotName),
   };
-  if (_gimbal)
-  {
-    arguments << "-p" << "gimbal:=True"
-              << "-p" << QString("robot_name:=%1").arg(_robotName);
-  }
-  else
-  {
-    arguments << "-p" << QString("robot_name:=%1").arg(_robotName);
-  }
 
   process.start(program, arguments);
   if (!process.waitForStarted(3000))
@@ -1024,11 +935,6 @@ std::string UavSpawner::PackageExecutable(
   }
 
   return executablePath;
-}
-
-std::string UavSpawner::CameraModelName(const std::string &_uavName) const
-{
-  return _uavName + "_" + this->cameraName_;
 }
 
 std::tuple<int, int, int> UavSpawner::GridCellForIndex(int _index) const

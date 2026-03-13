@@ -68,6 +68,8 @@ class FollowUav(FollowControllerCoreMixin, Node):
 
         declare_yaml_param(self, "follow_speed_mps")
         declare_yaml_param(self, "follow_speed_gain")
+        declare_yaml_param(self, "uav_xy_command_mode")
+        declare_yaml_param(self, "uav_xy_command_step_scale")
         declare_yaml_param(self, "follow_z_speed_mps")
         declare_yaml_param(self, "follow_z_speed_gain")
         declare_yaml_param(self, "search_z_speed_scale")
@@ -154,6 +156,8 @@ class FollowUav(FollowControllerCoreMixin, Node):
         self.min_cmd_period_s = float(required_param_value(self, "min_cmd_period_s"))
         self.follow_speed_mps = float(required_param_value(self, "follow_speed_mps"))
         self.follow_speed_gain = float(required_param_value(self, "follow_speed_gain"))
+        self.uav_xy_command_mode = str(required_param_value(self, "uav_xy_command_mode")).strip().lower()
+        self.uav_xy_command_step_scale = float(required_param_value(self, "uav_xy_command_step_scale"))
         self.follow_z_speed_mps = float(required_param_value(self, "follow_z_speed_mps"))
         self.follow_z_speed_gain = float(required_param_value(self, "follow_z_speed_gain"))
         self.search_z_speed_scale = float(required_param_value(self, "search_z_speed_scale"))
@@ -220,6 +224,10 @@ class FollowUav(FollowControllerCoreMixin, Node):
             raise ValueError("follow_speed_mps must be >= 0")
         if self.follow_speed_gain < 0.0:
             raise ValueError("follow_speed_gain must be >= 0")
+        if self.uav_xy_command_mode not in ("direct", "controller_step"):
+            raise ValueError("uav_xy_command_mode must be 'direct' or 'controller_step'")
+        if self.uav_xy_command_step_scale < 0.0:
+            raise ValueError("uav_xy_command_step_scale must be >= 0")
         if self.follow_z_speed_mps < 0.0:
             raise ValueError("follow_z_speed_mps must be >= 0")
         if self.follow_z_speed_gain < 0.0:
@@ -367,6 +375,8 @@ class FollowUav(FollowControllerCoreMixin, Node):
             f"pose_timeout_s={self.pose_timeout_s}, min_cmd_period_s={self.min_cmd_period_s}, "
             f"follow_speed_mps={self.follow_speed_mps}, "
             f"follow_speed_gain={self.follow_speed_gain}, "
+            f"uav_xy_command_mode={self.uav_xy_command_mode}, "
+            f"uav_xy_command_step_scale={self.uav_xy_command_step_scale}, "
             f"follow_z_speed_mps={self.follow_z_speed_mps}, "
             f"follow_z_speed_gain={self.follow_z_speed_gain}, "
             f"search_z_speed_scale={self.search_z_speed_scale}, "
@@ -1092,15 +1102,12 @@ class FollowUav(FollowControllerCoreMixin, Node):
             if search_active:
                 motion_quality_scale = max(motion_quality_scale, self.search_min_motion_scale)
             effective_follow_speed_mps *= max(0.0, min(1.0, motion_quality_scale))
-        step_limit = effective_follow_speed_mps / self.tick_hz if effective_follow_speed_mps > 0.0 else 0.0
-        if step_limit > 0.0:
-            dx = xt - current_uav.x
-            dy = yt - current_uav.y
-            step = math.hypot(dx, dy)
-            if step > step_limit and step > 1e-9:
-                s = step_limit / step
-                xt = current_uav.x + dx * s
-                yt = current_uav.y + dy * s
+        xt, yt = self.compute_uav_xy_command(
+            current_uav,
+            xt,
+            yt,
+            speed_mps=effective_follow_speed_mps,
+        )
 
         cmd_xy_delta = math.hypot(xt - current_uav.x, yt - current_uav.y)
         target_x, target_y = self._leader_look_target_xy(leader_for_follow)

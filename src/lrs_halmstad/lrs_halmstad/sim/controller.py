@@ -14,9 +14,11 @@ from geometry_msgs.msg import PoseArray, PoseStamped, Vector3Stamped, Quaternion
 from sensor_msgs.msg import Joy
 from tf_transformations import euler_from_quaternion
 
+from lrs_halmstad.follow.follow_core import compute_controller_style_xy_command
+
 class Controller(Node):
     def __init__(self):
-        super().__init__('example_controller')
+        super().__init__('sim_controller')
         self.declare_parameter("uav_name", "")
         self.declare_parameter("name", "")
         self.declare_parameter("update_rate_hz", 30.0)
@@ -35,8 +37,6 @@ class Controller(Node):
         self.pan = 0.0
         self.tilt = -45.0
 
-        self.old_error_x = 0.0
-        self.old_error_y = 0.0
         self.world_position = None
         self.current_pose = None
         self.speed = 2.0
@@ -73,10 +73,13 @@ class Controller(Node):
         self.state = "idle"
         self.get_logger().info(
             f"Using UAV '{self.uav_name}' topics: cmd={cmd_topic}, pose={pose_topic}, "
-            f"gimbal_pitch={gimbal_pitch_topic}"
+            f"gimbal_pitch={gimbal_pitch_topic}, gimbal_yaw={gimbal_yaw_topic}"
         )
         self.get_logger().info(
             "Legacy UAV command topic is published as absolute ENU pose: x, y, z, yaw."
+        )
+        self.get_logger().info(
+            "Camera test publishes both attached gimbal joint commands and legacy pan/tilt topics."
         )
         self.get_logger().info(
             f"update_rate_hz={self.update_rate_hz:.1f} "
@@ -248,27 +251,21 @@ class Controller(Node):
     def control_pose(self, newquat, new_position):
         # print("control_pose:", newquat, new_position)
         (roll, pitch, yaw) = euler_from_quaternion ([newquat.x, newquat.y, newquat.z, newquat.w])
-        fac = 0.6
-        dfac = 0.0
-        # dfac = 0.1
-        dx = new_position.x - self.world_position.x
-        dy = new_position.y - self.world_position.y
-        len = math.sqrt(dx*dx+dy*dy)
-        error_x = dx/len*self.speed*self.period_time
-        error_y = dy/len*self.speed*self.period_time
-        error_dx = (error_x - self.old_error_x)
-        error_dy = (error_y - self.old_error_y)
-        self.old_error_x = error_x
-        self.old_error_y = error_y
-            
-        x_cmd = error_x*fac + dfac*error_dx
-        y_cmd = error_y*fac + dfac*error_dy
+        cmd_x, cmd_y = compute_controller_style_xy_command(
+            self.world_position.x,
+            self.world_position.y,
+            new_position.x,
+            new_position.y,
+            tick_hz=self.update_rate_hz,
+            speed_mps=self.speed,
+            step_scale=0.6,
+        )
         z_cmd = new_position.z
             
         msg = Joy()
         # The simulator adapter interprets this legacy topic as absolute ENU pose.
-        msg.axes.append(self.world_position.x + x_cmd)
-        msg.axes.append(self.world_position.y + y_cmd)
+        msg.axes.append(cmd_x)
+        msg.axes.append(cmd_y)
         msg.axes.append(z_cmd)
         msg.axes.append(yaw)
         self.ctrl_pos_yaw_pub.publish(msg)
@@ -295,7 +292,7 @@ def main(args=None):
     node = Controller()
     executor = MultiThreadedExecutor(num_threads=8)
     executor.add_node(node)
-    print("Spinning simple controller")
+    print("Spinning sim_controller")
     try:
         executor.spin()
     except KeyboardInterrupt:

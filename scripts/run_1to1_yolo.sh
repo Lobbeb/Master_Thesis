@@ -60,7 +60,8 @@ for arg in "$@"; do
           EXTRA_ARGS+=("uav_camera_mode:=integrated_joint")
           ;;
         detached|detached_model)
-          EXTRA_ARGS+=("uav_camera_mode:=detached_model")
+          echo "Detached camera mode has been removed from simulation. Use camera:=attached." >&2
+          exit 2
           ;;
         *)
           EXTRA_ARGS+=("uav_camera_mode:=$camera_mode")

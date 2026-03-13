@@ -38,7 +38,7 @@ Recommended tmux workflow:
 
 Current important notes:
 - the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
-- detached camera mode is the current default
+- attached/integrated gimbal camera is the only simulation camera path
 - Gazebo sim time is guarded by `clock_guard`, and `/clock` should have exactly one publisher
 - `./run.sh 1to1_yolo ...` is the quiet/default YOLO wrapper; bare `ros2 launch ... run_follow.launch.py ...` does not automatically inherit those quiet overrides
 - current active debugging target is the YOLO follow motion bug where the camera can snap upward and the UAV briefly surges forward before recovering

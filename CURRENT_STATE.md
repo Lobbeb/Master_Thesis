@@ -82,8 +82,8 @@ Spawn chain:
   - launches `spawn_uav_1to1.launch.py`
 - `spawn_uav_1to1.launch.py`
   - always spawns the UAV body
-  - spawns detached camera/gimbal when `uav_camera_mode:=detached_model`
-  - starts the pose bridge and delayed camera bridge
+  - always spawns the attached camera/gimbal with `uav_camera_mode:=integrated_joint`
+  - detached camera mode has been removed from simulation
 
 Important separation:
 - `scripts/run_spawn_uav.sh` creates the Gazebo entities
@@ -315,22 +315,24 @@ Important current assumption:
 ### Camera Baseline
 
 Current validated baseline:
-- detached camera model
+- attached / integrated gimbal camera
 - spawned UAV camera is now RGBD-capable by default
 - existing RGB topics remain:
   - `/<uav>/camera0/image_raw`
   - `/<uav>/camera0/camera_info`
 - additional UAV depth topic is now available:
   - `/<uav>/camera0/depth_image`
-- `uav_camera_mode:=detached_model`
+- `uav_camera_mode:=integrated_joint`
 - `pan_enable: true`
 - `tilt_enable: true`
 - `default_pan_deg: 0.0`
 - `default_tilt_deg: -45.0`
+- `uav_xy_command_mode: controller_step`
+- `uav_xy_command_step_scale: 0.6`
 
 Important consequence:
-- `camera:=attached` is now an override path, not the default baseline
-- detached remains the primary path for Gazebo visual correctness
+- `camera:=attached` / `uav_camera_mode:=integrated_joint` is now the default baseline
+- detached camera mode is no longer available in simulation
 
 ### Current Defaults Worth Remembering
 

@@ -37,9 +37,6 @@ class GenSdf(Node):
         self.declare_parameter("robot", False)
         self.robot = self.get_parameter('robot').get_parameter_value().bool_value
 
-        self.declare_parameter("gimbal", False)
-        self.gimbal = self.get_parameter('gimbal').get_parameter_value().bool_value
-
         self.declare_parameter("laser", False)
         self.laser = self.get_parameter('laser').get_parameter_value().bool_value
 
@@ -58,43 +55,25 @@ class GenSdf(Node):
         self.declare_parameter("laser_update_rate", 10)
         self.laser_update_rate = self.get_parameter('laser_update_rate').get_parameter_value().integer_value
         
-        self.robot_gimbal = True
-
         #self.get_logger().error(f'GenSdf: {self.name}')        
         #self.get_logger().error(f'GenSdf: {self.type}')        
         #self.get_logger().error(f'GenSdf: {self.xacro_file}')
         #self.get_logger().error(f'GenSdf: {self.with_camera}')
 
-    def _strip_detached_camera_visuals(self, doc):
-        if not self.gimbal:
-            return doc
-        visuals = list(doc.getElementsByTagName('visual'))
-        for visual in visuals:
-            parent = visual.parentNode
-            if parent is not None:
-                parent.removeChild(visual)
-        return doc
-
     def process(self):
         res = "dummmy"
-        if self.gimbal or self.laser:
-            self.robot_gimbal = False
-        elif self.robot and not self.with_camera:
-            self.robot_gimbal = False
         if not self.xacro_file:
             xacro_path = get_package_share_path('lrs_halmstad') / 'xacro'
-            if self.robot_gimbal:
+            if self.robot and self.with_camera:
                 self.xacro_file = f'{xacro_path}/lrs_model.xacro'
             elif self.robot:
                 self.xacro_file = f'{xacro_path}/lrs_robot.xacro'
-            elif self.gimbal:
-                self.xacro_file = f'{xacro_path}/lrs_gimbal.xacro'
             elif self.laser:
                 self.xacro_file = f'{xacro_path}/lrs_laser.xacro'
         mappings = {}
         mappings["robot_type"] = self.type
 
-        if self.robot_gimbal:
+        if self.robot and self.with_camera:
             mappings["robot_name"] = self.name
             mappings["camera_name"] = self.camera_name
             mappings["model_static"] = "true" if self.model_static else "false"
@@ -106,16 +85,6 @@ class GenSdf(Node):
                 
         if self.robot:
             mappings["name"] = self.name
-
-        if self.gimbal:
-            mappings["camera_name"] = self.camera_name
-            mappings["robot_name"] = self.robot_name
-            mappings["model_static"] = "false"
-            mappings["camera_far_clip"] = "900"
-            mappings["camera_update_rate"] = f'{self.camera_update_rate}'
-            mappings["camera_sensor_roll_deg"] = f'{self.camera_sensor_roll_deg}'
-            mappings["camera_sensor_pitch_deg"] = f'{self.camera_sensor_pitch_deg}'
-            mappings["camera_sensor_yaw_deg"] = f'{self.camera_sensor_yaw_deg}'
 
         if self.laser:
             mappings["laser_name"] = self.laser_name
@@ -132,8 +101,6 @@ class GenSdf(Node):
             print("ACROFILE:", self.xacro_file, mappings)
             print("Exception:", ex, type(ex))
             sys.exit(1)
-
-        doc = self._strip_detached_camera_visuals(doc)
         
         res = doc.toprettyxml(indent='  ')
         # self.get_logger().error(f'SDF: {res}')                                

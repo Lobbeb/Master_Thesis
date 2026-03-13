@@ -48,6 +48,35 @@ def compute_rate_limited_axis_value(
     return float(current_value) + math.copysign(step_limit, error)
 
 
+def compute_controller_style_xy_command(
+    current_x: float,
+    current_y: float,
+    target_x: float,
+    target_y: float,
+    *,
+    tick_hz: float,
+    speed_mps: float,
+    step_scale: float = 1.0,
+    snap_tolerance: float = 1e-6,
+) -> tuple[float, float]:
+    dx = float(target_x) - float(current_x)
+    dy = float(target_y) - float(current_y)
+    distance = math.hypot(dx, dy)
+    if distance <= max(0.0, float(snap_tolerance)):
+        return float(target_x), float(target_y)
+    if tick_hz <= 0.0:
+        return float(target_x), float(target_y)
+
+    step_distance = max(0.0, float(speed_mps)) * max(0.0, float(step_scale)) / float(tick_hz)
+    if step_distance <= 0.0:
+        return float(current_x), float(current_y)
+    if distance <= step_distance:
+        return float(target_x), float(target_y)
+
+    scale = step_distance / distance
+    return float(current_x) + dx * scale, float(current_y) + dy * scale
+
+
 class FollowControllerCoreMixin:
     def on_uav_pose(self, msg: PoseStamped) -> None:
         p = msg.pose.position
@@ -108,6 +137,28 @@ class FollowControllerCoreMixin:
             return True
         dt = (now - self.last_cmd_time).nanoseconds * 1e-9
         return dt >= self.min_cmd_period_s
+
+    def compute_uav_xy_command(
+        self,
+        current_uav: Pose2D,
+        target_x: float,
+        target_y: float,
+        *,
+        speed_mps: float,
+    ) -> tuple[float, float]:
+        mode = str(getattr(self, "uav_xy_command_mode", "direct")).strip().lower()
+        step_scale = 1.0
+        if mode == "controller_step":
+            step_scale = float(getattr(self, "uav_xy_command_step_scale", 0.6))
+        return compute_controller_style_xy_command(
+            current_uav.x,
+            current_uav.y,
+            target_x,
+            target_y,
+            tick_hz=self.tick_hz,
+            speed_mps=speed_mps,
+            step_scale=step_scale,
+        )
 
     def publish_legacy_uav_command(self, x: float, y: float, z: float, yaw_rad: float) -> None:
         msg = Joy()

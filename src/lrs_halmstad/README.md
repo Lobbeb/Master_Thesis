@@ -50,7 +50,7 @@ cd <workspace_root>
 
 ### 2. Spawn one UAV
 
-Use either the GUI spawn plugin or the dedicated detached-camera launch:
+Use the GUI spawn plugin or the integrated-camera launch:
 
 ```bash
 cd <workspace_root>
@@ -134,7 +134,7 @@ ros2 launch lrs_halmstad spawn_uav_1to1.launch.py
 cd <workspace_root>
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
-ros2 run lrs_halmstad simulator --ros-args -p uav_name:=dji0 -p camera_mode:=detached_model
+ros2 run lrs_halmstad simulator --ros-args -p uav_name:=dji0 -p camera_mode:=integrated_joint
 ```
 
 ### Publish manual test motion
@@ -150,7 +150,7 @@ ros2 run lrs_halmstad controller --ros-args -p uav_name:=dji0
 
 - `follow_uav` no longer talks to Gazebo directly. It publishes to `/dji0/psdk_ros2/flight_control_setpoint_ENUposition_yaw` and leaves Gazebo actuation to `simulator`.
 - In simulation, `simulator` interprets `/dji0/psdk_ros2/flight_control_setpoint_ENUposition_yaw` as an absolute ENU pose setpoint: `x`, `y`, `z`, `yaw`.
-- The detached camera model is the default backend for visible camera motion in Gazebo, but the ROS image topics remain `/dji0/camera0/*`.
+- The attached gimbal path is now the default camera backend in Gazebo, while the ROS image topics remain `/dji0/camera0/*`.
 - `leader_estimator` now defaults to the actual simulated UAV pose topic `/dji0/pose`, not `/dji0/pose_cmd`.
 - The default perception range mode is `ground`, not fixed range. `leader_range_mode:=const` is still available as a fallback for debugging.
 - The Husky now uses `lidar2d_0` as its only active range sensor in this workspace. The old temporary `lidar3d_0` path is no longer part of the active bring-up.

@@ -120,7 +120,8 @@ for arg in "$@"; do
           ARGS+=("uav_camera_mode:=integrated_joint")
           ;;
         detached|detached_model)
-          ARGS+=("uav_camera_mode:=detached_model")
+          echo "Detached camera mode has been removed from simulation. Use camera:=attached." >&2
+          exit 2
           ;;
         *)
           ARGS+=("uav_camera_mode:=$camera_mode")
@@ -135,15 +136,6 @@ for arg in "$@"; do
       ;;
     mount_pitch_deg:=*)
       ARGS+=("camera_pitch_offset_deg:=${arg#mount_pitch_deg:=}")
-      ;;
-    sensor_roll_deg:=*)
-      ARGS+=("camera_sensor_roll_deg:=${arg#sensor_roll_deg:=}")
-      ;;
-    sensor_pitch_deg:=*)
-      ARGS+=("camera_sensor_pitch_deg:=${arg#sensor_pitch_deg:=}")
-      ;;
-    sensor_yaw_deg:=*)
-      ARGS+=("camera_sensor_yaw_deg:=${arg#sensor_yaw_deg:=}")
       ;;
     *)
       ARGS+=("$arg")

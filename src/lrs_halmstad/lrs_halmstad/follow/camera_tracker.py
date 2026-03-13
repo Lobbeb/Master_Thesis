@@ -83,8 +83,11 @@ class CameraTracker(Node):
             raise ValueError("leader_input_type must be 'odom', 'pose', or 'estimate'")
         if self.uav_camera_mode == "integrated":
             self.uav_camera_mode = "integrated_joint"
-        if self.uav_camera_mode == "detached":
-            self.uav_camera_mode = "detached_model"
+        if self.uav_camera_mode != "integrated_joint":
+            self.get_logger().warn(
+                f"uav_camera_mode='{self.uav_camera_mode}' is no longer supported; using 'integrated_joint'"
+            )
+            self.uav_camera_mode = "integrated_joint"
         if not self.uav_pose_cmd_topic:
             self.uav_pose_cmd_topic = f"/{self.uav_name}/pose_cmd"
 
@@ -579,11 +582,9 @@ class CameraTracker(Node):
         if not self.tilt_enable:
             return self.default_tilt_deg
         target_tilt_deg = self._compute_tilt_deg(uav_pose, uav_z)
-        if self.uav_camera_mode == "integrated_joint":
-            # The attached gimbal pitch command is relative to the fixed camera
-            # mount angle baked into the spawned UAV model.
-            return target_tilt_deg + self.camera_mount_pitch_deg
-        return target_tilt_deg
+        # The attached gimbal pitch command is relative to the fixed camera
+        # mount angle baked into the spawned UAV model.
+        return target_tilt_deg + self.camera_mount_pitch_deg
 
     def _compute_pan_deg_for_target(
         self,
@@ -836,8 +837,7 @@ class CameraTracker(Node):
                 tilt_leader_pose,
                 tilt_leader_z,
             )
-            if self.uav_camera_mode == "integrated_joint":
-                raw_tilt_cmd += self.camera_mount_pitch_deg
+            raw_tilt_cmd += self.camera_mount_pitch_deg
             raw_tilt_cmd += tilt_image_correction_deg
             target_tilt_cmd_deg = float(raw_tilt_cmd)
             tilt_mode = "track"

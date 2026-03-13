@@ -20,14 +20,14 @@ from lrs_halmstad.follow.follow_math import rotate_body_offset, wrap_pi, yaw_fro
 
 class Simulator(Node):
     def __init__(self):
-        super().__init__('example_simulator')
+        super().__init__('uav_simulator')
         self.group = ReentrantCallbackGroup()
 
         self.declare_parameter("world", "warehouse")
         self.declare_parameter("uav_name", "")
         self.declare_parameter("name", "")
         self.declare_parameter("update_rate_hz", 20.0)
-        self.declare_parameter("camera_mode", "detached_model")
+        self.declare_parameter("camera_mode", "integrated_joint")
         self.declare_parameter("camera_name", "camera0")
         yaml_param(self, "camera_x_offset_m")
         yaml_param(self, "camera_y_offset_m")
@@ -37,7 +37,6 @@ class Simulator(Node):
         yaml_param(self, "camera_pan_sign")
         self.declare_parameter("gimbal_pitch_min_rad", -1.5708)
         self.declare_parameter("gimbal_pitch_max_rad", 0.7854)
-        self.declare_parameter("sync_detached_camera_pose", True)
         self.declare_parameter("publish_legacy_debug_topics", False)
 
         self.frame_id = "odom"
@@ -57,15 +56,12 @@ class Simulator(Node):
         self.camera_pan_sign = float(self.get_parameter("camera_pan_sign").value)
         self.gimbal_pitch_min = float(self.get_parameter("gimbal_pitch_min_rad").value)
         self.gimbal_pitch_max = float(self.get_parameter("gimbal_pitch_max_rad").value)
-        self.sync_detached_camera_pose = bool(self.get_parameter("sync_detached_camera_pose").value)
         self.publish_legacy_debug_topics = bool(self.get_parameter("publish_legacy_debug_topics").value)
         if self.camera_mode == "integrated":
             self.camera_mode = "integrated_joint"
-        if self.camera_mode == "detached":
-            self.camera_mode = "detached_model"
-        if self.camera_mode not in ("integrated_joint", "detached_model"):
+        if self.camera_mode != "integrated_joint":
             self.get_logger().warn(
-                f"Unknown camera_mode='{self.camera_mode}', using 'integrated_joint'"
+                f"camera_mode='{self.camera_mode}' is no longer supported; using 'integrated_joint'"
             )
             self.camera_mode = "integrated_joint"
 
@@ -91,7 +87,6 @@ class Simulator(Node):
         self.target_tilt = self.tilt
         self.target_pan = self.pan
         self.future1 = None
-        self.future2 = None
 
         self.cli = self.create_client(SetEntityPose, f'/world/{self.gz_world}/set_pose', callback_group=self.group)
         print(f"WAIT for service: /world/{self.gz_world}/set_pose'")
@@ -293,17 +288,14 @@ class Simulator(Node):
             y = self.world_position.y
             z = self.world_position.z
             self.set_pose(self.name, x, y, z, self.yaw)
-            if self.camera_mode == "detached_model":
-                self.set_camera_model_pose(x, y, z, self.pan, self.tilt)
-            else:
-                pitchmsg = Float64()
-                pitchmsg.data = self._clamp(
-                    -math.radians(self.tilt), self.gimbal_pitch_min, self.gimbal_pitch_max
-                )
-                self.gimbal_pitch_pub.publish(pitchmsg)
-                yawmsg = Float64()
-                yawmsg.data = math.radians(self.pan)
-                self.gimbal_yaw_pub.publish(yawmsg)
+            pitchmsg = Float64()
+            pitchmsg.data = self._clamp(
+                -math.radians(self.tilt), self.gimbal_pitch_min, self.gimbal_pitch_max
+            )
+            self.gimbal_pitch_pub.publish(pitchmsg)
+            yawmsg = Float64()
+            yawmsg.data = math.radians(self.pan)
+            self.gimbal_yaw_pub.publish(yawmsg)
             now_msg = self.get_clock().now().to_msg()
             quat = quaternion_from_euler(0.0, 0.0, self.yaw)
             msg = PoseStamped()
@@ -383,26 +375,6 @@ class Simulator(Node):
         except Exception as ex:
             print("Exception set_pose:", ex, type(ex))
 
-    def set_camera_model_pose(self, x, y, z, pan_deg, tilt_deg):
-        try:
-            if self.future2 is not None and not self.future2.done():
-                return
-            camera_request = SetEntityPose.Request()
-            yaw, offset_x, offset_y, quat2 = self._camera_pose_components(pan_deg, tilt_deg)
-            camera_request.entity.id = 0
-            camera_request.entity.name = f"{self.name}_{self.camera_name}"
-            camera_request.entity.type = camera_request.entity.MODEL
-            camera_request.pose.position.x = x + offset_x
-            camera_request.pose.position.y = y + offset_y
-            camera_request.pose.position.z = z - self.camera_z_offset
-            camera_request.pose.orientation.x = quat2[0]
-            camera_request.pose.orientation.y = quat2[1]
-            camera_request.pose.orientation.z = quat2[2]
-            camera_request.pose.orientation.w = quat2[3]
-            self.future2 = self.cli.call_async(camera_request)
-        except Exception as ex:
-            print("Exception set_camera_model_pose:", ex, type(ex))
-
     def _camera_pose_components(self, pan_deg, tilt_deg):
         yaw = self.yaw + math.radians((self.camera_pan_sign * pan_deg) + self.camera_yaw_offset_deg)
         quat = quaternion_from_euler(0.0, -math.radians(tilt_deg), yaw)
@@ -428,9 +400,7 @@ class Simulator(Node):
         return msg
 
     def _absolute_camera_tilt_deg(self, commanded_tilt_deg: float) -> float:
-        if self.camera_mode == "integrated_joint":
-            return float(commanded_tilt_deg - self.camera_mount_pitch_deg)
-        return float(commanded_tilt_deg)
+        return float(commanded_tilt_deg - self.camera_mount_pitch_deg)
 
 
 def main(args=None):

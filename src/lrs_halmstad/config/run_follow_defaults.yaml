@@ -2,7 +2,7 @@
   ros__parameters:
     camera_x_offset_m: 0.0    # Shared UAV->camera X offset in the UAV body frame (forward).
     camera_y_offset_m: 0.0     # Shared UAV->camera Y offset in the UAV body frame (left).
-    camera_z_offset_m: 0.27     # Shared UAV->camera Z offset used by tilt geometry and detached camera pose.
+    camera_z_offset_m: 0.27     # Shared UAV->camera Z offset used by tilt geometry and simulator camera pose.
     camera_mount_pitch_deg: 45.0  # Shared fixed camera mount pitch used by simulator and camera tracking geometry.
     camera_yaw_offset_deg: 0.0    # Shared fixed camera yaw offset used by simulator and camera tracking geometry.
     camera_pan_sign: 1.0          # Shared pan sign convention between camera_tracker and simulator.
@@ -37,6 +37,8 @@ follow_uav:
 
     follow_speed_mps: 5.0          # Hard cap on commanded XY follow speed.
     follow_speed_gain: 1.2          # Proportional XY speed gain from anchor-position error.
+    uav_xy_command_mode: direct  # XY command path: direct (current clamped target) or controller_step (smaller controller-style waypoint stepping).
+    uav_xy_command_step_scale: 0.6  # Step scale used by controller_step mode; 0.6 matches the old sim controller test path.
     follow_z_speed_mps: 5.0          # Hard cap on commanded vertical glide speed.
     follow_z_speed_gain: 1.0          # Proportional vertical speed gain from altitude error.
     search_z_speed_scale: 0.25       # In estimate-mode search climb, scale the normal Z speed cap to keep ascent smooth.

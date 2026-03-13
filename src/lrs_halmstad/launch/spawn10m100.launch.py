@@ -37,18 +37,6 @@ def generate_launch_description():
                           }.items(),
     )
     
-    dji0gimbal = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('lrs_halmstad'),
-                'spawn_gimbal.launch.py')),
-        launch_arguments={"name": "dji0gimbal",
-                          "type": "m100",
-                          "z": "0.0",
-                          "world": LaunchConfiguration('world'),
-                          }.items(),
-    )
-    
     dji1 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -171,7 +159,6 @@ def generate_launch_description():
         world_arg,
         bridge,
         dji0,
-        dji0gimbal,
         dji1,
         dji2,
         dji3,

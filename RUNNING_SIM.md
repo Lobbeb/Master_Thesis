@@ -168,11 +168,12 @@ Current baseline:
 - this odom-follow path now uses `/<ugv>/amcl_pose_odom`, not raw `/platform/odom`
 - `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose` by [pose_cov_to_odom.py](src/lrs_halmstad/lrs_halmstad/sim/pose_cov_to_odom.py)
 - launch `leader_odom_topic` / `ugv_odom_topic` defaults are intentionally pointed at that AMCL-derived topic
-- current UAV camera mode is detached: `uav_camera_mode:=detached_model`
+- current UAV camera mode is attached/integrated: `uav_camera_mode:=integrated_joint`
 - spawned UAV camera is now RGBD-capable while keeping the existing RGB ROS topics
 - additional UAV depth topic is available at `/<uav>/camera0/depth_image`
 - current camera defaults are `pan_enable: true` and `tilt_enable: true`
-- attached mode is still available as an override with `camera:=attached`
+- current XY body-command mode is `uav_xy_command_mode:=controller_step` with `uav_xy_command_step_scale:=0.6`
+- detached camera mode has been removed from simulation
 - if you override the mount pitch for attached mode, pass the same value to follow:
 
 ```bash
@@ -180,16 +181,8 @@ Current baseline:
 ./run.sh 1to1_follow warehouse camera:=attached mount_pitch_deg:=35
 ```
 
-To test the older attached camera path instead of the detached default:
-
-```bash
-./run.sh spawn_uav warehouse camera:=attached
-./run.sh 1to1_follow warehouse camera:=attached
-```
-
 Important:
-- pass the same camera mode to both spawn and follow
-- detached mode does not rely on the attached `45 deg` mount pitch baseline
+- pass the same mount pitch to both spawn and follow when overriding it
 - the wrapper alias also accepts `camera:=attached`
 
 Important runtime note:
@@ -670,17 +663,11 @@ This creates:
   - common examples: `dji0`, `dji1`, `dji2`
 - `height:=...`
   - UAV spawn height in meters
-- `camera:=attached|detached`
-  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
+- `camera:=attached`
+  - shorthand for `uav_camera_mode:=integrated_joint`
 - `mount_pitch_deg:=...`
   - attached camera mount pitch in degrees
   - common examples: `35`, `45`
-- `sensor_roll_deg:=...`
-  - camera sensor roll offset in degrees
-- `sensor_pitch_deg:=...`
-  - camera sensor pitch offset in degrees
-- `sensor_yaw_deg:=...`
-  - camera sensor yaw offset in degrees
 - extra forwarded launch arguments
   - anything else is passed through to `spawn_uav_1to1.launch.py`
 
@@ -703,8 +690,8 @@ This creates:
 
 - positional `WORLD`
   - current tested example: `warehouse`
-- `camera:=attached|detached`
-  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
+- `camera:=attached`
+  - shorthand for `uav_camera_mode:=integrated_joint`
 - `height:=...`
   - maps to `uav_start_z:=...`
 - `mount_pitch_deg:=...`
@@ -718,7 +705,7 @@ This creates:
   - anything else is passed through to `run_follow.launch.py`
 - common forwarded launch arguments:
   - `uav_name:=dji0`
-  - `uav_camera_mode:=integrated_joint|detached_model`
+  - `uav_camera_mode:=integrated_joint`
   - `ugv_mode:=nav2|external|none`
   - `ugv_set_initial_pose:=true|false`
   - `ugv_goal_sequence_csv:='x1,y1,yaw1;x2,y2,yaw2'`
@@ -745,8 +732,8 @@ This creates:
 
 - positional `WORLD`
   - current tested example: `warehouse`
-- `camera:=attached|detached`
-  - shorthand for `uav_camera_mode:=integrated_joint|detached_model`
+- `camera:=attached`
+  - shorthand for `uav_camera_mode:=integrated_joint`
 - `weights:=...`
   - maps to `yolo_weights:=...`
   - bare filenames resolve under `detection/...` when `tracker:=false`
