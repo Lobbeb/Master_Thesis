@@ -22,6 +22,7 @@ class Controller(Node):
         self.declare_parameter("uav_name", "")
         self.declare_parameter("name", "")
         self.declare_parameter("update_rate_hz", 30.0)
+        self.declare_parameter("camera_mount_pitch_deg", 45.0)
         self.declare_parameter("gimbal_pitch_min_rad", -1.5708)
         self.declare_parameter("gimbal_pitch_max_rad", 0.7854)
         self.declare_parameter("waypoint_test_enable", True)
@@ -50,6 +51,7 @@ class Controller(Node):
         gimbal_yaw_topic = self._gimbal_topic("yaw")
         self.gimbal_pitch_min = float(self.get_parameter("gimbal_pitch_min_rad").value)
         self.gimbal_pitch_max = float(self.get_parameter("gimbal_pitch_max_rad").value)
+        self.camera_mount_pitch_deg = float(self.get_parameter("camera_mount_pitch_deg").value)
         self.waypoint_test_enable = bool(self.get_parameter("waypoint_test_enable").value)
         self.camera_test_motion_enable = bool(self.get_parameter("camera_test_motion_enable").value)
         self.camera_test_pan_amp_deg = float(self.get_parameter("camera_test_pan_amp_deg").value)
@@ -80,6 +82,9 @@ class Controller(Node):
         )
         self.get_logger().info(
             "Camera test publishes both attached gimbal joint commands and legacy pan/tilt topics."
+        )
+        self.get_logger().info(
+            "update_tilt is published in degrees relative to the horizontal plane."
         )
         self.get_logger().info(
             f"update_rate_hz={self.update_rate_hz:.1f} "
@@ -274,7 +279,9 @@ class Controller(Node):
     def publish_camera_commands(self):
         pitchmsg = Float64()
         pitchmsg.data = self._clamp(
-            -math.radians(self.tilt), self.gimbal_pitch_min, self.gimbal_pitch_max
+            -math.radians(self.tilt + self.camera_mount_pitch_deg),
+            self.gimbal_pitch_min,
+            self.gimbal_pitch_max,
         )
         self.gimbal_pitch_pub.publish(pitchmsg)
         yawmsg = Float64()

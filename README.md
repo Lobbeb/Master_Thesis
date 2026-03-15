@@ -39,6 +39,7 @@ Recommended tmux workflow:
 Current important notes:
 - the 1-to-1 odom-follow path now uses AMCL-derived `/<ugv>/amcl_pose_odom`, not raw UGV odom
 - attached/integrated gimbal camera is the only simulation camera path
+- attached-camera teleport spawns now use a non-static UAV model with a kinematic base link so the gimbal joints visibly actuate while the UAV body still follows the simulator `set_pose` path
 - Gazebo sim time is guarded by `clock_guard`, and `/clock` should have exactly one publisher
 - `./run.sh 1to1_yolo ...` is the quiet/default YOLO wrapper; bare `ros2 launch ... run_follow.launch.py ...` does not automatically inherit those quiet overrides
 - current active debugging target is the YOLO follow motion bug where the camera can snap upward and the UAV briefly surges forward before recovering
@@ -130,7 +131,7 @@ Low-level UAV spawn (`spawn_robot.launch.py`)
 ---------------------------------------------
 Use this when you want one UAV with full control over camera attachment and spawn pose.
 
-Example (teleport/static UAV with attached camera and camera bridge):
+Example (teleport UAV with attached camera and camera bridge; the spawned model is non-static and uses a kinematic base link):
 ```bash
 ros2 launch lrs_halmstad spawn_robot.launch.py \
   world:=warehouse name:=dji0 type:=m100 \
@@ -149,6 +150,26 @@ ros2 launch lrs_halmstad spawn_robot.launch.py \
 - `x:=<m>` `y:=<m>` `z:=<m>`
 - `R:=<rad>` `P:=<rad>` `Y:=<rad>`
 - `model:=...` (legacy arg, currently not used by the generated-SDF spawn path)
+
+Attached gimbal rollback
+------------------------
+The current attached-gimbal fix depends on a non-static model with a kinematic UAV base link. If you need to back it out, revert these files together:
+
+- `src/lrs_halmstad/launch/spawn_robot.launch.py`
+  - restore `model_static_for_mode` to the old teleport/static rule
+  - remove `base_link_kinematic_for_mode`
+  - stop passing `-p base_link_kinematic:=...` into `generate_sdf`
+- `src/lrs_halmstad/lrs_halmstad/generate_sdf.py`
+  - remove the `base_link_kinematic` parameter and mapping
+- `src/lrs_halmstad/xacro/lrs_model.xacro`
+  - remove the `base_link_kinematic` xacro arg and passthrough into `lrs_m100_macro`
+- `src/lrs_halmstad/xacro/lrs_m100_base.sdf.xacro`
+  - remove `<kinematic>${base_link_kinematic}</kinematic>`
+  - if you want the exact old behavior, also remove `<gravity>false</gravity>` from `base_link`
+
+Expected rollback effect:
+- UAV teleport mode returns to the old static-body behavior
+- attached gimbal joint motion in Gazebo may stop being visibly rendered again
 
 Movement and follow orchestration
 ---------------------------------

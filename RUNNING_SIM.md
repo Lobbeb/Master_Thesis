@@ -169,6 +169,7 @@ Current baseline:
 - `/<ugv>/amcl_pose_odom` is synthesized from `/<ugv>/amcl_pose` by [pose_cov_to_odom.py](src/lrs_halmstad/lrs_halmstad/sim/pose_cov_to_odom.py)
 - launch `leader_odom_topic` / `ugv_odom_topic` defaults are intentionally pointed at that AMCL-derived topic
 - current UAV camera mode is attached/integrated: `uav_camera_mode:=integrated_joint`
+- attached-camera teleport spawns now use a non-static UAV model with a kinematic base link so the gimbal joints visibly actuate while the body still follows the simulator `set_pose` path
 - spawned UAV camera is now RGBD-capable while keeping the existing RGB ROS topics
 - additional UAV depth topic is available at `/<uav>/camera0/depth_image`
 - current camera defaults are `pan_enable: true` and `tilt_enable: true`
@@ -184,6 +185,22 @@ Current baseline:
 Important:
 - pass the same mount pitch to both spawn and follow when overriding it
 - the wrapper alias also accepts `camera:=attached`
+
+Rollback of the current attached-gimbal kinematic workaround:
+- revert `src/lrs_halmstad/launch/spawn_robot.launch.py`
+  - restore teleport spawns to the old `model_static:=true` behavior
+  - remove the `base_link_kinematic_for_mode` path
+- revert `src/lrs_halmstad/lrs_halmstad/generate_sdf.py`
+  - remove the `base_link_kinematic` parameter and mapping
+- revert `src/lrs_halmstad/xacro/lrs_model.xacro`
+  - remove the `base_link_kinematic` xacro arg and passthrough
+- revert `src/lrs_halmstad/xacro/lrs_m100_base.sdf.xacro`
+  - remove `<kinematic>${base_link_kinematic}</kinematic>`
+  - if you want the exact pre-workaround behavior, also remove `<gravity>false</gravity>` from `base_link`
+
+Expected rollback result:
+- UAV body teleport mode returns to the older static-model behavior
+- visible attached-gimbal motion in Gazebo may disappear again
 
 Important runtime note:
 - Gazebo sim time is guarded through [clock_guard.py](src/lrs_halmstad/lrs_halmstad/sim/clock_guard.py)

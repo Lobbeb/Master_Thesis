@@ -83,6 +83,7 @@ Spawn chain:
 - `spawn_uav_1to1.launch.py`
   - always spawns the UAV body
   - always spawns the attached camera/gimbal with `uav_camera_mode:=integrated_joint`
+  - attached-camera teleport spawns now use a non-static model with a kinematic UAV base link so the gimbal joints visibly actuate while the body remains compatible with `uav_simulator` `set_pose`
   - detached camera mode has been removed from simulation
 
 Important separation:
@@ -333,6 +334,21 @@ Current validated baseline:
 Important consequence:
 - `camera:=attached` / `uav_camera_mode:=integrated_joint` is now the default baseline
 - detached camera mode is no longer available in simulation
+
+Attached gimbal rollback path:
+- the current visible-gimbal workaround lives in:
+  - `src/lrs_halmstad/launch/spawn_robot.launch.py`
+  - `src/lrs_halmstad/lrs_halmstad/generate_sdf.py`
+  - `src/lrs_halmstad/xacro/lrs_model.xacro`
+  - `src/lrs_halmstad/xacro/lrs_m100_base.sdf.xacro`
+- to revert it:
+  - restore teleport spawns to `model_static:=true`
+  - remove the `base_link_kinematic` launch / SDF / xacro wiring
+  - remove `base_link` kinematic from `lrs_m100_base.sdf.xacro`
+  - if exact old behavior is needed, also remove `base_link` `gravity:false`
+- expected rollback result:
+  - the old static-body teleport behavior returns
+  - attached camera/gimbal joint motion may stop being visibly rendered again
 
 ### Current Defaults Worth Remembering
 

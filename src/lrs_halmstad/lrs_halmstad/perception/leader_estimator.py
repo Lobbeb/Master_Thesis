@@ -487,7 +487,9 @@ class LeaderEstimator(Node):
         assert self.uav_pose is not None
         x_n = (u - cam.cx) / cam.fx
         y_n = (v - cam.cy) / cam.fy
-        pitch_img = math.atan2(y_n, math.sqrt(1.0 + x_n * x_n))
+        # Image Y grows downward, but the ground-projection elevation convention
+        # here uses negative angles for rays that point downward.
+        pitch_img = math.atan2(-y_n, math.sqrt(1.0 + x_n * x_n))
         cam_world_z = self.uav_pose.z + self.cam_z_offset_m
         dz = self.target_ground_z_m - cam_world_z
         elev = self.cam_pitch_offset_rad + pitch_img
@@ -517,7 +519,9 @@ class LeaderEstimator(Node):
         x_n = (u - cam.cx) / cam.fx
         y_n = (v - cam.cy) / cam.fy
         bearing = self.cam_yaw_offset_rad - math.atan2(x_n, 1.0)
-        pitch_img = math.atan2(y_n, math.sqrt(1.0 + x_n * x_n))
+        # Keep the ground-point solver consistent with _ground_range_from_pixel:
+        # lower image rows must point the ray farther downward, not upward.
+        pitch_img = math.atan2(-y_n, math.sqrt(1.0 + x_n * x_n))
         cam_world_z = self.uav_pose.z + self.cam_z_offset_m
         dz = self.target_ground_z_m - cam_world_z
         elev = self.cam_pitch_offset_rad + pitch_img

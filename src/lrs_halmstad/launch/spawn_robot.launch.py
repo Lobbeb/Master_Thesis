@@ -83,8 +83,16 @@ def generate_launch_description():
         "'", LaunchConfiguration('uav_mode'), "' == 'physics'",
         ") else 'false'"
     ])
+    # Attached camera joints do not visually actuate on a static model.
+    # Keep camera-less teleport spawns static, but let attached-camera UAVs
+    # remain dynamic and rely on the simulator's set_pose path for body motion.
     model_static_for_mode = PythonExpression([
-        "'true' if '", LaunchConfiguration('uav_mode'), "' == 'teleport' else 'false'"
+        "'false' if '", with_camera_for_mode, "' == 'true' else "
+        "('true' if '", LaunchConfiguration('uav_mode'), "' == 'teleport' else 'false')"
+    ])
+    base_link_kinematic_for_mode = PythonExpression([
+        "'true' if ('", with_camera_for_mode, "' == 'true' and '",
+        LaunchConfiguration('uav_mode'), "' == 'teleport') else 'false'"
     ])
 
     generate_sdf_exe = os.path.join(
@@ -112,6 +120,7 @@ def generate_launch_description():
                     " -p robot:=True",
                     " -p with_camera:=", with_camera_for_mode,
                     " -p model_static:=", model_static_for_mode,
+                    " -p base_link_kinematic:=", base_link_kinematic_for_mode,
                     " -p camera_pitch_offset_deg:=", LaunchConfiguration('camera_pitch_offset_deg'),
                     " -p camera_name:=", LaunchConfiguration('camera_name')
                 ]),

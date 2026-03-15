@@ -151,11 +151,31 @@ ros2 run lrs_halmstad controller --ros-args -p uav_name:=dji0
 - `follow_uav` no longer talks to Gazebo directly. It publishes to `/dji0/psdk_ros2/flight_control_setpoint_ENUposition_yaw` and leaves Gazebo actuation to `simulator`.
 - In simulation, `simulator` interprets `/dji0/psdk_ros2/flight_control_setpoint_ENUposition_yaw` as an absolute ENU pose setpoint: `x`, `y`, `z`, `yaw`.
 - The attached gimbal path is now the default camera backend in Gazebo, while the ROS image topics remain `/dji0/camera0/*`.
+- Attached-camera teleport spawns now use a non-static UAV model with a kinematic `base_link`, so the gimbal joints visibly actuate while the body remains pose-driven by `simulator`.
 - `leader_estimator` now defaults to the actual simulated UAV pose topic `/dji0/pose`, not `/dji0/pose_cmd`.
 - The default perception range mode is `ground`, not fixed range. `leader_range_mode:=const` is still available as a fallback for debugging.
 - The Husky now uses `lidar2d_0` as its only active range sensor in this workspace. The old temporary `lidar3d_0` path is no longer part of the active bring-up.
 - UGV mobility now runs in two supported modes: `ugv_mode:=nav2` sends sequential Nav2 `NavigateToPose` goals derived from the configured route, and `ugv_mode:=external` leaves UGV motion to an external Nav2 goal source.
 - Current open debugging issue: in YOLO detect/track follow, the camera can snap upward and the UAV can surge forward briefly before recovering. Start from `follow_uav.py`, `camera_tracker.py`, `simulator.py`, and `leader_estimator.py`.
+
+### Reverting the current attached-gimbal kinematic workaround
+
+If you need to back out the current visible-gimbal fix, revert these files together:
+
+- `src/lrs_halmstad/launch/spawn_robot.launch.py`
+  - restore teleport spawns to `model_static:=true`
+  - remove the `base_link_kinematic_for_mode` wiring
+- `src/lrs_halmstad/lrs_halmstad/generate_sdf.py`
+  - remove the `base_link_kinematic` parameter and mapping
+- `src/lrs_halmstad/xacro/lrs_model.xacro`
+  - remove the `base_link_kinematic` arg and passthrough into `lrs_m100_macro`
+- `src/lrs_halmstad/xacro/lrs_m100_base.sdf.xacro`
+  - remove `<kinematic>${base_link_kinematic}</kinematic>`
+  - if you want the exact old behavior, also remove `<gravity>false</gravity>` from `base_link`
+
+Expected rollback result:
+- the old static-body teleport behavior returns
+- attached gimbal joints may stop producing visible camera motion in Gazebo again
 
 ## Contract checks
 

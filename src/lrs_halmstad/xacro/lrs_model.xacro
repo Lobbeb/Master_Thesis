@@ -3,6 +3,7 @@
 <sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="name" default="dji0"/>
   <xacro:arg name="model_static" default="false"/>
+  <xacro:arg name="base_link_kinematic" default="false"/>
 
   <model name="$(arg name)">  
     <static>$(arg model_static)</static>
@@ -94,12 +95,14 @@
 
     <xacro:if value="${prop_type == 'm100'}">    
       <xacro:include filename="$(find lrs_halmstad)/xacro/lrs_m100_base.sdf.xacro"/>
-      <xacro:lrs_m100_macro base_link_name="$(arg base_link_frame)"/>
+      <xacro:lrs_m100_macro base_link_name="$(arg base_link_frame)"
+                            base_link_kinematic="$(arg base_link_kinematic)"/>
     </xacro:if>
 
     <xacro:if value="${prop_type == 'm300'}">    
       <xacro:include filename="$(find lrs_halmstad)/xacro/lrs_m100_base.sdf.xacro"/>
-      <xacro:lrs_m100_macro base_link_name="$(arg base_link_frame)"/>
+      <xacro:lrs_m100_macro base_link_name="$(arg base_link_frame)"
+                            base_link_kinematic="$(arg base_link_kinematic)"/>
     </xacro:if>
 
     
@@ -158,8 +161,6 @@
           <axis>
             <xyz>0 0 1</xyz>
             <limit>
-              <lower>-3.1416</lower>
-              <upper>3.1416</upper>
               <effort>100</effort>
               <velocity>-1</velocity>
             </limit>

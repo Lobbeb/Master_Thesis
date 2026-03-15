@@ -277,7 +277,7 @@ fi
 
 if [ "$USE_ESTIMATE" = true ]; then
   if [ -z "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then
-    EXTRA_ARGS+=("leader_actual_heading_enable:=true")
+    EXTRA_ARGS+=("leader_actual_heading_enable:=false")
   elif [ -n "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then
     EXTRA_ARGS+=("leader_actual_heading_enable:=$USE_ACTUAL_HEADING")
   fi

@@ -24,6 +24,8 @@ class GenSdf(Node):
 
         self.declare_parameter("model_static", False)
         self.model_static = self.get_parameter('model_static').get_parameter_value().bool_value
+        self.declare_parameter("base_link_kinematic", False)
+        self.base_link_kinematic = self.get_parameter('base_link_kinematic').get_parameter_value().bool_value
 
         self.declare_parameter("camera_name", "camera0")
         self.camera_name = self.get_parameter('camera_name').get_parameter_value().string_value
@@ -77,6 +79,7 @@ class GenSdf(Node):
             mappings["robot_name"] = self.name
             mappings["camera_name"] = self.camera_name
             mappings["model_static"] = "true" if self.model_static else "false"
+            mappings["base_link_kinematic"] = "true" if self.base_link_kinematic else "false"
             mappings["camera_pitch_offset"] = f'{self.camera_pitch_offset_deg}'
             if self.with_camera:
                 mappings["with_camera"] = "true"

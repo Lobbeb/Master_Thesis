@@ -67,9 +67,9 @@ follow_uav:
     state_machine_enable: true  # Debounce follow-state transitions instead of switching immediately.
 
     #~~~~<< Heading inference from leader motion.
-    leader_actual_heading_enable: false  # Use shared UGV body heading for anchor placement while still following estimator XY.
+    leader_actual_heading_enable: false  # In YOLO/estimate follow, do not use the real UGV pose/heading for anchor placement.
     leader_actual_heading_topic: /a201_0000/amcl_pose_odom  # Shared AMCL-derived UGV pose used to read the true chassis heading for the anchor.
-    estimate_heading_from_motion_enable: true  # In estimate-follow, prefer leader motion heading over noisy pose yaw when actual heading is unavailable.
+    estimate_heading_from_motion_enable: true  # In YOLO/estimate follow, prefer motion heading from the estimated pose over sideways/noisy OBB yaw when placing the behind-anchor.
     estimate_heading_max_dt_s: 2.0  # Ignore heading inference updates if pose gaps exceed this.
     estimate_heading_min_speed_mps: 0.15  # Minimum leader speed before motion-derived heading is trusted.
 
@@ -156,7 +156,7 @@ leader_estimator:
     fault_status_topic: /coord/leader_estimate_fault  # Latched estimator fault topic.
     debug_image_topic: /coord/leader_debug_image  # Estimator debug image topic.
 
-    cam_pitch_offset_deg: 0.0  # Camera pitch mounting offset used in bearing/range projection.
+    cam_pitch_offset_deg: -45.0  # Camera pitch mounting offset used in bearing/range projection; negative is down, so this must match the mounted camera angle.
     cam_roll_offset_deg: 0.0  # Camera roll mounting offset reserved for future geometry work.
     cam_x_offset_m: 0.0  # Camera X offset in the UAV body frame.
     cam_y_offset_m: 0.0  # Camera Y offset in the UAV body frame.

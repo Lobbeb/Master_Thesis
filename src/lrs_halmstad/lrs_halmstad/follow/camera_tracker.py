@@ -53,7 +53,6 @@ class CameraTracker(Node):
         self.camera_target_root = f"{self.camera_topic_root}/target"
         self.camera_debug_root = f"{self.camera_topic_root}/debug"
         self.uav_camera_mode = str(self.declare_parameter("uav_camera_mode", "integrated_joint").value).strip().lower()
-        self.camera_mount_pitch_deg = float(yaml_param(self, "camera_mount_pitch_deg"))
         self.uav_pose_cmd_topic = str(self.declare_parameter("uav_pose_cmd_topic", "").value).strip()
         self.tick_hz = max(1.0, float(yaml_param(self, "tick_hz")))
         self.pose_timeout_s = float(yaml_param(self, "pose_timeout_s"))
@@ -349,7 +348,7 @@ class CameraTracker(Node):
             f"publish_debug_topics={self.publish_debug_topics}, "
             f"leader_look_target_m=({self.leader_look_target_x_m}, "
             f"{self.leader_look_target_y_m}, {self.camera_look_target_z_m}), "
-            f"camera_mode={self.uav_camera_mode}, camera_mount_pitch_deg={self.camera_mount_pitch_deg}, "
+            f"camera_mode={self.uav_camera_mode}, "
             f"uav_pose_cmd_topic={self.uav_pose_cmd_topic}"
         )
 
@@ -582,9 +581,8 @@ class CameraTracker(Node):
         if not self.tilt_enable:
             return self.default_tilt_deg
         target_tilt_deg = self._compute_tilt_deg(uav_pose, uav_z)
-        # The attached gimbal pitch command is relative to the fixed camera
-        # mount angle baked into the spawned UAV model.
-        return target_tilt_deg + self.camera_mount_pitch_deg
+        # Keep update_tilt in degrees relative to the horizontal plane.
+        return target_tilt_deg
 
     def _compute_pan_deg_for_target(
         self,
@@ -837,7 +835,6 @@ class CameraTracker(Node):
                 tilt_leader_pose,
                 tilt_leader_z,
             )
-            raw_tilt_cmd += self.camera_mount_pitch_deg
             raw_tilt_cmd += tilt_image_correction_deg
             target_tilt_cmd_deg = float(raw_tilt_cmd)
             tilt_mode = "track"

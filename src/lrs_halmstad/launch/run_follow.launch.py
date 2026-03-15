@@ -305,7 +305,7 @@ def generate_launch_description():
     )
     leader_actual_heading_enable_arg = DeclareLaunchArgument(
         'leader_actual_heading_enable',
-        default_value='true',
+        default_value='false',
     )
     leader_actual_heading_topic_arg = DeclareLaunchArgument(
         'leader_actual_heading_topic',

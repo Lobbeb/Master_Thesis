@@ -188,6 +188,9 @@ class Simulator(Node):
         self.get_logger().info(
             "Legacy UAV command topic is interpreted as absolute ENU pose: x, y, z, yaw."
         )
+        self.get_logger().info(
+            "update_tilt is interpreted in degrees relative to the horizontal plane."
+        )
         self.target_camera_world_yaw = None
         self.target_camera_pose = None
 
@@ -289,9 +292,7 @@ class Simulator(Node):
             z = self.world_position.z
             self.set_pose(self.name, x, y, z, self.yaw)
             pitchmsg = Float64()
-            pitchmsg.data = self._clamp(
-                -math.radians(self.tilt), self.gimbal_pitch_min, self.gimbal_pitch_max
-            )
+            pitchmsg.data = self._gimbal_pitch_cmd_rad(self.tilt)
             self.gimbal_pitch_pub.publish(pitchmsg)
             yawmsg = Float64()
             yawmsg.data = math.radians(self.pan)
@@ -399,8 +400,13 @@ class Simulator(Node):
         msg.pose.orientation.w = float(quat[3])
         return msg
 
+    def _gimbal_pitch_cmd_rad(self, commanded_tilt_deg: float) -> float:
+        joint_cmd_rad = -math.radians(commanded_tilt_deg + self.camera_mount_pitch_deg)
+        return self._clamp(joint_cmd_rad, self.gimbal_pitch_min, self.gimbal_pitch_max)
+
     def _absolute_camera_tilt_deg(self, commanded_tilt_deg: float) -> float:
-        return float(commanded_tilt_deg - self.camera_mount_pitch_deg)
+        joint_cmd_rad = self._gimbal_pitch_cmd_rad(commanded_tilt_deg)
+        return float(-math.degrees(joint_cmd_rad) - self.camera_mount_pitch_deg)
 
 
 def main(args=None):
