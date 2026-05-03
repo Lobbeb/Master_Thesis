@@ -54,6 +54,8 @@ class FollowUavOdom(FollowControllerCoreMixin, Node):
         declare_yaml_param(self, "follow_yaw_rate_gain", descriptor=dyn_num)
         declare_yaml_param(self, "publish_pose_cmd_topics")
         declare_yaml_param(self, "leader_heading_offset_deg", descriptor=dyn_num)
+        self.declare_parameter("forward_offset_m", 0.0, dyn_num)
+        self.declare_parameter("lateral_offset_m", 0.0, dyn_num)
 
         self.world = str(self.get_parameter("world").value)
         self.uav_name = str(self.get_parameter("uav_name").value)
@@ -85,6 +87,8 @@ class FollowUavOdom(FollowControllerCoreMixin, Node):
         self.leader_heading_offset_rad = math.radians(
             float(required_param_value(self, "leader_heading_offset_deg"))
         )
+        self.forward_offset_m = float(self.get_parameter("forward_offset_m").value)
+        self.lateral_offset_m = float(self.get_parameter("lateral_offset_m").value)
 
         self._validate_parameters()
 
@@ -275,8 +279,11 @@ class FollowUavOdom(FollowControllerCoreMixin, Node):
         )
 
     def _compute_anchor_pose(self, target_horizontal_distance: float) -> Pose2D:
-        anchor_x = self.ugv_pose.x - target_horizontal_distance * math.cos(self.ugv_follow_heading)
-        anchor_y = self.ugv_pose.y - target_horizontal_distance * math.sin(self.ugv_follow_heading)
+        heading = self.ugv_follow_heading
+        anchor_x = self.ugv_pose.x - target_horizontal_distance * math.cos(heading)
+        anchor_y = self.ugv_pose.y - target_horizontal_distance * math.sin(heading)
+        anchor_x += self.forward_offset_m * math.cos(heading) - self.lateral_offset_m * math.sin(heading)
+        anchor_y += self.forward_offset_m * math.sin(heading) + self.lateral_offset_m * math.cos(heading)
         anchor_x, anchor_y = clamp_point_to_radius(
             self.ugv_pose.x,
             self.ugv_pose.y,
