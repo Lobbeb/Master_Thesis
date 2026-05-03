@@ -133,6 +133,12 @@ class CameraTracker(Node):
             self.leader_input_type = "pose"
         if self.leader_input_type not in ("odom", "pose"):
             raise ValueError("leader_input_type must be 'odom', 'pose', or 'estimate'")
+        if self.leader_input_type != "odom" and self.actual_pose_reacquire_enable:
+            self.get_logger().warn(
+                "[camera_tracker] Disabling actual_pose_reacquire_enable in estimate/pose mode"
+            )
+            self.actual_pose_reacquire_enable = False
+            self.leader_actual_pose_topic = ""
         if self.uav_camera_mode == "integrated":
             self.uav_camera_mode = "integrated_joint"
         if self.uav_camera_mode != "integrated_joint":

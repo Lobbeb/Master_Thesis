@@ -13,10 +13,14 @@ SAFE_Z_FLOOR="0.10"
 COMMAND_ONLY="false"
 STANDARD_YAW="0.5"
 SHOW_AMCL="true"
+AMCL_TIMEOUT_S="8"
+AMCL_RETRY_COUNT="3"
+AMCL_RETRY_DELAY_S="1.0"
+AMCL_TOPIC="/a201_0000/amcl_pose"
 
 usage() {
   cat <<'EOF'
-Usage: ./run.sh current_pose [world] [gui:=true|false] [safe_z:=0.10] [standard_yaw:=0.5] [command_only:=true|false] [show_amcl:=true|false]
+Usage: ./run.sh current_pose [world] [gui:=true|false] [safe_z:=0.10] [standard_yaw:=0.5] [command_only:=true|false] [show_amcl:=true|false] [amcl_timeout_s:=8] [amcl_retry_count:=3] [amcl_retry_delay_s:=1.0]
 
 Examples:
   ./run.sh current_pose
@@ -26,6 +30,7 @@ Examples:
   ./run.sh current_pose baylands standard_yaw:=0.5
   ./run.sh current_pose baylands command_only:=true
   ./run.sh current_pose baylands show_amcl:=false
+  ./run.sh current_pose baylands amcl_timeout_s:=10 amcl_retry_count:=5
 EOF
 }
 
@@ -70,6 +75,15 @@ while [ "$#" -gt 0 ]; do
     show_amcl:=*)
       SHOW_AMCL="$(coerce_bool "${1#show_amcl:=}")"
       ;;
+    amcl_timeout_s:=*)
+      AMCL_TIMEOUT_S="${1#amcl_timeout_s:=}"
+      ;;
+    amcl_retry_count:=*)
+      AMCL_RETRY_COUNT="${1#amcl_retry_count:=}"
+      ;;
+    amcl_retry_delay_s:=*)
+      AMCL_RETRY_DELAY_S="${1#amcl_retry_delay_s:=}"
+      ;;
     *)
       echo "[run_current_pose] Unknown argument: $1" >&2
       usage >&2
@@ -112,10 +126,13 @@ if [ "$SHOW_AMCL" = "true" ]; then
   source "$WS_ROOT/src/lrs_halmstad/clearpath/setup.bash"
   set -u
 
-  AMCL_TMP="$(mktemp)"
-  AMCL_ERR_TMP="$(mktemp)"
-  if timeout 5s ros2 topic echo --no-daemon --once /a201_0000/amcl_pose >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
-    if AMCL_ENV="$(python3 - "$AMCL_TMP" <<'PY'
+  total_amcl_attempts=$((AMCL_RETRY_COUNT + 1))
+  amcl_attempt=1
+  while [ "$amcl_attempt" -le "$total_amcl_attempts" ]; do
+    AMCL_TMP="$(mktemp)"
+    AMCL_ERR_TMP="$(mktemp)"
+    if timeout "${AMCL_TIMEOUT_S}s" ros2 topic echo --no-daemon --once "$AMCL_TOPIC" >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
+      if AMCL_ENV="$(python3 - "$AMCL_TMP" <<'PY'
 import math
 import sys
 from pathlib import Path
@@ -156,23 +173,31 @@ print(f"amcl_x={x!r}")
 print(f"amcl_y={y!r}")
 print(f"amcl_yaw={yaw!r}")
 PY
-)"; then
-      eval "$AMCL_ENV"
-      printf '%s\n' "$spawn_x,$spawn_y,$spawn_z,$spawn_yaw,$amcl_x,$amcl_y,$amcl_yaw"
-      rm -f "$AMCL_TMP"
-      rm -f "$AMCL_ERR_TMP"
-      exit 0
-    fi
-  else
-    AMCL_ERR_TEXT="$(tr '\n' ' ' < "$AMCL_ERR_TMP" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
-    if [ -z "$AMCL_ERR_TEXT" ]; then
-      AMCL_WARNING="[run_current_pose] AMCL pose unavailable. Make sure localization is running and /a201_0000/amcl_pose is reachable on the current ROS domain."
+      )"; then
+        eval "$AMCL_ENV"
+        printf '%s\n' "$spawn_x,$spawn_y,$spawn_z,$spawn_yaw,$amcl_x,$amcl_y,$amcl_yaw"
+        rm -f "$AMCL_TMP"
+        rm -f "$AMCL_ERR_TMP"
+        exit 0
+      fi
+      AMCL_WARNING="[run_current_pose] Received $AMCL_TOPIC but could not parse a usable pose message."
     else
-      AMCL_WARNING="[run_current_pose] AMCL pose unavailable: $AMCL_ERR_TEXT"
+      AMCL_ERR_TEXT="$(tr '\n' ' ' < "$AMCL_ERR_TMP" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
+      if [ -z "$AMCL_ERR_TEXT" ]; then
+        AMCL_WARNING="[run_current_pose] AMCL pose unavailable from $AMCL_TOPIC within ${AMCL_TIMEOUT_S}s. Make sure localization is running and AMCL has settled."
+      else
+        AMCL_WARNING="[run_current_pose] AMCL pose unavailable from $AMCL_TOPIC: $AMCL_ERR_TEXT"
+      fi
     fi
-  fi
-  rm -f "$AMCL_TMP"
-  rm -f "$AMCL_ERR_TMP"
+    rm -f "$AMCL_TMP"
+    rm -f "$AMCL_ERR_TMP"
+
+    if [ "$amcl_attempt" -lt "$total_amcl_attempts" ]; then
+      echo "[run_current_pose] Waiting for $AMCL_TOPIC (attempt ${amcl_attempt}/${total_amcl_attempts} failed, retrying in ${AMCL_RETRY_DELAY_S}s)..." >&2
+      sleep "$AMCL_RETRY_DELAY_S"
+    fi
+    amcl_attempt=$((amcl_attempt + 1))
+  done
 fi
 
 if [ -n "$AMCL_WARNING" ]; then

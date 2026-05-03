@@ -48,7 +48,7 @@ class FollowPointGenerator(Node):
         self.declare_parameter("uav_pose_timeout_s", 0.5)
         self.declare_parameter("camera_pose_timeout_s", 0.5)
         self.declare_parameter("hold_timeout_s", 0.5)
-        self.declare_parameter("follow_distance_m", 7.0)
+        self.declare_parameter("d_target", 7.0)
         self.declare_parameter("lateral_offset_m", 0.0)
         self.declare_parameter("lookahead_horizon_s", 0.25)
         self.declare_parameter("min_target_speed_mps", 0.25)
@@ -61,7 +61,7 @@ class FollowPointGenerator(Node):
         self.declare_parameter("require_motion_to_start", True)
         self.declare_parameter("point_alpha", 0.55)
         self.declare_parameter("max_follow_point_jump_m", 2.0)
-        self.declare_parameter("follow_altitude_m", 7.0)
+        self.declare_parameter("uav_start_z", 7.0)
         self.declare_parameter("camera_x_offset_m", 0.0)
         self.declare_parameter("camera_y_offset_m", 0.0)
         self.declare_parameter("predicted_lookahead_scale", 0.65)
@@ -102,7 +102,7 @@ class FollowPointGenerator(Node):
         self.uav_pose_timeout_s = float(self.get_parameter("uav_pose_timeout_s").value)
         self.camera_pose_timeout_s = float(self.get_parameter("camera_pose_timeout_s").value)
         self.hold_timeout_s = float(self.get_parameter("hold_timeout_s").value)
-        self.follow_distance_m = float(self.get_parameter("follow_distance_m").value)
+        self.d_target = float(self.get_parameter("d_target").value)
         self.lateral_offset_m = float(self.get_parameter("lateral_offset_m").value)
         self.lookahead_horizon_s = float(self.get_parameter("lookahead_horizon_s").value)
         self.min_target_speed_mps = float(self.get_parameter("min_target_speed_mps").value)
@@ -117,7 +117,7 @@ class FollowPointGenerator(Node):
         self.require_motion_to_start = coerce_bool(self.get_parameter("require_motion_to_start").value)
         self.point_alpha = float(self.get_parameter("point_alpha").value)
         self.max_follow_point_jump_m = float(self.get_parameter("max_follow_point_jump_m").value)
-        self.follow_altitude_m = float(self.get_parameter("follow_altitude_m").value)
+        self.uav_start_z = float(self.get_parameter("uav_start_z").value)
         self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
         self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
         self.predicted_lookahead_scale = float(self.get_parameter("predicted_lookahead_scale").value)
@@ -158,8 +158,8 @@ class FollowPointGenerator(Node):
             raise ValueError("pose timeouts must be > 0")
         if self.hold_timeout_s < 0.0:
             raise ValueError("hold_timeout_s must be >= 0")
-        if self.follow_distance_m <= 0.0:
-            raise ValueError("follow_distance_m must be > 0")
+        if self.d_target <= 0.0:
+            raise ValueError("d_target must be > 0")
         if self.lookahead_horizon_s < 0.0:
             raise ValueError("lookahead_horizon_s must be >= 0")
         if self.target_pose_timeout_s <= 0.0:
@@ -209,10 +209,10 @@ class FollowPointGenerator(Node):
         self.last_target_pose_z: Optional[float] = None
         self.last_target_pose_stamp: Optional[Time] = None
         self.uav_pose = Pose2D(0.0, 0.0, 0.0)
-        self.uav_z = self.follow_altitude_m
+        self.uav_z = self.uav_start_z
         self.last_uav_pose_stamp: Optional[Time] = None
         self.camera_pose = Pose2D(0.0, 0.0, 0.0)
-        self.camera_z = self.follow_altitude_m
+        self.camera_z = self.uav_start_z
         self.camera_frame_id = "map"
         self.last_camera_pose_stamp: Optional[Time] = None
         self.last_tick_time: Optional[Time] = None
@@ -241,7 +241,8 @@ class FollowPointGenerator(Node):
         self.get_logger().info(
             "[follow_point_generator] Started: "
             f"target_estimate={self.target_estimate_topic}, camera_pose={self.camera_pose_topic}, "
-            f"uav_pose={self.uav_pose_topic}, out={self.out_topic}"
+            f"uav_pose={self.uav_pose_topic}, out={self.out_topic}, "
+            f"d_target={self.d_target:.2f}, uav_start_z={self.uav_start_z:.2f}"
         )
 
     def on_target_estimate(self, msg: Odometry) -> None:
@@ -662,11 +663,11 @@ class FollowPointGenerator(Node):
                         if self.last_target_pose_z is not None and math.isfinite(self.last_target_pose_z)
                         else 0.0
                     )
-                    follow_z = self.follow_altitude_m
+                    follow_z = self.uav_start_z
                     z_delta = follow_z - leader_z
                     effective_follow_distance = max(
                         0.5,
-                        self.follow_distance_m * max(0.0, follow_distance_scale),
+                        self.d_target * max(0.0, follow_distance_scale),
                     )
                     effective_lateral_offset = self.lateral_offset_m * max(0.0, lateral_offset_scale)
                     horizontal_dist = horizontal_distance_for_euclidean(

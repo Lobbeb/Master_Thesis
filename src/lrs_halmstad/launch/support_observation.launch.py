@@ -222,9 +222,29 @@ def generate_launch_description():
         'support_camera_scan_period_s',
         default_value='8.0',
     )
+    support_camera_scan_pan_phase_offsets_deg_arg = DeclareLaunchArgument(
+        'support_camera_scan_pan_phase_offsets_deg',
+        default_value='',
+        description='Comma-separated per-UAV pan phase offsets in degrees, for example 0,180 for mirrored sweeps.',
+    )
     support_camera_scan_pitch_deg_arg = DeclareLaunchArgument(
         'support_camera_scan_pitch_deg',
         default_value='-20.0',
+    )
+    support_camera_scan_pitch_amplitude_deg_arg = DeclareLaunchArgument(
+        'support_camera_scan_pitch_amplitude_deg',
+        default_value='0.0',
+        description='Optional sinusoidal pitch amplitude in degrees; 0 keeps a fixed tilt.',
+    )
+    support_camera_scan_pitch_period_s_arg = DeclareLaunchArgument(
+        'support_camera_scan_pitch_period_s',
+        default_value='0.0',
+        description='Optional pitch sweep period in seconds; 0 reuses the pan period.',
+    )
+    support_camera_scan_pitch_phase_offsets_deg_arg = DeclareLaunchArgument(
+        'support_camera_scan_pitch_phase_offsets_deg',
+        default_value='',
+        description='Comma-separated per-UAV pitch phase offsets in degrees.',
     )
     support_camera_scan_rate_hz_arg = DeclareLaunchArgument(
         'support_camera_scan_rate_hz',
@@ -310,7 +330,11 @@ def generate_launch_description():
                 'yaw_center_deg': LaunchConfiguration('support_camera_scan_yaw_center_deg'),
                 'yaw_amplitude_deg': LaunchConfiguration('support_camera_scan_yaw_amplitude_deg'),
                 'period_s': LaunchConfiguration('support_camera_scan_period_s'),
+                'pan_phase_offsets_deg': LaunchConfiguration('support_camera_scan_pan_phase_offsets_deg'),
                 'pitch_deg': LaunchConfiguration('support_camera_scan_pitch_deg'),
+                'pitch_amplitude_deg': LaunchConfiguration('support_camera_scan_pitch_amplitude_deg'),
+                'pitch_period_s': LaunchConfiguration('support_camera_scan_pitch_period_s'),
+                'pitch_phase_offsets_deg': LaunchConfiguration('support_camera_scan_pitch_phase_offsets_deg'),
                 'rate_hz': LaunchConfiguration('support_camera_scan_rate_hz'),
             }
         ],
@@ -368,7 +392,11 @@ def generate_launch_description():
         support_camera_scan_yaw_center_deg_arg,
         support_camera_scan_yaw_amplitude_deg_arg,
         support_camera_scan_period_s_arg,
+        support_camera_scan_pan_phase_offsets_deg_arg,
         support_camera_scan_pitch_deg_arg,
+        support_camera_scan_pitch_amplitude_deg_arg,
+        support_camera_scan_pitch_period_s_arg,
+        support_camera_scan_pitch_phase_offsets_deg_arg,
         support_camera_scan_rate_hz_arg,
         support_dji1_detector,
         support_dji2_detector,

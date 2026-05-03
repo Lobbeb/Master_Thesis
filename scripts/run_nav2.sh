@@ -27,8 +27,10 @@ fi
 lidar_mode_parse_args 2d "$@"
 USE_POINTCLOUD_TO_LASERSCAN="false"
 
-if [ -n "$LIDAR_POINTCLOUD_TOPIC" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
-  USE_POINTCLOUD_TO_LASERSCAN="true"
+if [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
+  LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
+  LIDAR_POINTCLOUD_TOPIC=""
+  echo "[run_nav2] 3D lidar mode: reusing localization scan relay topic $LIDAR_SCAN_TOPIC" >&2
 fi
 
 mkdir -p "$STATE_DIR"

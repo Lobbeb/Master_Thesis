@@ -460,6 +460,10 @@ class KeyboardFollowParams(Node):
 
 
 def parse_args() -> FollowControlConfig:
+    raw_argv = list(sys.argv[1:])
+    if raw_argv and raw_argv[0] in ("keyboard", "params", "random"):
+        raw_argv = ["--mode", raw_argv[0], *raw_argv[1:]]
+
     parser = argparse.ArgumentParser(
         description="Keyboard or random runtime tuning for the follow controller"
     )
@@ -501,7 +505,7 @@ def parse_args() -> FollowControlConfig:
     parser.add_argument("--pan-amplitude", type=float, default=20.0, help="Pan random amplitude in degrees, default: 20")
     parser.add_argument("--pan-min", type=float, default=-45.0, help="Pan lower limit in degrees, default: -45")
     parser.add_argument("--pan-max", type=float, default=45.0, help="Pan upper limit in degrees, default: 45")
-    args = parser.parse_args()
+    args = parser.parse_args(raw_argv)
     mode = "keyboard" if args.mode == "params" else args.mode
     return FollowControlConfig(
         mode=mode,

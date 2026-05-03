@@ -40,7 +40,7 @@ class VisualTargetEstimator(Node):
         self.declare_parameter("prediction_max_gap_s", 0.35)
         self.declare_parameter("prefer_intrinsics_normalization", True)
         self.declare_parameter("range_signal_mode", "auto")
-        self.declare_parameter("reference_range_m", 7.0)
+        self.declare_parameter("d_target", 7.0)
         self.declare_parameter("reference_area_norm", 0.009)
         self.declare_parameter("min_area_norm_valid", 0.002)
         self.declare_parameter("projected_range_min_m", 0.5)
@@ -80,7 +80,7 @@ class VisualTargetEstimator(Node):
             self.get_parameter("prefer_intrinsics_normalization").value
         )
         self.range_signal_mode = str(self.get_parameter("range_signal_mode").value).strip().lower()
-        self.reference_range_m = float(self.get_parameter("reference_range_m").value)
+        self.d_target = float(self.get_parameter("d_target").value)
         self.reference_area_norm = float(self.get_parameter("reference_area_norm").value)
         self.min_area_norm_valid = float(self.get_parameter("min_area_norm_valid").value)
         self.projected_range_min_m = float(self.get_parameter("projected_range_min_m").value)
@@ -122,8 +122,8 @@ class VisualTargetEstimator(Node):
             raise ValueError("hard_lost_after_s must be >= degraded_after_s")
         if self.range_signal_mode not in ("auto", "projected", "area"):
             raise ValueError("range_signal_mode must be one of: auto, projected, area")
-        if self.reference_range_m <= 0.0 or self.reference_area_norm <= 0.0:
-            raise ValueError("reference_range_m and reference_area_norm must be > 0")
+        if self.d_target <= 0.0 or self.reference_area_norm <= 0.0:
+            raise ValueError("d_target and reference_area_norm must be > 0")
         if self.min_area_norm_valid < 0.0:
             raise ValueError("min_area_norm_valid must be >= 0")
         if (
@@ -185,7 +185,8 @@ class VisualTargetEstimator(Node):
         self.get_logger().info(
             "[visual_target_estimator] Started: "
             f"selected_target={self.selected_target_topic}, camera_info={self.camera_info_topic}, "
-            f"out={self.out_topic}, range_signal_mode={self.range_signal_mode}"
+            f"out={self.out_topic}, range_signal_mode={self.range_signal_mode}, "
+            f"d_target={self.d_target:.2f}"
         )
 
     def on_selected_target(self, msg: Detection2DArray) -> None:
@@ -261,7 +262,7 @@ class VisualTargetEstimator(Node):
         if not self._area_available(area_norm):
             return None
         area_ratio = self.reference_area_norm / max(float(area_norm), 1e-9)
-        return self.reference_range_m * math.sqrt(max(area_ratio, 1e-9))
+        return self.d_target * math.sqrt(max(area_ratio, 1e-9))
 
     def _visibility_score(
         self,

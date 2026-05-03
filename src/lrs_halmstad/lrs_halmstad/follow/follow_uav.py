@@ -52,6 +52,9 @@ class FollowUav(FollowControllerCoreMixin, Node):
         declare_yaml_param(self, "min_cmd_period_s", descriptor=dyn_num)
         declare_yaml_param(self, "follow_speed_mps", descriptor=dyn_num)
         declare_yaml_param(self, "follow_speed_gain", descriptor=dyn_num)
+        declare_yaml_param(self, "leader_motion_heading_min_speed_mps", descriptor=dyn_num)
+        declare_yaml_param(self, "leader_motion_heading_min_delta_m", descriptor=dyn_num)
+        declare_yaml_param(self, "leader_motion_heading_alpha", descriptor=dyn_num)
         declare_yaml_param(self, "follow_yaw_rate_rad_s", descriptor=dyn_num)
         declare_yaml_param(self, "follow_yaw_rate_gain", descriptor=dyn_num)
         declare_yaml_param(self, "publish_pose_cmd_topics")
@@ -90,6 +93,15 @@ class FollowUav(FollowControllerCoreMixin, Node):
         self.min_cmd_period_s = float(required_param_value(self, "min_cmd_period_s"))
         self.follow_speed_mps = float(required_param_value(self, "follow_speed_mps"))
         self.follow_speed_gain = float(required_param_value(self, "follow_speed_gain"))
+        self.leader_motion_heading_min_speed_mps = float(
+            required_param_value(self, "leader_motion_heading_min_speed_mps")
+        )
+        self.leader_motion_heading_min_delta_m = float(
+            required_param_value(self, "leader_motion_heading_min_delta_m")
+        )
+        self.leader_motion_heading_alpha = float(
+            required_param_value(self, "leader_motion_heading_alpha")
+        )
         self.follow_yaw_rate_rad_s = float(required_param_value(self, "follow_yaw_rate_rad_s"))
         self.follow_yaw_rate_gain = float(required_param_value(self, "follow_yaw_rate_gain"))
         self.publish_pose_cmd_topics = coerce_bool(required_param_value(self, "publish_pose_cmd_topics"))
@@ -99,8 +111,17 @@ class FollowUav(FollowControllerCoreMixin, Node):
         self.have_ugv = False
         self.ugv_pose = Pose2D(0.0, 0.0, 0.0)
         self.ugv_z = 0.0
+        self.ugv_estimate_yaw = 0.0
+        self.ugv_follow_heading = 0.0
+        self.ugv_follow_heading_source = "startup"
         self.leader_frame_id = "map"
         self.last_ugv_stamp: Optional[Time] = None
+        self._leader_heading_ref_xy: Optional[tuple[float, float]] = None
+        self._leader_heading_ref_stamp: Optional[Time] = None
+        self._leader_motion_last_xy: Optional[tuple[float, float]] = None
+        self._leader_motion_last_stamp: Optional[Time] = None
+        self._leader_heading_dir_xy: Optional[tuple[float, float]] = None
+        self._last_logged_heading_source = ""
 
         self.uav_cmd = Pose2D(self.uav_start_x, self.uav_start_y, self.uav_start_yaw)
         self.uav_cmd_z = self.uav_start_z
@@ -158,6 +179,7 @@ class FollowUav(FollowControllerCoreMixin, Node):
             f"[follow_uav] Started: world={self.world}, uav={self.uav_name}, "
             f"leader_pose={self.leader_pose_topic}, tick={self.tick_hz}Hz, "
             f"d_target={self.d_target:.2f}, xy_anchor_max={self.xy_anchor_max:.2f}, "
+            f"motion_heading_min_speed={self.leader_motion_heading_min_speed_mps:.2f}m/s, "
             f"follow_yaw={self.follow_yaw}, publish_pose_cmd_topics={self.publish_pose_cmd_topics}, "
             f"uav_start=({self.uav_start_x:.2f},{self.uav_start_y:.2f},"
             f"{self.uav_start_z:.2f},{math.degrees(self.uav_start_yaw):.1f}deg)"
@@ -177,18 +199,24 @@ class FollowUav(FollowControllerCoreMixin, Node):
         if (
             self.follow_speed_mps < 0.0
             or self.follow_speed_gain < 0.0
+            or self.leader_motion_heading_min_speed_mps < 0.0
+            or self.leader_motion_heading_min_delta_m < 0.0
             or self.follow_yaw_rate_rad_s < 0.0
             or self.follow_yaw_rate_gain < 0.0
         ):
             raise ValueError(
-                "follow_speed_mps, follow_speed_gain, follow_yaw_rate_rad_s, "
-                "and follow_yaw_rate_gain must be >= 0"
+                "follow_speed_mps, follow_speed_gain, leader motion heading thresholds, "
+                "follow_yaw_rate_rad_s, and follow_yaw_rate_gain must be >= 0"
             )
+        if not (0.0 <= self.leader_motion_heading_alpha <= 1.0):
+            raise ValueError("leader_motion_heading_alpha must be within [0, 1]")
 
     def _on_set_parameters(self, params):
         numeric_nonnegative = {
             "follow_speed_mps",
             "follow_speed_gain",
+            "leader_motion_heading_min_speed_mps",
+            "leader_motion_heading_min_delta_m",
             "follow_yaw_rate_rad_s",
             "follow_yaw_rate_gain",
             "min_cmd_period_s",
@@ -215,6 +243,14 @@ class FollowUav(FollowControllerCoreMixin, Node):
                 updates[param.name] = value
             elif param.name == "follow_yaw":
                 updates[param.name] = coerce_bool(param.value)
+            elif param.name == "leader_motion_heading_alpha":
+                try:
+                    value = float(param.value)
+                except Exception as exc:
+                    return SetParametersResult(successful=False, reason=f"invalid {param.name}: {exc}")
+                if not (0.0 <= value <= 1.0):
+                    return SetParametersResult(successful=False, reason=f"{param.name} must be within [0, 1]")
+                updates[param.name] = value
 
         if not updates:
             return SetParametersResult(successful=True)
@@ -228,19 +264,123 @@ class FollowUav(FollowControllerCoreMixin, Node):
         )
         return SetParametersResult(successful=True)
 
+    def _set_leader_follow_heading(self, yaw: float, source: str) -> None:
+        self.ugv_follow_heading = wrap_pi(yaw)
+        self.ugv_follow_heading_source = source
+        if source != self._last_logged_heading_source:
+            self.get_logger().info(
+                f"[follow_uav] Leader follow heading source: {source}"
+            )
+            self._last_logged_heading_source = source
+
+    def _set_leader_heading_dir(self, dir_x: float, dir_y: float) -> None:
+        norm = math.hypot(dir_x, dir_y)
+        if norm <= 1e-6:
+            return
+        next_x = float(dir_x / norm)
+        next_y = float(dir_y / norm)
+        if self._leader_heading_dir_xy is not None and self.leader_motion_heading_alpha < 1.0:
+            prev_x, prev_y = self._leader_heading_dir_xy
+            alpha = self.leader_motion_heading_alpha
+            blend_x = (1.0 - alpha) * prev_x + alpha * next_x
+            blend_y = (1.0 - alpha) * prev_y + alpha * next_y
+            blend_norm = math.hypot(blend_x, blend_y)
+            if blend_norm > 1e-6:
+                next_x = float(blend_x / blend_norm)
+                next_y = float(blend_y / blend_norm)
+        self._leader_heading_dir_xy = (next_x, next_y)
+        self._set_leader_follow_heading(math.atan2(next_y, next_x), "motion_heading")
+
+    def _startup_heading_from_view(self, leader_x: float, leader_y: float) -> Optional[float]:
+        if not self.have_uav_actual:
+            return None
+        dx = float(leader_x) - self.uav_actual.x
+        dy = float(leader_y) - self.uav_actual.y
+        if math.hypot(dx, dy) <= 1e-6:
+            return None
+        return math.atan2(dy, dx)
+
+    def _update_leader_follow_heading(
+        self,
+        leader_x: float,
+        leader_y: float,
+        estimate_yaw: float,
+        stamp: Time,
+    ) -> None:
+        if self._leader_heading_ref_xy is None or self._leader_heading_ref_stamp is None:
+            self._leader_heading_ref_xy = (float(leader_x), float(leader_y))
+            self._leader_heading_ref_stamp = stamp
+            self._leader_motion_last_xy = (float(leader_x), float(leader_y))
+            self._leader_motion_last_stamp = stamp
+            startup_yaw = self._startup_heading_from_view(leader_x, leader_y)
+            if startup_yaw is not None:
+                self._leader_heading_dir_xy = (math.cos(startup_yaw), math.sin(startup_yaw))
+                self._set_leader_follow_heading(startup_yaw, "view_line_startup")
+            else:
+                self._leader_heading_dir_xy = (math.cos(estimate_yaw), math.sin(estimate_yaw))
+                self._set_leader_follow_heading(estimate_yaw, "estimate_yaw_startup")
+            return
+
+        if self._leader_motion_last_xy is None or self._leader_motion_last_stamp is None:
+            self._leader_motion_last_xy = (float(leader_x), float(leader_y))
+            self._leader_motion_last_stamp = stamp
+            return
+
+        dt_s = (stamp - self._leader_motion_last_stamp).nanoseconds * 1e-9
+        last_x, last_y = self._leader_motion_last_xy
+        self._leader_motion_last_xy = (float(leader_x), float(leader_y))
+        self._leader_motion_last_stamp = stamp
+        if dt_s <= 1e-3:
+            return
+        if dt_s > self.pose_timeout_s:
+            self._leader_heading_ref_xy = (float(leader_x), float(leader_y))
+            self._leader_heading_ref_stamp = stamp
+            return
+
+        meas_speed_mps = math.hypot(float(leader_x) - last_x, float(leader_y) - last_y) / dt_s
+        ref_x, ref_y = self._leader_heading_ref_xy
+        dx = float(leader_x) - ref_x
+        dy = float(leader_y) - ref_y
+        distance_m = math.hypot(dx, dy)
+        if (
+            distance_m >= self.leader_motion_heading_min_delta_m
+            and meas_speed_mps >= self.leader_motion_heading_min_speed_mps
+        ):
+            self._set_leader_heading_dir(dx, dy)
+            self._leader_heading_ref_xy = (float(leader_x), float(leader_y))
+            self._leader_heading_ref_stamp = stamp
+            return
+
+        if self.ugv_follow_heading_source == "estimate_yaw_startup":
+            startup_yaw = self._startup_heading_from_view(leader_x, leader_y)
+            if startup_yaw is not None:
+                self._leader_heading_dir_xy = (math.cos(startup_yaw), math.sin(startup_yaw))
+                self._set_leader_follow_heading(startup_yaw, "view_line_startup")
+                return
+
+        if self._leader_heading_dir_xy is not None:
+            dir_x, dir_y = self._leader_heading_dir_xy
+            self._set_leader_follow_heading(
+                math.atan2(dir_y, dir_x),
+                self.ugv_follow_heading_source or "held_heading",
+            )
+
     def on_leader_pose(self, msg: PoseStamped) -> None:
         p = msg.pose.position
         q = msg.pose.orientation
         yaw = yaw_from_quat(float(q.x), float(q.y), float(q.z), float(q.w))
+        try:
+            stamp = Time.from_msg(msg.header.stamp)
+        except (ValueError, TypeError, AttributeError):
+            stamp = self.get_clock().now()
 
         self.ugv_pose = Pose2D(float(p.x), float(p.y), yaw)
         self.ugv_z = float(p.z)
+        self.ugv_estimate_yaw = yaw
         self.leader_frame_id = msg.header.frame_id or "map"
+        self._update_leader_follow_heading(float(p.x), float(p.y), yaw, stamp)
         self.have_ugv = True
-        try:
-            self.last_ugv_stamp = Time.from_msg(msg.header.stamp)
-        except (ValueError, TypeError, AttributeError):
-            self.last_ugv_stamp = self.get_clock().now()
+        self.last_ugv_stamp = stamp
 
     def on_uav_pose(self, msg: PoseStamped) -> None:
         super().on_uav_pose(msg)
@@ -261,8 +401,9 @@ class FollowUav(FollowControllerCoreMixin, Node):
         return age_s <= self.pose_timeout_s
 
     def _compute_anchor_pose(self, target_horizontal_distance: float) -> Pose2D:
-        anchor_x = self.ugv_pose.x - target_horizontal_distance * math.cos(self.ugv_pose.yaw)
-        anchor_y = self.ugv_pose.y - target_horizontal_distance * math.sin(self.ugv_pose.yaw)
+        heading = self.ugv_follow_heading
+        anchor_x = self.ugv_pose.x - target_horizontal_distance * math.cos(heading)
+        anchor_y = self.ugv_pose.y - target_horizontal_distance * math.sin(heading)
         anchor_x, anchor_y = clamp_point_to_radius(
             self.ugv_pose.x,
             self.ugv_pose.y,

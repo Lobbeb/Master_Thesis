@@ -9,6 +9,11 @@ SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 FOLLOW_SIM=false
 LAUNCH_PID=""
 WATCH_PID=""
+HAVE_LEADER_START_X=false
+HAVE_LEADER_START_Y=false
+HAVE_LEADER_START_YAW=false
+HAVE_LEADER_NOMINAL_Z=false
+EXTRA_ARGS=()
 
 sim_helper_running() {
   if [ ! -f "$SIM_PID_FILE" ]; then
@@ -95,7 +100,35 @@ if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
   shift
 fi
 
+for arg in "$@"; do
+  case "$arg" in
+    leader_start_x:=*)
+      HAVE_LEADER_START_X=true
+      EXTRA_ARGS+=("$arg")
+      ;;
+    leader_start_y:=*)
+      HAVE_LEADER_START_Y=true
+      EXTRA_ARGS+=("$arg")
+      ;;
+    leader_start_yaw_deg:=*)
+      HAVE_LEADER_START_YAW=true
+      EXTRA_ARGS+=("$arg")
+      ;;
+    leader_nominal_z:=*)
+      HAVE_LEADER_NOMINAL_Z=true
+      EXTRA_ARGS+=("$arg")
+      ;;
+    *)
+      EXTRA_ARGS+=("$arg")
+      ;;
+  esac
+done
+
 ORIG_ROS_DOMAIN_ID="${ROS_DOMAIN_ID-}"
+
+set +u
+source "$WS_ROOT/scripts/slam_state_common.sh"
+set -u
 
 set +u
 source /opt/ros/jazzy/setup.bash
@@ -112,7 +145,43 @@ if ! ros2 topic list 2>/dev/null | grep -qx '/dji0/pose'; then
   echo "[run_support_follow_odom] /dji0/pose is not visible yet; support UAVs will still spawn now and their controllers will wait for the main UAV pose." >&2
 fi
 
-setsid ros2 launch lrs_halmstad support_follow_odom.launch.py world:="$WORLD" "$@" &
+add_live_leader_start_from_dji0_pose() {
+  local timeout_s="${1:-5}"
+  local pose_env=""
+  local leader_yaw_deg=""
+
+  pose_env="$(slam_state_capture_gazebo_named_pose_env "$WORLD" "dji0" "$timeout_s")" || return 1
+  eval "$pose_env"
+  leader_yaw_deg="$(
+    python3 - "$spawn_yaw" <<'PY'
+import math
+import sys
+
+print(f"{math.degrees(float(sys.argv[1])):.9f}")
+PY
+  )" || return 1
+
+  if [ "$HAVE_LEADER_START_X" = false ]; then
+    EXTRA_ARGS+=("leader_start_x:=$spawn_x")
+  fi
+  if [ "$HAVE_LEADER_START_Y" = false ]; then
+    EXTRA_ARGS+=("leader_start_y:=$spawn_y")
+  fi
+  if [ "$HAVE_LEADER_START_YAW" = false ]; then
+    EXTRA_ARGS+=("leader_start_yaw_deg:=$leader_yaw_deg")
+  fi
+  if [ "$HAVE_LEADER_NOMINAL_Z" = false ]; then
+    EXTRA_ARGS+=("leader_nominal_z:=$spawn_z")
+  fi
+
+  echo "[run_support_follow_odom] Using live dji0 pose for support spawn x=${spawn_x} y=${spawn_y} z=${spawn_z} yaw_deg=${leader_yaw_deg}"
+}
+
+if ! add_live_leader_start_from_dji0_pose 5; then
+  echo "[run_support_follow_odom] Warning: could not capture live dji0 pose; support UAVs will use launch defaults for slot placement." >&2
+fi
+
+setsid ros2 launch lrs_halmstad support_follow_odom.launch.py world:="$WORLD" "${EXTRA_ARGS[@]}" &
 LAUNCH_PID=$!
 
 if [ "$FOLLOW_SIM" = true ]; then

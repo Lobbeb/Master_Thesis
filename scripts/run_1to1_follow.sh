@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
+SIM_SPAWN_WAYPOINT_FILE="$STATE_DIR/gazebo_sim.spawn_waypoint"
 BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 BAYLANDS_DEFAULT_NAV2_GOALS="parkinglot_west"
@@ -16,6 +17,43 @@ UAV_START_Z_VALUE="$DEFAULT_UAV_Z"
 UAV_NAME="dji0"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+
+resolve_baylands_amcl_waypoint_pose() {
+  local waypoint_name="$1"
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+import csv
+import math
+import sys
+
+name, *paths = sys.argv[1:]
+
+for path in paths:
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                waypoint_name = str(row.get("place", "")).strip()
+                if waypoint_name != name:
+                    continue
+                try:
+                    amcl_x = float(row["amcl_x"])
+                    amcl_y = float(row["amcl_y"])
+                    amcl_yaw = float(row["amcl_yaw"])
+                except (KeyError, TypeError, ValueError):
+                    raise SystemExit(1)
+
+                print(f"ugv_waypoint_name={waypoint_name!r}")
+                print(f"ugv_waypoint_distance_m={0.0:.9f}")
+                print(f"ugv_amcl_x={amcl_x:.9f}")
+                print(f"ugv_amcl_y={amcl_y:.9f}")
+                print(f"ugv_amcl_yaw_deg={math.degrees(amcl_yaw):.9f}")
+                raise SystemExit(0)
+    except FileNotFoundError:
+        continue
+
+raise SystemExit(1)
+PY
+}
 
 if [ -f "$SIM_WORLD_FILE" ]; then
   sim_world="$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)"
@@ -124,6 +162,9 @@ for arg in "$@"; do
       HAVE_UGV_GOAL_SEQUENCE="true"
       EXTRA_ARGS+=("$arg")
       ;;
+    params_file:=*)
+      EXTRA_ARGS+=("$arg")
+      ;;
     camera_leader_actual_pose_topic:=*)
       HAVE_CAMERA_LEADER_ACTUAL_POSE_TOPIC="true"
       EXTRA_ARGS+=("$arg")
@@ -208,6 +249,28 @@ add_ugv_initial_pose_from_baylands_waypoint_map() {
   local timeout_s="$1"
   local ugv_pose_env=""
   local amcl_pose_env=""
+  local spawn_waypoint=""
+
+  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ]; then
+    spawn_waypoint="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
+    if [ -n "$spawn_waypoint" ]; then
+      if amcl_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint")"; then
+        eval "$amcl_pose_env"
+        if [ "$HAVE_UGV_INITIAL_POSE_X" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_x:=$ugv_amcl_x")
+        fi
+        if [ "$HAVE_UGV_INITIAL_POSE_Y" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_y:=$ugv_amcl_y")
+        fi
+        if [ "$HAVE_UGV_INITIAL_POSE_YAW" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_yaw_deg:=$ugv_amcl_yaw_deg")
+        fi
+        echo "[run_1to1_follow] Using exact Baylands waypoint '$ugv_waypoint_name' for Nav2 initial pose x=${ugv_amcl_x} y=${ugv_amcl_y} yaw_deg=${ugv_amcl_yaw_deg}"
+        return 0
+      fi
+      echo "[run_1to1_follow] Warning: exact Baylands waypoint '$spawn_waypoint' has no usable AMCL pose; falling back to nearest world-position match." >&2
+    fi
+  fi
 
   ugv_pose_env="$(slam_state_capture_gazebo_pose_env "$WS_ROOT" "$WORLD" "$timeout_s")" || return 1
   eval "$ugv_pose_env"
@@ -267,8 +330,12 @@ PY
 
 if [ "$HAVE_UAV_START_X" = "false" ] && [ "$HAVE_UAV_START_Y" = "false" ]; then
   if [[ "$WORLD" == baylands* ]]; then
-    if ! add_uav_start_from_live_uav_pose 30; then
-      echo "[run_1to1_follow] Error: could not read the live UAV pose for Baylands, so refusing to invent a startup pose." >&2
+    if add_uav_start_from_live_uav_pose 30; then
+      :
+    elif add_uav_start_from_live_ugv_pose 10; then
+      echo "[run_1to1_follow] Warning: live UAV pose was not ready for Baylands start-up, so falling back to the live UGV-relative spawn pose." >&2
+    else
+      echo "[run_1to1_follow] Error: could not read the live UAV pose or the live UGV pose for Baylands, so refusing to invent a startup pose." >&2
       echo "[run_1to1_follow] Start Gazebo and spawn the UAV first, or pass explicit uav_start_x:=... uav_start_y:=... uav_start_z:=... uav_start_yaw_deg:=..." >&2
       exit 2
     fi

@@ -5,40 +5,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
+SIM_SPAWN_WAYPOINT_FILE="$STATE_DIR/gazebo_sim.spawn_waypoint"
 BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 BAYLANDS_DEFAULT_NAV2_GOALS="parkinglot_west"
 WORLD="warehouse"
 EXTRA_ARGS=()
 USE_ESTIMATE="true"
-USE_ACTUAL_HEADING=""
-HAVE_LEADER_ACTUAL_HEADING_ENABLE="false"
 USE_OBB="true"
 USE_TRACKER="true"
 EXTERNAL_DETECTION_NODE="detector"
-LEADER_RANGE_MODE="auto"
+RANGE_MODE="auto"
 START_OMNET_BRIDGE=""
-YOLO_CONTROL_MODE="visual_bridge"
+YOLO_CONTROL_MODE="follow_uav_estimate"
 WEIGHTS_REL=""
 MODEL_SUBDIR=""
 HAVE_UAV_START_X="false"
 HAVE_UAV_START_Y="false"
 HAVE_UAV_START_YAW="false"
 HAVE_UAV_START_Z="false"
-HAVE_LEADER_ACTUAL_POSE_ENABLE="false"
-HAVE_CAMERA_ACTUAL_POSE_REACQUIRE_ENABLE="false"
-HAVE_UGV_ODOM_TOPIC="false"
-HAVE_LEADER_ACTUAL_POSE_TOPIC="false"
-HAVE_CAMERA_LEADER_ACTUAL_POSE_TOPIC="false"
 HAVE_UGV_USE_AMCL_ODOM_FALLBACK="false"
-HAVE_START_UGV_GROUND_TRUTH_BRIDGE="false"
 HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="false"
 HAVE_PUBLISH_POSE_CMD_TOPICS="false"
 HAVE_PUBLISH_CAMERA_DEBUG_TOPICS="false"
 HAVE_YOLO_DEVICE="false"
 HAVE_UGV_START_DELAY="false"
 HAVE_DETECTOR_BACKEND="false"
-HAVE_LEADER_RANGE_MODE="false"
+HAVE_RANGE_MODE="false"
 HAVE_UGV_INITIAL_POSE_X="false"
 HAVE_UGV_INITIAL_POSE_Y="false"
 HAVE_UGV_INITIAL_POSE_YAW="false"
@@ -60,6 +53,43 @@ DEFAULT_UAV_Z="7.0"
 UAV_NAME="dji0"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+
+resolve_baylands_amcl_waypoint_pose() {
+  local waypoint_name="$1"
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+import csv
+import math
+import sys
+
+name, *paths = sys.argv[1:]
+
+for path in paths:
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                waypoint_name = str(row.get("place", "")).strip()
+                if waypoint_name != name:
+                    continue
+                try:
+                    amcl_x = float(row["amcl_x"])
+                    amcl_y = float(row["amcl_y"])
+                    amcl_yaw = float(row["amcl_yaw"])
+                except (KeyError, TypeError, ValueError):
+                    raise SystemExit(1)
+
+                print(f"ugv_waypoint_name={waypoint_name!r}")
+                print(f"ugv_waypoint_distance_m={0.0:.9f}")
+                print(f"ugv_amcl_x={amcl_x:.9f}")
+                print(f"ugv_amcl_y={amcl_y:.9f}")
+                print(f"ugv_amcl_yaw_deg={math.degrees(amcl_yaw):.9f}")
+                raise SystemExit(0)
+    except FileNotFoundError:
+        continue
+
+raise SystemExit(1)
+PY
+}
 
 case "$MODELS_ROOT" in
   "~")
@@ -134,43 +164,12 @@ for arg in "$@"; do
     yolo_control_mode:=*)
       YOLO_CONTROL_MODE="${arg#yolo_control_mode:=}"
       ;;
-    use_actual_heading:=*)
-      USE_ACTUAL_HEADING="${arg#use_actual_heading:=}"
-      ;;
-    leader_actual_heading_enable:=*)
-      USE_ACTUAL_HEADING="${arg#leader_actual_heading_enable:=}"
-      HAVE_LEADER_ACTUAL_HEADING_ENABLE="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    leader_actual_pose_enable:=*)
-      HAVE_LEADER_ACTUAL_POSE_ENABLE="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    camera_actual_pose_reacquire_enable:=*)
-      HAVE_CAMERA_ACTUAL_POSE_REACQUIRE_ENABLE="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    leader_actual_pose_topic:=*)
-      HAVE_LEADER_ACTUAL_POSE_TOPIC="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    leader_actual_heading_topic:=*)
-      EXTRA_ARGS+=("$arg")
-      ;;
-    camera_leader_actual_pose_topic:=*)
-      HAVE_CAMERA_LEADER_ACTUAL_POSE_TOPIC="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    ugv_odom_topic:=*)
-      HAVE_UGV_ODOM_TOPIC="true"
-      EXTRA_ARGS+=("$arg")
+    use_actual_heading:=*|leader_actual_heading_enable:=*|leader_actual_heading_topic:=*|leader_actual_pose_enable:=*|leader_actual_pose_topic:=*|camera_actual_pose_reacquire_enable:=*|camera_leader_actual_pose_topic:=*|ugv_odom_topic:=*|start_ugv_ground_truth_bridge:=*)
+      echo "Argument '$arg' is disabled in YOLO mode; the YOLO pipeline must not consume UGV odom, AMCL, or ground-truth pose." >&2
+      exit 2
       ;;
     ugv_use_amcl_odom_fallback:=*)
       HAVE_UGV_USE_AMCL_ODOM_FALLBACK="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    start_ugv_ground_truth_bridge:=*)
-      HAVE_START_UGV_GROUND_TRUTH_BRIDGE="true"
       EXTRA_ARGS+=("$arg")
       ;;
     ugv_initial_pose_x:=*)
@@ -195,6 +194,9 @@ for arg in "$@"; do
       ;;
     nav2_goals:=*|ugv_goal_sequence_file:=*|ugv_goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    params_file:=*)
       EXTRA_ARGS+=("$arg")
       ;;
     publish_follow_debug_topics:=*)
@@ -255,12 +257,8 @@ for arg in "$@"; do
       USE_CONDA="${arg#use_conda:=}"
       ;;
     range_mode:=*)
-      LEADER_RANGE_MODE="${arg#range_mode:=}"
-      HAVE_LEADER_RANGE_MODE="true"
-      ;;
-    leader_range_mode:=*)
-      LEADER_RANGE_MODE="${arg#leader_range_mode:=}"
-      HAVE_LEADER_RANGE_MODE="true"
+      RANGE_MODE="${arg#range_mode:=}"
+      HAVE_RANGE_MODE="true"
       ;;
     uav_start_x:=*)
       HAVE_UAV_START_X="true"
@@ -300,20 +298,24 @@ if [[ "$WORLD" == baylands* ]] && [ "$HAVE_UGV_GOAL_SEQUENCE" = "false" ]; then
   EXTRA_ARGS+=("nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS")
 fi
 
-if [ "$HAVE_LEADER_RANGE_MODE" = "false" ]; then
+if [ "$HAVE_RANGE_MODE" = "false" ]; then
   case "$START_OMNET_BRIDGE" in
     true|yes|1)
-      LEADER_RANGE_MODE="radio"
+      RANGE_MODE="radio"
       ;;
   esac
 fi
 
 case "$USE_ESTIMATE" in
-  true|false)
+  true)
+    ;;
+  false)
+    echo "use_estimate:=false is disabled for run_1to1_yolo; use the normal follow/odom launcher for odom follow." >&2
+    exit 2
     ;;
   *)
     echo "Invalid use_estimate option: $USE_ESTIMATE" >&2
-    echo "Use use_estimate:=true or use_estimate:=false" >&2
+    echo "Use use_estimate:=true" >&2
     exit 2
     ;;
 esac
@@ -338,18 +340,6 @@ case "$USE_OBB" in
     ;;
 esac
 
-if [ -n "$USE_ACTUAL_HEADING" ]; then
-  case "$USE_ACTUAL_HEADING" in
-    true|false)
-      ;;
-    *)
-      echo "Invalid use_actual_heading option: $USE_ACTUAL_HEADING" >&2
-      echo "Use use_actual_heading:=true or use_actual_heading:=false" >&2
-      exit 2
-      ;;
-  esac
-fi
-
 case "$USE_TRACKER" in
   true)
     EXTERNAL_DETECTION_NODE="tracker"
@@ -363,17 +353,17 @@ case "$USE_TRACKER" in
     ;;
 esac
 
-case "$LEADER_RANGE_MODE" in
+case "$RANGE_MODE" in
   auto|depth|radio|const)
     ;;
   *)
-    echo "Invalid range_mode option: $LEADER_RANGE_MODE" >&2
+    echo "Invalid range_mode option: $RANGE_MODE" >&2
     echo "Use range_mode:=auto|depth|radio|const" >&2
     exit 2
     ;;
 esac
 
-if [ "$USE_TRACKER" = true ]; then
+if [ "$USE_OBB" = true ]; then
   ARG_WEIGHTS_ROOT="obb"
 else
   ARG_WEIGHTS_ROOT="detection"
@@ -383,11 +373,7 @@ if [ "$YOLO_CONTROL_MODE" = "follow_uav_estimate" ]; then
   USE_ESTIMATE="true"
 fi
 
-if [ "$USE_ESTIMATE" = true ]; then
-  LEADER_MODE="estimate"
-else
-  LEADER_MODE="odom"
-fi
+LEADER_MODE="estimate"
 
 CONTROL_ARGS=()
 if [ "$YOLO_CONTROL_MODE" = "visual_bridge" ]; then
@@ -395,13 +381,6 @@ if [ "$YOLO_CONTROL_MODE" = "visual_bridge" ]; then
     "start_visual_actuation_bridge:=true"
     "start_visual_follow_point_generator:=true"
     "start_visual_follow_planner:=true"
-  )
-else
-  CONTROL_ARGS+=(
-    "start_visual_actuation_bridge:=false"
-    "start_visual_follow_point_generator:=false"
-    "start_visual_follow_planner:=false"
-    "start_visual_follow_controller:=false"
   )
 fi
 
@@ -467,14 +446,6 @@ if [ "$HAVE_DETECTOR_BACKEND" != true ] && [ "$USE_OBB" = true ]; then
   fi
 fi
 
-if [ "$USE_ESTIMATE" = true ]; then
-  if [ -z "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then
-    EXTRA_ARGS+=("leader_actual_heading_enable:=false")
-  elif [ -n "$USE_ACTUAL_HEADING" ] && [ "$HAVE_LEADER_ACTUAL_HEADING_ENABLE" != true ]; then
-    EXTRA_ARGS+=("leader_actual_heading_enable:=$USE_ACTUAL_HEADING")
-  fi
-fi
-
 LIVE_UAV_POSE_TIMEOUT_S=5
 if [[ "$WORLD" == baylands* ]]; then
   LIVE_UAV_POSE_TIMEOUT_S=30
@@ -529,6 +500,28 @@ add_ugv_initial_pose_from_baylands_waypoint_map() {
   local timeout_s="$1"
   local ugv_pose_env=""
   local amcl_pose_env=""
+  local spawn_waypoint=""
+
+  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ]; then
+    spawn_waypoint="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
+    if [ -n "$spawn_waypoint" ]; then
+      if amcl_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint")"; then
+        eval "$amcl_pose_env"
+        if [ "$HAVE_UGV_INITIAL_POSE_X" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_x:=$ugv_amcl_x")
+        fi
+        if [ "$HAVE_UGV_INITIAL_POSE_Y" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_y:=$ugv_amcl_y")
+        fi
+        if [ "$HAVE_UGV_INITIAL_POSE_YAW" = "false" ]; then
+          EXTRA_ARGS+=("ugv_initial_pose_yaw_deg:=$ugv_amcl_yaw_deg")
+        fi
+        echo "[run_1to1_yolo] Using exact Baylands waypoint '$ugv_waypoint_name' for Nav2 initial pose x=${ugv_amcl_x} y=${ugv_amcl_y} yaw_deg=${ugv_amcl_yaw_deg}"
+        return 0
+      fi
+      echo "[run_1to1_yolo] Warning: exact Baylands waypoint '$spawn_waypoint' has no usable AMCL pose; falling back to nearest world-position match." >&2
+    fi
+  fi
 
   ugv_pose_env="$(slam_state_capture_gazebo_pose_env "$WS_ROOT" "$WORLD" "$timeout_s")" || return 1
   eval "$ugv_pose_env"
@@ -587,35 +580,12 @@ PY
 }
 
 if [[ "$WORLD" == baylands* ]]; then
-  UGV_NAMESPACE="$(slam_state_namespace "$WS_ROOT" 2>/dev/null || true)"
-  if [ -z "$UGV_NAMESPACE" ]; then
-    UGV_NAMESPACE="a201_0000"
-  fi
   if ! add_ugv_initial_pose_from_baylands_waypoint_map 10; then
     echo "[run_1to1_yolo] Warning: could not resolve the live UGV world pose to a Baylands waypoint; Nav2 initial pose will use launch defaults." >&2
-  fi
-  if [ "$HAVE_UGV_ODOM_TOPIC" != "true" ]; then
-    EXTRA_ARGS+=("ugv_odom_topic:=/$UGV_NAMESPACE/ground_truth/odom")
-  fi
-  if [ "$HAVE_LEADER_ACTUAL_POSE_TOPIC" != "true" ]; then
-    EXTRA_ARGS+=("leader_actual_pose_topic:=/$UGV_NAMESPACE/ground_truth/odom")
-  fi
-  if [ "$HAVE_CAMERA_LEADER_ACTUAL_POSE_TOPIC" != "true" ]; then
-    EXTRA_ARGS+=("camera_leader_actual_pose_topic:=/$UGV_NAMESPACE/ground_truth/odom")
   fi
   if [ "$HAVE_UGV_USE_AMCL_ODOM_FALLBACK" != "true" ]; then
     EXTRA_ARGS+=("ugv_use_amcl_odom_fallback:=false")
   fi
-  if [ "$HAVE_START_UGV_GROUND_TRUTH_BRIDGE" != "true" ]; then
-    EXTRA_ARGS+=("start_ugv_ground_truth_bridge:=true")
-  fi
-fi
-
-if [ "$HAVE_LEADER_ACTUAL_POSE_ENABLE" != true ]; then
-  EXTRA_ARGS+=("leader_actual_pose_enable:=false")
-fi
-if [ "$HAVE_CAMERA_ACTUAL_POSE_REACQUIRE_ENABLE" != true ]; then
-  EXTRA_ARGS+=("camera_actual_pose_reacquire_enable:=false")
 fi
 if [ "$HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS" != true ]; then
   EXTRA_ARGS+=("publish_follow_debug_topics:=false")
@@ -632,19 +602,6 @@ fi
 if [ "$HAVE_UGV_START_DELAY" != true ]; then
   EXTRA_ARGS+=("ugv_start_delay_s:=12.0")
 fi
-if [ "$HAVE_START_VISUAL_ACTUATION_BRIDGE" != true ]; then
-  EXTRA_ARGS+=("start_visual_actuation_bridge:=false")
-fi
-if [ "$HAVE_START_VISUAL_FOLLOW_CONTROLLER" != true ]; then
-  EXTRA_ARGS+=("start_visual_follow_controller:=false")
-fi
-if [ "$HAVE_START_VISUAL_FOLLOW_POINT_GENERATOR" != true ]; then
-  EXTRA_ARGS+=("start_visual_follow_point_generator:=false")
-fi
-if [ "$HAVE_START_VISUAL_FOLLOW_PLANNER" != true ]; then
-  EXTRA_ARGS+=("start_visual_follow_planner:=false")
-fi
-
 case "$USE_CONDA" in
   ""|true|false)
     ;;
@@ -689,7 +646,7 @@ ros2 launch lrs_halmstad run_follow.launch.py \
   start_leader_estimator:=true \
   external_detection_enable:=true \
   external_detection_node:="$EXTERNAL_DETECTION_NODE" \
-  leader_range_mode:="$LEADER_RANGE_MODE" \
+  range_mode:="$RANGE_MODE" \
   yolo_weights:="$WEIGHTS_REL" \
   "${EXTRA_ARGS[@]}" \
   "${CONTROL_ARGS[@]}" \

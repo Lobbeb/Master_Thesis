@@ -175,7 +175,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
-      resolution: 0.06
+      resolution: 0.2
       track_unknown_space: true
       always_send_full_costmap: false
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]

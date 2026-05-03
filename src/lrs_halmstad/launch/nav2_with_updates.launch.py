@@ -7,6 +7,7 @@ from clearpath_config.common.utils.yaml import read_yaml
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -60,11 +61,18 @@ ARGUMENTS = [
         default_value="",
         description="Override the default Nav2 params YAML",
     ),
+    DeclareLaunchArgument(
+        "start_teleop_base",
+        default_value="true",
+        choices=["true", "false"],
+        description="Start Clearpath teleop_base so twist_mux forwards Nav2 cmd_vel to platform/cmd_vel.",
+    ),
 ]
 
 
 def launch_setup(context, *args, **kwargs):
     pkg_clearpath_nav2_demos = get_package_share_directory("clearpath_nav2_demos")
+    pkg_clearpath_control = get_package_share_directory("clearpath_control")
     pkg_nav2_bringup = get_package_share_directory("nav2_bringup")
 
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -85,6 +93,7 @@ def launch_setup(context, *args, **kwargs):
     pc2ls_transform_tolerance = LaunchConfiguration("pc2ls_transform_tolerance")
     pc2ls_use_inf = LaunchConfiguration("pc2ls_use_inf")
     params_file = LaunchConfiguration("params_file")
+    start_teleop_base = LaunchConfiguration("start_teleop_base")
 
     config = read_yaml(os.path.join(setup_path.perform(context), "robot.yaml"))
     clearpath_config = ClearpathConfig(config)
@@ -114,6 +123,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     launch_nav2 = PathJoinSubstitution([pkg_nav2_bringup, "launch", "navigation_launch.py"])
+    launch_teleop_base = PathJoinSubstitution([pkg_clearpath_control, "launch", "teleop_base.launch.py"])
 
     converter_node = None
     if use_pointcloud_to_laserscan.perform(context) == "true" and len(eval_pointcloud_topic) != 0:
@@ -160,6 +170,16 @@ def launch_setup(context, *args, **kwargs):
                 ("use_composition", "False"),
                 ("namespace", namespace),
             ],
+        )
+    )
+    group_actions.append(
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(launch_teleop_base),
+            launch_arguments=[
+                ("setup_path", setup_path),
+                ("use_sim_time", use_sim_time),
+            ],
+            condition=IfCondition(start_teleop_base),
         )
     )
 

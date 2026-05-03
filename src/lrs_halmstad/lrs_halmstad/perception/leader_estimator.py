@@ -8,8 +8,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import PoseStamped, Vector3Stamped
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
@@ -26,6 +25,7 @@ from lrs_halmstad.common.selected_target_state import (
 from lrs_halmstad.common.ros_params import yaml_param
 from lrs_halmstad.follow.follow_math import (
     Pose3D,
+    Pose2D,
     coerce_bool,
     horizontal_distance_for_euclidean,
     quat_from_yaw,
@@ -65,7 +65,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.status_topic = str(yaml_param(self, "status_topic")).strip()
         self.distance_status_topic = "/coord/leader_distance_debug"
         self.fault_status_topic = str(yaml_param(self, "fault_status_topic")).strip()
-        self.estimate_error_topic = str(yaml_param(self, "estimate_error_topic")).strip()
         self.event_topic = str(yaml_param(self, "event_topic")).strip()
         self.debug_image_topic = str(yaml_param(self, "debug_image_topic")).strip()
         self.selected_target_topic = "/coord/leader_selected_target"
@@ -81,10 +80,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.publish_debug_image = coerce_bool(yaml_param(self, "publish_debug_image"))
         self.publish_events = coerce_bool(yaml_param(self, "publish_events"))
 
-        self.leader_actual_pose_enable = coerce_bool(yaml_param(self, "leader_actual_pose_enable"))
-        self.leader_actual_pose_topic = str(yaml_param(self, "leader_actual_pose_topic")).strip()
-        self.leader_actual_pose_timeout_s = float(yaml_param(self, "leader_actual_pose_timeout_s", descriptor=dyn_num))
-
         self.est_hz = float(yaml_param(self, "est_hz", descriptor=dyn_num))
         self.image_timeout_s = float(yaml_param(self, "image_timeout_s", descriptor=dyn_num))
         self.uav_pose_timeout_s = float(yaml_param(self, "uav_pose_timeout_s", descriptor=dyn_num))
@@ -94,10 +89,8 @@ class LeaderEstimator(EventEmitterMixin, Node):
         )
 
         self.d_target = float(yaml_param(self, "d_target", descriptor=dyn_num))
-        self.declare_parameter("leader_range_mode", "")
-        leader_range_mode = str(self.get_parameter("leader_range_mode").value).strip().lower()
         self.declare_parameter("constant_range_m", 5.0, dyn_num)
-        self.range_mode = leader_range_mode or str(yaml_param(self, "range_mode")).strip().lower()
+        self.range_mode = str(yaml_param(self, "range_mode")).strip().lower()
         self.depth_scale = float(yaml_param(self, "depth_scale", descriptor=dyn_num))
         self.depth_timeout_s = float(yaml_param(self, "depth_timeout_s", descriptor=dyn_num))
         self.depth_patch_min_valid_px = max(1, int(yaml_param(self, "depth_patch_min_valid_px", descriptor=dyn_num)))
@@ -130,8 +123,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
             raise ValueError("external_detection_timeout_s must be > 0")
         if self.external_detection_max_latency_ms < 0.0:
             raise ValueError("external_detection_max_latency_ms must be >= 0")
-        if self.leader_actual_pose_timeout_s <= 0.0:
-            raise ValueError("leader_actual_pose_timeout_s must be > 0")
         if self.constant_range_m <= 0.0 and self.d_target <= 0.0:
             raise ValueError("either d_target or constant_range_m must be > 0")
         if self.range_mode not in ("auto", "depth", "const", "radio"):
@@ -161,17 +152,11 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.last_follow_debug_heading_yaw: Optional[float] = None
         self.last_follow_debug_heading_source: str = ""
         self.last_follow_debug_heading_stamp: Optional[Time] = None
-        self.last_actual_leader_pose: Optional[Pose3D] = None
-        self.last_actual_leader_pose_frame_id: str = ""
-        self.last_actual_leader_pose_stamp: Optional[Time] = None
         self.last_radio_range_m: Optional[float] = None
         self.last_radio_range_stamp: Optional[Time] = None
         self.last_estimate_pose: Optional[Pose3D] = None
         self.last_estimate_stamp: Optional[Time] = None
         self.last_estimate_track_id: Optional[int] = None
-        self.last_estimate_error_dx_m: Optional[float] = None
-        self.last_estimate_error_dy_m: Optional[float] = None
-        self.last_estimate_error_m: Optional[float] = None
         self.prev_heading_yaw: Optional[float] = None
 
         self.last_det_conf: float = -1.0
@@ -187,7 +172,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.last_fault_state: str = "none"
         self.last_fault_reason: str = "none"
         self.last_fault_stamp: Optional[Time] = None
-        self._estimate_error_frame_warn_logged = False
         self.last_debug_state: str = "INIT"
         self.last_debug_det: Optional[Detection2D] = None
         self.audit_ticks_total = 0
@@ -224,11 +208,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
             self.on_follow_debug_heading_yaw,
             10,
         )
-        self.actual_leader_pose_sub = (
-            self.create_subscription(Odometry, self.leader_actual_pose_topic, self.on_actual_leader_pose, 10)
-            if self.leader_actual_pose_enable
-            else None
-        )
         self.radio_range_sub = (
             self.create_subscription(Float64, self.radio_range_topic, self.on_radio_range, 10)
             if self.radio_range_topic
@@ -245,11 +224,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.selected_target_pub = (
             self.create_publisher(Detection2DArray, self.selected_target_topic, 10)
             if self.publish_selected_target
-            else None
-        )
-        self.estimate_error_pub = (
-            self.create_publisher(Vector3Stamped, self.estimate_error_topic, 10)
-            if self.leader_actual_pose_enable
             else None
         )
         fault_qos = QoSProfile(
@@ -437,21 +411,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         except Exception:
             self.last_uav_pose_stamp = self.get_clock().now()
 
-    def on_actual_leader_pose(self, msg: Odometry) -> None:
-        p = msg.pose.pose.position
-        q = msg.pose.pose.orientation
-        self.last_actual_leader_pose_frame_id = str(msg.header.frame_id or "").strip()
-        self.last_actual_leader_pose = Pose3D(
-            x=float(p.x),
-            y=float(p.y),
-            z=float(p.z),
-            yaw=yaw_from_quat(float(q.x), float(q.y), float(q.z), float(q.w)),
-        )
-        try:
-            self.last_actual_leader_pose_stamp = Time.from_msg(msg.header.stamp)
-        except Exception:
-            self.last_actual_leader_pose_stamp = self.get_clock().now()
-
     def on_radio_range(self, msg: Float64) -> None:
         val = float(msg.data)
         if math.isfinite(val) and val > 0.0:
@@ -589,11 +548,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
     def uav_pose_fresh(self, now: Time) -> bool:
         return self.uav_pose is not None and self._is_fresh(self.last_uav_pose_stamp, self.uav_pose_timeout_s, now)
 
-    def actual_leader_pose_fresh(self, now: Time) -> bool:
-        if not self.leader_actual_pose_enable:
-            return False
-        return self._is_fresh(self.last_actual_leader_pose_stamp, self.leader_actual_pose_timeout_s, now)
-
     def external_detection_fresh(self, now: Time) -> bool:
         return self._is_fresh(self.last_external_det_stamp, self.external_detection_timeout_s, now)
 
@@ -708,11 +662,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         yaw_a = self._unwrap_angle_near(yaw_a, self.prev_heading_yaw)
         yaw_b = self._unwrap_angle_near(yaw_b, self.prev_heading_yaw)
         return yaw_a if abs(yaw_a - self.prev_heading_yaw) <= abs(yaw_b - self.prev_heading_yaw) else yaw_b
-
-    def _actual_leader_yaw_for_heading(self, now: Time) -> Optional[float]:
-        if self.last_actual_leader_pose is None or not self.actual_leader_pose_fresh(now):
-            return None
-        return self.last_actual_leader_pose.yaw
 
     def _ground_point_from_pixel(self, u: float, v: float, cam: CameraModel) -> Optional[Tuple[float, float]]:
         assert self.uav_pose is not None
@@ -899,13 +848,7 @@ class LeaderEstimator(EventEmitterMixin, Node):
 
         heading_source = "fallback"
         yaw = self.prev_heading_yaw if self.prev_heading_yaw is not None else self.uav_pose.yaw
-        actual_heading_yaw = self._actual_leader_yaw_for_heading(now)
-        if actual_heading_yaw is not None:
-            # In sim truth-assisted runs, prefer the real body-yaw frame for the
-            # follow anchor. OBB yaw is bidirectional and can flip the anchor side.
-            yaw = actual_heading_yaw
-            heading_source = "actual_pose"
-        elif det.obb_heading_yaw is not None:
+        if det.obb_heading_yaw is not None:
             yaw = self._resolve_bidirectional_heading(det.obb_heading_yaw)
             heading_source = "obb"
         elif det.obb_corners is not None:
@@ -944,58 +887,12 @@ class LeaderEstimator(EventEmitterMixin, Node):
         self.last_estimate_stamp = now
         self.last_estimate_track_id = track_id
         self.prev_heading_yaw = pose.yaw
-        self._publish_estimate_error(pose, now, frame_id)
-
-    def _publish_estimate_error(self, est_pose: Pose3D, now: Time, estimate_frame_id: str) -> None:
-        if not self.leader_actual_pose_enable or self.estimate_error_pub is None:
-            self.last_estimate_error_dx_m = None
-            self.last_estimate_error_dy_m = None
-            self.last_estimate_error_m = None
-            return
-        if not self.actual_leader_pose_fresh(now) or self.last_actual_leader_pose is None:
-            self.last_estimate_error_dx_m = None
-            self.last_estimate_error_dy_m = None
-            self.last_estimate_error_m = None
-            return
-        actual_frame_id = self.last_actual_leader_pose_frame_id or estimate_frame_id
-        if actual_frame_id != estimate_frame_id:
-            self.last_estimate_error_dx_m = None
-            self.last_estimate_error_dy_m = None
-            self.last_estimate_error_m = None
-            if not self._estimate_error_frame_warn_logged:
-                self.get_logger().warn(
-                    "[leader_estimator] Skipping estimate_error: "
-                    f"estimate frame '{estimate_frame_id}' differs from actual pose frame '{actual_frame_id}'"
-                )
-                self._estimate_error_frame_warn_logged = True
-            return
-        self._estimate_error_frame_warn_logged = False
-        dx = est_pose.x - self.last_actual_leader_pose.x
-        dy = est_pose.y - self.last_actual_leader_pose.y
-        planar = math.hypot(dx, dy)
-        self.last_estimate_error_dx_m = dx
-        self.last_estimate_error_dy_m = dy
-        self.last_estimate_error_m = planar
-        msg = Vector3Stamped()
-        msg.header.stamp = now.to_msg()
-        msg.header.frame_id = estimate_frame_id
-        msg.vector.x = float(dx)
-        msg.vector.y = float(dy)
-        msg.vector.z = float(planar)
-        self.estimate_error_pub.publish(msg)
 
     def _status_line(self, state: str, reason: str, now: Time, *, audit_origin: str = "none") -> str:
         reason = str(reason).strip() or "none"
-        err_dx = "na" if self.last_estimate_error_dx_m is None else f"{self.last_estimate_error_dx_m:.2f}"
-        err_dy = "na" if self.last_estimate_error_dy_m is None else f"{self.last_estimate_error_dy_m:.2f}"
-        err_planar = "na" if self.last_estimate_error_m is None else f"{self.last_estimate_error_m:.2f}"
         est_d, est_xy = self._estimated_distance_values(now)
-        real_d, real_xy, real_z = self._actual_distance_values(now)
         est_d_text = "na" if est_d is None else f"{est_d:.2f}"
         est_xy_text = "na" if est_xy is None else f"{est_xy:.2f}"
-        real_d_text = "na" if real_d is None else f"{real_d:.2f}"
-        real_xy_text = "na" if real_xy is None else f"{real_xy:.2f}"
-        real_z_text = "na" if real_z is None else f"{real_z:.2f}"
         return (
             f"state={state} reason={reason} "
             f"audit_origin={audit_origin} "
@@ -1011,28 +908,18 @@ class LeaderEstimator(EventEmitterMixin, Node):
             f"audit_ticks={self.audit_ticks_total} audit_ok={self.audit_ok_total} "
             f"audit_no_det={self.audit_no_det_total} audit_stale={self.audit_stale_total} "
             f"audit_estimate_fail={self.audit_estimate_fail_total} "
-            f"est_d_m={est_d_text} est_xy_m={est_xy_text} "
-            f"real_d_m={real_d_text} real_xy_m={real_xy_text} real_z_m={real_z_text} "
-            f"err_dx_m={err_dx} err_dy_m={err_dy} err_planar_m={err_planar}"
+            f"est_d_m={est_d_text} est_xy_m={est_xy_text}"
         )
 
     def _distance_status_line(self, now: Time) -> str:
         est_d, est_xy = self._estimated_distance_values(now)
-        real_d, real_xy, real_z = self._actual_distance_values(now)
         range_m_text = "na" if self.last_range_used_m < 0.0 else f"{self.last_range_used_m:.2f}"
         est_d_text = "na" if est_d is None else f"{est_d:.2f}"
         est_xy_text = "na" if est_xy is None else f"{est_xy:.2f}"
-        real_d_text = "na" if real_d is None else f"{real_d:.2f}"
-        real_xy_text = "na" if real_xy is None else f"{real_xy:.2f}"
-        real_z_text = "na" if real_z is None else f"{real_z:.2f}"
-        err_d_text = "na" if est_d is None or real_d is None else f"{(est_d - real_d):.2f}"
-        err_xy_text = "na" if est_xy is None or real_xy is None else f"{(est_xy - real_xy):.2f}"
         return (
             f"range_src={self.last_range_source} range_m={range_m_text} projection={self.last_projection_mode} "
             f"depth_raw_m={self.last_depth_raw_m:.2f} tilt_deg={self.last_projection_tilt_deg:.1f} "
-            f"est_d_m={est_d_text} est_xy_m={est_xy_text} "
-            f"real_d_m={real_d_text} real_xy_m={real_xy_text} real_z_m={real_z_text} "
-            f"err_d_m={err_d_text} err_xy_m={err_xy_text}"
+            f"est_d_m={est_d_text} est_xy_m={est_xy_text}"
         )
 
     def _detection_status_overlay_lines(self, now: Time) -> list[str]:
@@ -1105,16 +992,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
             return (0, 165, 255)
         return (0, 0, 255)
 
-    def _actual_pose_line(self, now: Time) -> str:
-        if self.last_actual_leader_pose is None or not self.actual_leader_pose_fresh(now):
-            return "actual: na"
-        return (
-            f"actual: ("
-            f"{self.last_actual_leader_pose.x:.2f},"
-            f"{self.last_actual_leader_pose.y:.2f},"
-            f"{self.last_actual_leader_pose.yaw:.2f})"
-        )
-
     def _estimated_distance_values(self, now: Time) -> tuple[Optional[float], Optional[float]]:
         if self.uav_pose is None or not self.uav_pose_fresh(now):
             return None, None
@@ -1134,29 +1011,6 @@ class LeaderEstimator(EventEmitterMixin, Node):
         return [
             f"est_d: {est_d:.2f}m",
             f"est_xy: {est_xy:.2f}m",
-        ]
-
-    def _actual_distance_values(self, now: Time) -> tuple[Optional[float], Optional[float], Optional[float]]:
-        if self.uav_pose is None or not self.uav_pose_fresh(now):
-            return None, None, None
-        if self.last_actual_leader_pose is None or not self.actual_leader_pose_fresh(now):
-            return None, None, None
-        dx = self.last_actual_leader_pose.x - self.uav_pose.x
-        dy = self.last_actual_leader_pose.y - self.uav_pose.y
-        dz = self.last_actual_leader_pose.z - self.uav_pose.z
-        real_xy = math.hypot(dx, dy)
-        real_z = abs(dz)
-        real_d = math.hypot(real_xy, real_z)
-        return real_d, real_xy, real_z
-
-    def _actual_range_lines(self, now: Time) -> list[str]:
-        real_d, real_xy, real_z = self._actual_distance_values(now)
-        if real_d is None or real_xy is None or real_z is None:
-            return ["real_d: na", "real_xy: na", "real_z: na"]
-        return [
-            f"real_d: {real_d:.2f}m",
-            f"real_xy: {real_xy:.2f}m",
-            f"real_z: {real_z:.2f}m",
         ]
 
     def _draw_debug_text(
@@ -1215,9 +1069,7 @@ class LeaderEstimator(EventEmitterMixin, Node):
                     estimate_lines.append(
                         f"est: ({self.last_estimate_pose.x:.2f},{self.last_estimate_pose.y:.2f},{self.last_estimate_pose.yaw:.2f})"
                     )
-                estimate_lines.append(self._actual_pose_line(now))
                 estimate_lines.extend(self._estimated_distance_lines(now))
-                estimate_lines.extend(self._actual_range_lines(now))
                 estimate_lines.extend([
                     f"range_src: {self.last_range_source}",
                     f"proj: {self.last_projection_mode}",

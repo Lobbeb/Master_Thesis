@@ -240,20 +240,31 @@ def _optional_bool_from_launch(context, name: str):
 
 def _build_camera_tracker_node(context, *args, **kwargs):
     camera_params = _load_node_params_from_yaml(context, 'camera_tracker')
+    leader_mode = _launch_str(context, 'leader_mode').strip().lower()
+    actual_reacquire_enable = (
+        _launch_bool(context, 'camera_actual_pose_reacquire_enable')
+        if leader_mode == 'odom'
+        else False
+    )
+    actual_pose_topic = (
+        _launch_str(context, 'camera_leader_actual_pose_topic')
+        if leader_mode == 'odom' and actual_reacquire_enable
+        else ''
+    )
     camera_params.update({
         'use_sim_time': True,
         'uav_name': LaunchConfiguration('uav_name'),
         'leader_input_type': LaunchConfiguration('leader_mode'),
         'leader_odom_topic': LaunchConfiguration('ugv_odom_topic'),
         'leader_pose_topic': LaunchConfiguration('leader_pose_topic'),
-        'leader_actual_pose_topic': LaunchConfiguration('camera_leader_actual_pose_topic'),
+        'leader_actual_pose_topic': actual_pose_topic,
         'leader_status_topic': '/coord/leader_estimate_status',
         'uav_camera_mode': LaunchConfiguration('uav_camera_mode'),
         'camera_mount_pitch_deg': LaunchConfiguration('camera_mount_pitch_deg'),
         'default_tilt_deg': LaunchConfiguration('camera_default_tilt_deg'),
         'camera_yaw_offset_deg': LaunchConfiguration('camera_yaw_offset_deg'),
         'camera_pan_sign': LaunchConfiguration('camera_pan_sign'),
-        'actual_pose_reacquire_enable': _bool_param('camera_actual_pose_reacquire_enable'),
+        'actual_pose_reacquire_enable': actual_reacquire_enable,
         'publish_debug_topics': _bool_param('publish_camera_debug_topics'),
     })
     pan_enable = _optional_bool_from_launch(context, 'pan_enable')
@@ -351,6 +362,40 @@ def _build_follow_estimate_node(context, *args, **kwargs):
             name='follow_uav',
             output='screen',
             parameters=[follow_params],
+        )
+    ]
+
+
+def _build_leader_estimator_node(context, *args, **kwargs):
+    estimator_params = _load_node_params_from_yaml(context, 'leader_estimator')
+    for truth_key in (
+        'leader_actual_pose_enable',
+        'leader_actual_pose_topic',
+        'leader_actual_pose_timeout_s',
+        'estimate_error_topic',
+    ):
+        estimator_params.pop(truth_key, None)
+    estimator_params.update({
+        'use_sim_time': True,
+        'uav_name': _launch_str(context, 'uav_name'),
+        'camera_topic': _launch_str(context, 'leader_image_topic'),
+        'camera_info_topic': _launch_str(context, 'leader_camera_info_topic'),
+        'depth_topic': _launch_str(context, 'leader_depth_topic'),
+        'uav_pose_topic': _launch_str(context, 'leader_uav_pose_topic'),
+        'external_detection_topic': _launch_str(context, 'external_detection_topic'),
+        'external_detection_max_latency_ms': _launch_float(context, 'detector_stale_detection_threshold_ms'),
+        'event_topic': _launch_str(context, 'event_topic'),
+    })
+    range_mode = _launch_str(context, 'range_mode').strip()
+    if range_mode:
+        estimator_params['range_mode'] = range_mode
+    return [
+        Node(
+            package='lrs_halmstad',
+            executable='leader_estimator',
+            name='leader_estimator',
+            output='screen',
+            parameters=[estimator_params],
         )
     ]
 
@@ -493,7 +538,10 @@ def _build_omnet_nodes(context, *args, **kwargs):
 
 
 def _build_ugv_ground_truth_bridge_node(context, *args, **kwargs):
-    if not _launch_bool(context, 'start_ugv_ground_truth_bridge'):
+    if not (
+        _launch_bool(context, 'start_ugv_ground_truth_bridge')
+        or _launch_bool(context, 'start_omnet_bridge')
+    ):
         return []
 
     ugv_ns = LaunchConfiguration('ugv_namespace').perform(context).strip() or 'a201_0000'
@@ -731,15 +779,8 @@ def generate_launch_description():
     )
     start_ugv_ground_truth_bridge_arg = DeclareLaunchArgument(
         'start_ugv_ground_truth_bridge',
-        default_value=_default_world_value(
-            LaunchConfiguration('world'),
-            'false',
-            'false',
-            'false',
-            'false',
-            baylands_value='true',
-        ),
-        description='Publish /<ugv_namespace>/ground_truth/(pose|odom) from Gazebo world poses.',
+        default_value='false',
+        description='Publish /<ugv_namespace>/ground_truth/(pose|odom) from Gazebo world poses. Also enabled automatically when start_omnet_bridge:=true.',
     )
     ugv_use_amcl_odom_fallback_arg = DeclareLaunchArgument(
         'ugv_use_amcl_odom_fallback',
@@ -760,20 +801,12 @@ def generate_launch_description():
     )
     leader_actual_pose_topic_arg = DeclareLaunchArgument(
         'leader_actual_pose_topic',
-        default_value=PythonExpression([
-            "'/' + '", LaunchConfiguration('ugv_namespace'), "' + '/ground_truth/odom'"
-            " if '", LaunchConfiguration('world'), "'.startswith('baylands') else "
-            "'/' + '", LaunchConfiguration('ugv_namespace'), "' + '/amcl_pose_odom'",
-        ]),
+        default_value='',
     )
     camera_leader_actual_pose_topic_arg = DeclareLaunchArgument(
         'camera_leader_actual_pose_topic',
-        default_value=PythonExpression([
-            "'/' + '", LaunchConfiguration('ugv_namespace'), "' + '/ground_truth/odom'"
-            " if '", LaunchConfiguration('world'), "'.startswith('baylands') else "
-            "'/' + '", LaunchConfiguration('ugv_namespace'), "' + '/platform/odom/filtered'",
-        ]),
-        description='Odom-frame leader pose used by camera_tracker for camera-only reacquisition.',
+        default_value='',
+        description='Deprecated: odom-frame leader pose for camera-only reacquisition in odom mode.',
     )
     leader_actual_pose_enable_arg = DeclareLaunchArgument(
         'leader_actual_pose_enable',
@@ -827,7 +860,11 @@ def generate_launch_description():
         'leader_uav_pose_topic',
         default_value=['/', LaunchConfiguration('uav_name'), '/pose'],
     )
-    leader_range_mode_arg = DeclareLaunchArgument('leader_range_mode', default_value='')
+    range_mode_arg = DeclareLaunchArgument(
+        'range_mode',
+        default_value='',
+        description='Optional leader_estimator range source override: auto|depth|radio|const. Empty uses params_file YAML.',
+    )
     target_class_name_arg = DeclareLaunchArgument('target_class_name', default_value='')
     target_class_id_arg = DeclareLaunchArgument('target_class_id', default_value='-1')
     yolo_weights_arg = DeclareLaunchArgument(
@@ -1058,29 +1095,9 @@ def generate_launch_description():
         ],
     )
 
-    estimator_node = Node(
-        package='lrs_halmstad',
-        executable='leader_estimator',
-        name='leader_estimator',
-        output='screen',
+    estimator_node = OpaqueFunction(
+        function=_build_leader_estimator_node,
         condition=_estimator_condition(),
-        parameters=[
-            LaunchConfiguration('params_file'),
-            {
-                'use_sim_time': True,
-                'uav_name': LaunchConfiguration('uav_name'),
-                'camera_topic': LaunchConfiguration('leader_image_topic'),
-                'camera_info_topic': LaunchConfiguration('leader_camera_info_topic'),
-                'depth_topic': LaunchConfiguration('leader_depth_topic'),
-                'uav_pose_topic': LaunchConfiguration('leader_uav_pose_topic'),
-                'leader_range_mode': LaunchConfiguration('leader_range_mode'),
-                'leader_actual_pose_topic': LaunchConfiguration('leader_actual_pose_topic'),
-                'leader_actual_pose_enable': _bool_param('leader_actual_pose_enable'),
-                'external_detection_topic': LaunchConfiguration('external_detection_topic'),
-                'external_detection_max_latency_ms': LaunchConfiguration('detector_stale_detection_threshold_ms'),
-                'event_topic': LaunchConfiguration('event_topic'),
-            },
-        ],
     )
 
     follow_odom_node = OpaqueFunction(
@@ -1152,6 +1169,7 @@ def generate_launch_description():
                 'prefer_target_pose_position': _bool_param('follow_point_prefer_target_pose_position'),
                 'prefer_target_pose_heading': _bool_param('follow_point_prefer_target_pose_heading'),
                 'follow_core_alignment_enable': _visual_follow_logic_follow_core_param(),
+                'uav_start_z': LaunchConfiguration('uav_start_z'),
             },
         ],
     )
@@ -1350,7 +1368,7 @@ def generate_launch_description():
         leader_camera_info_topic_arg,
         leader_depth_topic_arg,
         leader_uav_pose_topic_arg,
-        leader_range_mode_arg,
+        range_mode_arg,
         target_class_name_arg,
         target_class_id_arg,
         yolo_weights_arg,

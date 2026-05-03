@@ -4,6 +4,8 @@ set -euo pipefail
 STATE_DIR="/tmp/halmstad_ws"
 SIM_PID_FILE="$STATE_DIR/gazebo_sim.pid"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
+SIM_SPAWN_WAYPOINT_FILE="$STATE_DIR/gazebo_sim.spawn_waypoint"
+CONTROLLER_RECOVERY_PID_FILE="$STATE_DIR/gazebo_sim.controller_recovery.pid"
 TMUX_STATE_DIR="$STATE_DIR/tmux_sessions"
 WORLD="warehouse"
 SESSION=""
@@ -148,7 +150,7 @@ lookup_saved_pane_id() {
 }
 
 cleanup_state_files() {
-  rm -f "$SESSION_STATE_FILE" "$SIM_PID_FILE" "$SIM_WORLD_FILE"
+  rm -f "$SESSION_STATE_FILE" "$SIM_PID_FILE" "$SIM_WORLD_FILE" "$SIM_SPAWN_WAYPOINT_FILE" "$CONTROLLER_RECOVERY_PID_FILE"
 }
 
 signal_process_group_from_pid_file() {
@@ -204,15 +206,26 @@ signal_named_nodes() {
 
 run_fallback_cleanup() {
   signal_process_group_from_pid_file "$SIM_PID_FILE" "Gazebo helper" || true
+  signal_process_group_from_pid_file "$CONTROLLER_RECOVERY_PID_FILE" "controller recovery helper" || true
   signal_processes_by_pattern "experiment recorder" 'ros2 bag record .*((runs|recordings|bags)/experiments/.*/bag)' || true
+  signal_processes_by_pattern "Gazebo helper" 'scripts/run_gazebo_sim\.sh' || true
+  signal_processes_by_pattern "spawn helper" 'scripts/run_spawn_uav\.sh' || true
+  signal_processes_by_pattern "localization helper" 'scripts/run_localization\.sh' || true
+  signal_processes_by_pattern "Nav2 helper" 'scripts/run_nav2\.sh' || true
   signal_processes_by_pattern "follow launch" 'ros2 launch lrs_halmstad run_1to1_follow\.launch\.py' || true
+  signal_processes_by_pattern "follow launch" 'ros2 launch lrs_halmstad run_follow\.launch\.py' || true
+  signal_processes_by_pattern "follow launch" 'ros2 launch .*/run_follow\.launch\.py' || true
   signal_processes_by_pattern "Nav2 launch" 'ros2 launch clearpath_nav2_demos nav2\.launch\.py' || true
+  signal_processes_by_pattern "Nav2 launch" 'ros2 launch .*/nav2_with_updates\.launch\.py' || true
+  signal_processes_by_pattern "Nav2 child processes" '/opt/ros/[^/]+/lib/nav2_' || true
   signal_processes_by_pattern "localization launch" 'ros2 launch clearpath_nav2_demos localization\.launch\.py' || true
+  signal_processes_by_pattern "localization launch" 'ros2 launch .*/localization_with_params\.launch\.py' || true
   signal_processes_by_pattern "spawn launch" 'ros2 launch lrs_halmstad spawn_uav_1to1\.launch\.py' || true
   signal_processes_by_pattern "Gazebo launch" 'ros2 launch lrs_halmstad managed_clearpath_sim\.launch\.py' || true
+  signal_processes_by_pattern "Gazebo launch" 'ros2 launch .*/managed_clearpath_sim\.launch\.py' || true
   signal_processes_by_pattern "OMNeT bridge sim" '(^|/)UAV_UGV($| ).*-c Communication-GazeboBridge-' || true
-  signal_named_nodes "stack child nodes" 'amcl|map_server|planner_server|controller_server|behavior_server|bt_navigator|waypoint_follower|velocity_smoother|smoother_server|route_server|lifecycle_manager_localization|lifecycle_manager_navigation|ugv_nav2_driver|ugv_amcl_to_odom|ugv_amcl_to_platform_odom|ugv_amcl_to_platform_filtered_odom|ugv_platform_odom_to_tf|uav_simulator|leader_detector|leader_estimator|selected_target_filter|visual_target_estimator|follow_point_generator|follow_point_planner|visual_actuation_bridge|camera_tracker' || true
-  signal_processes_by_pattern "ros_gz_bridge" 'ros_gz_bridge/parameter_bridge' || true
+  signal_named_nodes "stack child nodes" 'amcl|map_server|planner_server|controller_server|collision_monitor|behavior_server|bt_navigator|waypoint_follower|velocity_smoother|smoother_server|route_server|docking_server|lifecycle_manager_localization|lifecycle_manager_navigation|ugv_nav2_driver|ugv_amcl_to_odom|ugv_amcl_to_platform_odom|ugv_amcl_to_platform_filtered_odom|ugv_platform_odom_to_tf|uav_simulator|follow_uav|follow_uav_odom|leader_detector|leader_tracker|leader_estimator|selected_target_filter|visual_target_estimator|follow_point_generator|follow_point_planner|visual_actuation_bridge|camera_tracker|clock_bridge|clock_guard|omnet_uav_pose_to_odom|omnet_tcp_bridge|omnet_metrics_bridge' || true
+  signal_processes_by_pattern "ros_gz_bridge" 'ros_gz_bridge/(bridge_node|parameter_bridge|image_bridge)' || true
   signal_processes_by_pattern "Gazebo sim" '(^|/)gz sim($| )' || true
 }
 
@@ -259,8 +272,9 @@ if ! tmux_has_session; then
     echo "Planned final action: kill_session=$KILL_SESSION after ${FINAL_GRACE_S}s"
     exit 0
   fi
-  echo "tmux session not found: $SESSION" >&2
-  exit 1
+  echo "tmux session not found: $SESSION"
+  echo "Fallback cleanup complete."
+  exit 0
 fi
 
 echo "Stopping tmux 1-to-1 session: $SESSION"
