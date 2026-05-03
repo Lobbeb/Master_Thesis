@@ -1,5 +1,31 @@
 # AGENT.md
 
+## Current Mission
+
+Right now the active priority is **dataset capture**, not a broad follow-stack redesign.
+
+Current datasets in focus:
+- leader UAV dataset from `dji0`
+- support UAV datasets from `dji1` and `dji2`
+
+Primary workflows currently being exercised:
+- `./run.sh collect_leader_dataset baylands`
+- support-camera sweep plus support capture tooling
+
+Current known blocker for the **next session**:
+- Baylands **AMCL pose / Nav2 waypoint pose consistency** is still not trustworthy enough.
+- In practice, this means waypoint YAMLs and AMCL initial poses for Baylands need more debugging before the automated capture flow is truly reliable.
+
+## Operator Preferences
+
+These are important and should guide the next agent's behavior:
+
+- **Reuse existing code first.** Prefer extending current scripts, launch files, tools, and helpers instead of creating new files.
+- **Do not create new files unless they are clearly necessary.**
+- **Check with the user on the plan before substantial changes.**
+- Prefer small, targeted edits over broad rewrites.
+- Keep current topic names, parameter names, and launch argument styles stable unless the user explicitly wants them changed.
+
 ## Start Here
 
 Read these first at the start of a session:
@@ -7,6 +33,9 @@ Read these first at the start of a session:
 - `src/lrs_halmstad/README.md`
 - `CURRENT_STATE.md`
 - `RUNNING_SIM.md`
+- `FOLLOW_MODES_GUIDE.md`
+- `RUN_FOLLOW_DEFAULTS_AUDIT.md`
+- `VISUAL_FOLLOW_PLAN.md`
 
 Quick orientation:
 - Main package: `src/lrs_halmstad`
@@ -18,6 +47,7 @@ Before editing:
 - Run `git status --short --branch`
 - Do not revert unrelated user changes
 - Prefer small, targeted edits over broad rewrites
+- Confirm the plan with the user before doing larger implementation passes
 
 ## Workspace Facts
 
@@ -34,6 +64,9 @@ Scripts that matter for Baylands:
 - `scripts/run_nav2.sh` loads Baylands Nav2 params
 - `scripts/run_save_waypoint_csv.sh` captures Gazebo plus AMCL pose into CSV
 - `scripts/run_save_waypoint_yaml.sh` writes Nav2-ready YAML waypoint files
+- `scripts/run_collect_leader_dataset.sh` runs the leader dataset collector
+- `scripts/run_support_camera_scan.sh` sweeps support UAV cameras
+- `scripts/run_support_capture_pair.sh` captures `dji1` and `dji2` datasets in parallel
 
 ## Code Conventions
 
@@ -53,6 +86,7 @@ When working in specific areas:
 Avoid:
 - Duplicating helper functions that already exist nearby
 - Adding "temporary" alternate paths when the current code can be extended cleanly
+- Adding new files when an existing file or helper can be extended instead
 - Renaming files, topics, or parameters casually in this workspace
 
 ## Baylands Map Rules
@@ -85,6 +119,13 @@ After workflow or operator-facing changes:
 - Update `README.md` and `src/lrs_halmstad/README.md`
 
 ## Notes For Future Sessions
+
+Current handoff notes:
+- The dataset collector exists and is the active leader-data path.
+- Support-UAV camera sweep and paired capture tooling also exist and are part of the current data-collection effort.
+- The current debugging lane is **not** "invent a new architecture"; it is "make the existing capture workflows reliable."
+- The current likely failure area is Baylands AMCL / Nav2 initial pose and waypoint alignment, not the simplified follow math itself.
+- If something fails while collecting data, inspect the current capture scripts and launch wrappers first before proposing new tooling.
 
 If documentation and code disagree, trust the code paths in:
 - `scripts/`

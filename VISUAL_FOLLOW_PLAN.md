@@ -1,5 +1,21 @@
 # Visual Follow Current Plan
 
+## Current Status Note
+
+This file is still useful as historical context, but it is **not** the active top priority right now.
+
+Current active work has shifted toward:
+
+- capturing training data for the leader UAV (`dji0`)
+- capturing training data for the two support UAVs (`dji1`, `dji2`)
+- making the existing Baylands capture workflows reliable
+
+Current next-session problem to solve:
+
+- Baylands **AMCL pose / Nav2 waypoint pose alignment**
+
+So for the next session, do not default into more visual-follow redesign work unless the user explicitly asks for it. Reuse the current code paths and debugging tools first.
+
 This note captures the current agreed direction for the visual-follow thesis work on branch `live-yolo-runtime-refactor`.
 
 ## Current Safe Base
