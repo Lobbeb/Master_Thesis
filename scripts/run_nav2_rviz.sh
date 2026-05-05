@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STATE_DIR="/tmp/halmstad_ws"
+SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 RVIZ_CONFIG_DIR="$WS_ROOT/src/lrs_halmstad/config"
 BASE_RVIZ_CONFIG="$RVIZ_CONFIG_DIR/nav2_namespaced_waypoints.rviz"
 RVIZ_CONFIG_OVERRIDE=""
@@ -14,6 +16,9 @@ lidar_mode_parse_args 2d "$@"
 if [ "$LIDAR_MODE" = "3d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
   LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
   echo "[run_nav2_rviz] 3D lidar mode: using throttled relay topic $LIDAR_SCAN_TOPIC" >&2
+elif [ -f "$SIM_WORLD_FILE" ] && [[ "$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)" == baylands* ]] && [ "$LIDAR_MODE" = "2d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 2d)" ]; then
+  LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
+  echo "[run_nav2_rviz] Baylands 2D lidar mode: using localization-owned relay topic $LIDAR_SCAN_TOPIC" >&2
 fi
 
 RVIZ_PASSTHROUGH_ARGS=()

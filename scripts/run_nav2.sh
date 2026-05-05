@@ -10,6 +10,7 @@ BAYLANDS_NAV2_PARAMS="$WS_ROOT/src/lrs_halmstad/config/nav2_baylands_large_map.y
 LOCAL_NAV2_LAUNCH="$WS_ROOT/src/lrs_halmstad/launch/nav2_with_updates.launch.py"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 BASE_NAV2_PARAMS="$DEFAULT_NAV2_PARAMS"
+BAYLANDS_2D_SCAN_RELAY_TOPIC="/a201_0000/sensors/lidar2d_0/scan_relay"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 
@@ -29,6 +30,9 @@ USE_POINTCLOUD_TO_LASERSCAN="false"
 
 if [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
   echo "[run_nav2] 3D lidar mode: enabling Nav2 scan relay for $LIDAR_SCAN_TOPIC" >&2
+elif [ "$BASE_NAV2_PARAMS" = "$BAYLANDS_NAV2_PARAMS" ] && [ "$LIDAR_MODE" = "2d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 2d)" ]; then
+  LIDAR_SCAN_TOPIC="$BAYLANDS_2D_SCAN_RELAY_TOPIC"
+  echo "[run_nav2] Baylands 2D lidar mode: reusing localization-owned scan relay $LIDAR_SCAN_TOPIC" >&2
 fi
 
 mkdir -p "$STATE_DIR"

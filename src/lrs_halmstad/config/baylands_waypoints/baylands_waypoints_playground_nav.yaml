@@ -35,8 +35,3 @@ waypoints:
   y: 25.93984879926437
   yaw_deg: -118.5283317422221
   group: playground_nav
-- name: playground_17
-  x: 153.8939322224418
-  y: 21.31217200763844
-  yaw_deg: -68.95699616597284
-  group: playground_nav
