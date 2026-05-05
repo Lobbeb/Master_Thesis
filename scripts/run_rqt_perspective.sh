@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PERSPECTIVE_DIR="$WS_ROOT/perspectives"
-DEFAULT_PERSPECTIVE="$PERSPECTIVE_DIR/YOLO.perspective"
+DEFAULT_PERSPECTIVE="NAV2"
 PERSPECTIVE="${1:-$DEFAULT_PERSPECTIVE}"
 
 resolve_perspective() {
@@ -36,6 +36,15 @@ resolve_perspective() {
     printf '%s\n' "$PERSPECTIVE_DIR/${stem}.perspective"
     return 0
   fi
+
+  case "$candidate" in
+    NAV2|NAV2.perspective|*/NAV2|*/NAV2.perspective)
+      if [ -f "$PERSPECTIVE_DIR/FOLLOW.perspective" ]; then
+        printf '%s\n' "$PERSPECTIVE_DIR/FOLLOW.perspective"
+        return 0
+      fi
+      ;;
+  esac
 
   return 1
 }

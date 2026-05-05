@@ -3,6 +3,7 @@
 import copy
 
 import rclpy
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
@@ -12,12 +13,14 @@ class LatestScanRelay(Node):
     def __init__(self) -> None:
         super().__init__("latest_scan_relay")
 
+        numeric_param = ParameterDescriptor(dynamic_typing=True)
+
         self.declare_parameter("input_topic", "/scan")
         self.declare_parameter("output_topic", "/scan_relay")
-        self.declare_parameter("publish_hz", 2.0)
-        self.declare_parameter("max_age_s", 1.0)
+        self.declare_parameter("publish_hz", 2.0, numeric_param)
+        self.declare_parameter("max_age_s", 1.0, numeric_param)
         self.declare_parameter("restamp", True)
-        self.declare_parameter("startup_hold_s", 0.0)
+        self.declare_parameter("startup_hold_s", 0.0, numeric_param)
 
         input_topic = str(self.get_parameter("input_topic").value)
         output_topic = str(self.get_parameter("output_topic").value)

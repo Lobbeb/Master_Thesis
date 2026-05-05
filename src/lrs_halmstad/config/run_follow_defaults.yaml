@@ -450,13 +450,13 @@ ugv_nav2_driver:
     # Explicit goal sequences.
     goal_sequence_file: ""                     # Path to a YAML waypoint file; empty = use the internal route generator.
     goal_sequence_csv: ""                     # Inline waypoint list (x,y,yaw_deg;...); overrides goal_sequence_file when set.
-    goal_sequence_randomize: true                # Randomize the loaded waypoint order; uses goal_sequence_seed.
-    goal_sequence_random_reverse: true          # Randomly reverse the loaded waypoint order on each cycle.
-    goal_sequence_relative_to_current_pose: true  # Treat file/csv waypoints as offsets from the current pose.
+    goal_sequence_randomize: false                # Randomize the loaded waypoint order; uses goal_sequence_seed.
+    goal_sequence_random_reverse: false          # Randomly reverse the loaded waypoint order on each cycle.
+    goal_sequence_relative_to_current_pose: false  # Keep waypoint files/csv absolute by default; set true only for intentionally relative offset routes.
     goal_sequence_seed: -1                       # RNG seed for waypoint randomization; -1 = time-based seed.
 
     # Goal acceptance/results behavior.
-    continue_on_goal_failure: true        # Move to the next goal when Nav2 rejects or fails the current one.
+    continue_on_goal_failure: false        # Move to the next goal when Nav2 rejects or fails the current one.
     goal_reject_retry_count: 20            # Retries when a goal is rejected by the Nav2 action server; keep 2-20.
     goal_reject_retry_delay_s: 0.5          # Delay between goal-rejection retries; keep 0.2-1.0 s.
     goal_result_timeout_s: 600.0             # Cancel and advance if Nav2 has not returned a result within this timeout.
@@ -466,7 +466,7 @@ ugv_nav2_driver:
 
     # Internal generated route profile.
     motion_profile: route              # Named motion profile for internal route generation.
-    cycles: 2                             # Number of route cycles when using the internal route generator.
+    cycles: 1                             # Number of route cycles when using the internal route generator.
     forward_speed: 0.75                  # Forward speed for generated route segments in m/s.
     forward_time_s: 0.90                # Duration of each generated forward segment in seconds.
     turn_pattern: alternate         # Left/right turn pattern for generated turns: alternate, left, or right.

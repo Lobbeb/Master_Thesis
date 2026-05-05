@@ -1,0 +1,879 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STATE_DIR="/tmp/halmstad_ws"
+TMUX_STATE_DIR="$STATE_DIR/tmux_sessions"
+DEFAULT_BAYLANDS_TUNING_MAP="$WS_ROOT/maps/baylands.yaml"
+
+ACTION="start"
+WORLD="baylands"
+WAYPOINT="rotundan_0"
+NAV2_GOALS="rotundan"
+LIDAR="2d"
+PAUSE_AFTER_GOAL_S="0.0"
+GUI="false"
+PERSPECTIVE="NAV2"
+START_RQT="true"
+MAP_PATH=""
+RVIZ_CONFIG="$WS_ROOT/src/lrs_halmstad/config/waypoints_testing.rviz"
+SESSION=""
+TMUX_ATTACH="false"
+SPAWN_UAV="true"
+UAV_CAMERA_UPDATE_RATE="2"
+WITH_FOLLOW="true"
+REBUILD="false"
+REBUILD_DONE="false"
+DRY_RUN="false"
+REALIGN="true"
+FOLLOW_START_DELAY_S="3.0"
+LOCALIZATION_READY_TIMEOUT_S="15"
+STACK_STOP_GRACE_S="2"
+GAZEBO_READY_TIMEOUT_S="25"
+GAZEBO_POST_READY_DELAY_S="15"
+SPAWN_POST_DELAY_S="5"
+
+SESSION_EXPLICIT="false"
+WAYPOINT_EXPLICIT="false"
+NAV2_GOALS_EXPLICIT="false"
+LIDAR_EXPLICIT="false"
+GUI_EXPLICIT="false"
+PERSPECTIVE_EXPLICIT="false"
+START_RQT_EXPLICIT="false"
+MAP_EXPLICIT="false"
+RVIZ_CONFIG_EXPLICIT="false"
+SPAWN_UAV_EXPLICIT="false"
+UAV_CAMERA_UPDATE_RATE_EXPLICIT="false"
+WITH_FOLLOW_EXPLICIT="false"
+PAUSE_AFTER_GOAL_EXPLICIT="false"
+FOLLOW_START_DELAY_EXPLICIT="false"
+GAZEBO_READY_TIMEOUT_EXPLICIT="false"
+GAZEBO_POST_READY_DELAY_EXPLICIT="false"
+SPAWN_POST_DELAY_EXPLICIT="false"
+
+GAZEBO_PANE_ID=""
+SPAWN_PANE_ID=""
+RQT_PANE_ID=""
+LOCALIZATION_PANE_ID=""
+NAV2_PANE_ID=""
+RVIZ_PANE_ID=""
+FOLLOW_PANE_ID=""
+
+CLI_WORLD=""
+CLI_WAYPOINT=""
+CLI_NAV2_GOALS=""
+CLI_LIDAR=""
+CLI_PAUSE_AFTER_GOAL_S=""
+CLI_GUI=""
+CLI_PERSPECTIVE=""
+CLI_START_RQT=""
+CLI_MAP_PATH=""
+CLI_RVIZ_CONFIG=""
+CLI_SPAWN_UAV=""
+CLI_UAV_CAMERA_UPDATE_RATE=""
+CLI_WITH_FOLLOW=""
+CLI_FOLLOW_START_DELAY_S=""
+CLI_GAZEBO_READY_TIMEOUT_S=""
+CLI_GAZEBO_POST_READY_DELAY_S=""
+CLI_SPAWN_POST_DELAY_S=""
+
+shell_join() {
+  local out=""
+  local part=""
+  for part in "$@"; do
+    printf -v out '%s%q ' "$out" "$part"
+  done
+  printf '%s' "${out% }"
+}
+
+usage() {
+  cat <<EOF
+Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|attach|status] [world]
+  [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
+  [pause_after_goal_s:=10.0]
+  [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [map:=maps/baylands.yaml]
+  [rviz_config:=src/lrs_halmstad/config/nav2_namespaced_waypoints.rviz]
+  [spawn_uav:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
+  [uav_camera_update_rate:=2]
+  [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
+  [spawn_post_delay_s:=5]
+  [rebuild:=true|false]
+  [session:=name] [tmux_attach:=true|false] [dry_run:=true|false]
+
+Examples:
+  ./run.sh nav2_tuning start
+  ./run.sh nav2_tuning restart
+  ./run.sh nav2_tuning stack_stop
+  ./run.sh nav2_tuning follow
+  ./run.sh nav2_tuning route_stop
+  ./run.sh nav2_tuning stop
+  ./run.sh nav2_tuning attach
+
+Notes:
+  - This keeps Gazebo alive in tmux and only restarts the tuning stack.
+  - By default it keeps the normal UAV/follow flow alive, lowers the UAV camera update rate.
+  - rqt is optional here and defaults to off.
+  - Changes to nav2_baylands_large_map.yaml do not require a build; run_nav2.sh reads it from src/.
+  - Use rebuild:=true when you change Python/launch/package-installed files and want a symlink build first.
+  - Startup is sequenced: Gazebo helper ready -> optional UAV spawn -> localization -> realign_yaw -> Nav2/RViz/route driver.
+EOF
+}
+
+default_session() {
+  printf 'halmstad-%s-nav2-tuning\n' "$WORLD"
+}
+
+update_session_default() {
+  if [ "$SESSION_EXPLICIT" != "true" ]; then
+    SESSION="$(default_session)"
+  fi
+}
+
+tmux_has_session() {
+  tmux has-session -t "$SESSION" 2>/dev/null
+}
+
+session_safe() {
+  printf '%s' "$SESSION" | tr -c 'A-Za-z0-9_.-' '_'
+}
+
+session_state_file() {
+  printf '%s/%s.env\n' "$TMUX_STATE_DIR" "$(session_safe)"
+}
+
+write_state() {
+  mkdir -p "$TMUX_STATE_DIR"
+  {
+    printf 'SESSION=%q\n' "$SESSION"
+    printf 'WORLD=%q\n' "$WORLD"
+    printf 'WAYPOINT=%q\n' "$WAYPOINT"
+    printf 'NAV2_GOALS=%q\n' "$NAV2_GOALS"
+    printf 'LIDAR=%q\n' "$LIDAR"
+    printf 'PAUSE_AFTER_GOAL_S=%q\n' "$PAUSE_AFTER_GOAL_S"
+    printf 'GUI=%q\n' "$GUI"
+    printf 'PERSPECTIVE=%q\n' "$PERSPECTIVE"
+    printf 'START_RQT=%q\n' "$START_RQT"
+    printf 'MAP_PATH=%q\n' "$MAP_PATH"
+    printf 'RVIZ_CONFIG=%q\n' "$RVIZ_CONFIG"
+    printf 'SPAWN_UAV=%q\n' "$SPAWN_UAV"
+    printf 'UAV_CAMERA_UPDATE_RATE=%q\n' "$UAV_CAMERA_UPDATE_RATE"
+    printf 'WITH_FOLLOW=%q\n' "$WITH_FOLLOW"
+    printf 'FOLLOW_START_DELAY_S=%q\n' "$FOLLOW_START_DELAY_S"
+    printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
+    printf 'GAZEBO_POST_READY_DELAY_S=%q\n' "$GAZEBO_POST_READY_DELAY_S"
+    printf 'SPAWN_POST_DELAY_S=%q\n' "$SPAWN_POST_DELAY_S"
+    printf 'GAZEBO_PANE_ID=%q\n' "$GAZEBO_PANE_ID"
+    printf 'SPAWN_PANE_ID=%q\n' "$SPAWN_PANE_ID"
+    printf 'RQT_PANE_ID=%q\n' "$RQT_PANE_ID"
+    printf 'LOCALIZATION_PANE_ID=%q\n' "$LOCALIZATION_PANE_ID"
+    printf 'NAV2_PANE_ID=%q\n' "$NAV2_PANE_ID"
+    printf 'RVIZ_PANE_ID=%q\n' "$RVIZ_PANE_ID"
+    printf 'FOLLOW_PANE_ID=%q\n' "$FOLLOW_PANE_ID"
+  } > "$(session_state_file)"
+}
+
+load_state() {
+  local state_file
+  state_file="$(session_state_file)"
+  if [ ! -f "$state_file" ]; then
+    echo "No nav2 tuning session state found for $SESSION" >&2
+    echo "Start it first with: ./run.sh nav2_tuning start" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC1090
+  source "$state_file"
+}
+
+pane_exists() {
+  local pane_id="$1"
+  [ -n "$pane_id" ] || return 1
+  tmux list-panes -a -t "$SESSION" -F '#{pane_id}' 2>/dev/null | grep -Fxq "$pane_id"
+}
+
+signal_processes_by_pattern() {
+  local label="$1"
+  local pattern="$2"
+  local matched=""
+
+  matched="$(pgrep -a -f "$pattern" 2>/dev/null || true)"
+  [ -n "$matched" ] || return 1
+
+  echo "[nav2_tuning] Fallback cleanup matched $label"
+  printf '%s\n' "$matched"
+
+  if [ "$DRY_RUN" != "true" ]; then
+    pkill -INT -f "$pattern" 2>/dev/null || true
+    sleep 1
+    pkill -TERM -f "$pattern" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -f "$pattern" 2>/dev/null || true
+  fi
+  return 0
+}
+
+signal_named_nodes() {
+  local label="$1"
+  local names_regex="$2"
+  signal_processes_by_pattern "$label" "__node:=($names_regex)(\\s|$)"
+}
+
+send_ctrl_c_pane() {
+  local pane_id="$1"
+  local label="$2"
+  if pane_exists "$pane_id"; then
+    echo "[nav2_tuning] Stopping $label"
+    tmux send-keys -t "$pane_id" C-c
+  fi
+}
+
+send_pane_command() {
+  local pane_id="$1"
+  shift
+  local line
+  line="$(shell_join "$@")"
+  tmux send-keys -t "$pane_id" C-c
+  tmux send-keys -t "$pane_id" "clear" C-m
+  tmux send-keys -t "$pane_id" "$line" C-m
+}
+
+run_ros_probe() {
+  local timeout_s="$1"
+  shift
+  bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; source \"$WS_ROOT/src/lrs_halmstad/clearpath/setup.bash\" >/dev/null 2>&1; set -u; timeout ${timeout_s}s $*"
+}
+
+gazebo_cmd() {
+  local cmd=(./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT")
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+spawn_cmd() {
+  local cmd=(
+    ./run.sh spawn_uav "$WORLD"
+    "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
+  )
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+rqt_cmd() {
+  local cmd=(./run.sh rqt_perspective "$PERSPECTIVE")
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+effective_map_path() {
+  if [ -n "$MAP_PATH" ]; then
+    printf '%s\n' "$MAP_PATH"
+  elif [[ "$WORLD" == baylands* ]]; then
+    printf '%s\n' "$DEFAULT_BAYLANDS_TUNING_MAP"
+  fi
+}
+
+localization_cmd() {
+  local effective_map=""
+  effective_map="$(effective_map_path)"
+  local cmd=(./run.sh localization "$WORLD" "lidar:=$LIDAR")
+  if [ -n "$effective_map" ]; then
+    cmd+=("$effective_map")
+  fi
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+nav2_cmd() {
+  local cmd=(./run.sh nav2 "lidar:=$LIDAR")
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+rviz_cmd() {
+  local cmd=(./run.sh nav2_rviz "lidar:=$LIDAR")
+  if [ -n "$RVIZ_CONFIG" ]; then
+    cmd+=("rviz_config:=$RVIZ_CONFIG")
+  fi
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+follow_cmd() {
+  local follow_params
+  follow_params="$(follow_params_file)"
+  local cmd=(
+    ./run.sh 1to1_follow "$WORLD"
+    "waypoint:=$WAYPOINT"
+    "nav2_goals:=$NAV2_GOALS"
+    "params_file:=$follow_params"
+  )
+  echo "$(shell_join "${cmd[@]}")"
+}
+
+follow_params_file() {
+  printf '%s/nav2_tuning_follow_params.yaml\n' "$STATE_DIR"
+}
+
+write_follow_params_file() {
+  local output_file
+  output_file="$(follow_params_file)"
+  mkdir -p "$STATE_DIR"
+  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+pause_after_goal_s = float(sys.argv[3])
+
+data = yaml.safe_load(src.read_text(encoding="utf-8"))
+params = data.setdefault("ugv_nav2_driver", {}).setdefault("ros__parameters", {})
+params["pause_after_goal_s"] = pause_after_goal_s
+
+dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+PY
+}
+
+create_session() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would create tmux session: $SESSION"
+    echo "[sim/gazebo] $(gazebo_cmd)"
+    if [ "$SPAWN_UAV" = "true" ]; then
+      echo "[sim/spawn]  $(spawn_cmd)"
+    else
+      echo "[sim/spawn]  <disabled>"
+    fi
+    if [ "$START_RQT" = "true" ]; then
+      echo "[sim/rqt]    $(rqt_cmd)"
+    else
+      echo "[sim/rqt]    <disabled>"
+    fi
+    echo "[stack/localization] $(localization_cmd)"
+    echo "[stack/nav2]         $(nav2_cmd)"
+    echo "[stack/rviz]         $(rviz_cmd)"
+    if [ "$WITH_FOLLOW" = "true" ]; then
+      echo "[stack/route]        $(follow_cmd)"
+    fi
+    return 0
+  fi
+
+  if tmux_has_session; then
+    echo "tmux session already exists: $SESSION" >&2
+    exit 1
+  fi
+
+  tmux new-session -d -s "$SESSION" -n sim
+  GAZEBO_PANE_ID="$(tmux display-message -p -t "$SESSION:sim.0" '#{pane_id}')"
+  SPAWN_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$GAZEBO_PANE_ID" -h -l 35%)"
+  RQT_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$SPAWN_PANE_ID" -v -l 50%)"
+
+  tmux new-window -d -t "$SESSION" -n stack
+  LOCALIZATION_PANE_ID="$(tmux display-message -p -t "$SESSION:stack.0" '#{pane_id}')"
+  NAV2_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$LOCALIZATION_PANE_ID" -h -l 50%)"
+  RVIZ_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$LOCALIZATION_PANE_ID" -v -l 50%)"
+  FOLLOW_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$NAV2_PANE_ID" -v -l 50%)"
+
+  tmux select-pane -t "$GAZEBO_PANE_ID" -T gazebo
+  tmux select-pane -t "$SPAWN_PANE_ID" -T spawn
+  tmux select-pane -t "$RQT_PANE_ID" -T rqt
+  tmux select-pane -t "$LOCALIZATION_PANE_ID" -T localization
+  tmux select-pane -t "$NAV2_PANE_ID" -T nav2
+  tmux select-pane -t "$RVIZ_PANE_ID" -T rviz
+  tmux select-pane -t "$FOLLOW_PANE_ID" -T follow
+
+  write_state
+}
+
+wait_for_gazebo_helper_ready() {
+  local waited=0
+  local sim_pid_file="$STATE_DIR/gazebo_sim.pid"
+  local sim_world_file="$STATE_DIR/gazebo_sim.world"
+  echo "[nav2_tuning] Waiting for gazebo_sim helper readiness..."
+  while [ "$waited" -lt "$GAZEBO_READY_TIMEOUT_S" ]; do
+    if [ -f "$sim_pid_file" ] && [ -f "$sim_world_file" ]; then
+      local sim_pid=""
+      sim_pid="$(cat "$sim_pid_file" 2>/dev/null || true)"
+      if [ -n "$sim_pid" ] && kill -0 "$sim_pid" 2>/dev/null; then
+        echo "[nav2_tuning] Gazebo helper ready"
+        if [ "$GAZEBO_POST_READY_DELAY_S" != "0" ] && [ "$GAZEBO_POST_READY_DELAY_S" != "0.0" ]; then
+          echo "[nav2_tuning] Waiting ${GAZEBO_POST_READY_DELAY_S}s for Gazebo to settle"
+          sleep "$GAZEBO_POST_READY_DELAY_S"
+        fi
+        return 0
+      fi
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "[nav2_tuning] Timed out waiting for gazebo_sim helper readiness" >&2
+  return 1
+}
+
+start_base_processes() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would start base processes in order:"
+    if [ "$REBUILD" = "true" ]; then
+      echo "  0. colcon build --symlink-install"
+    fi
+    echo "  1. $(gazebo_cmd) rebuild:=false"
+    echo "  2. wait for /tmp/halmstad_ws/gazebo_sim.pid + .world"
+    if [ "$SPAWN_UAV" = "true" ]; then
+      echo "  3. $(spawn_cmd)"
+      echo "  4. wait ${SPAWN_POST_DELAY_S}s"
+      if [ "$START_RQT" = "true" ]; then
+        echo "  5. $(rqt_cmd)"
+      fi
+    else
+      if [ "$START_RQT" = "true" ]; then
+        echo "  3. $(rqt_cmd)"
+      fi
+    fi
+    return 0
+  fi
+
+  maybe_rebuild
+  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "rebuild:=false"
+  wait_for_gazebo_helper_ready
+  if [ "$SPAWN_UAV" = "true" ]; then
+    send_pane_command "$SPAWN_PANE_ID" ./run.sh spawn_uav "$WORLD" "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
+    if [ "$SPAWN_POST_DELAY_S" != "0" ] && [ "$SPAWN_POST_DELAY_S" != "0.0" ]; then
+      echo "[nav2_tuning] Waiting ${SPAWN_POST_DELAY_S}s after spawn"
+      sleep "$SPAWN_POST_DELAY_S"
+    fi
+  else
+    send_pane_command "$SPAWN_PANE_ID" bash -lc "printf 'UAV spawn disabled for nav2_tuning\\n'; exec bash"
+  fi
+  if [ "$START_RQT" = "true" ]; then
+    send_pane_command "$RQT_PANE_ID" ./run.sh rqt_perspective "$PERSPECTIVE"
+  else
+    send_pane_command "$RQT_PANE_ID" bash -lc "printf 'rqt disabled for nav2_tuning\\n'; exec bash"
+  fi
+}
+
+wait_for_localization_ready() {
+  local waited=0
+  echo "[nav2_tuning] Waiting for localization readiness..."
+  while [ "$waited" -lt "$LOCALIZATION_READY_TIMEOUT_S" ]; do
+    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; ros2 lifecycle get /a201_0000/map_server 2>/dev/null | grep -q 'active \\[3\\]' && ros2 lifecycle get /a201_0000/amcl 2>/dev/null | grep -Eq '(inactive \\[2\\]|active \\[3\\])'"; then
+      echo "[nav2_tuning] Localization ready"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "[nav2_tuning] Timed out waiting for localization" >&2
+  return 1
+}
+
+maybe_rebuild() {
+  if [ "$REBUILD" != "true" ]; then
+    return 0
+  fi
+  if [ "$REBUILD_DONE" = "true" ]; then
+    return 0
+  fi
+  echo "[nav2_tuning] Rebuilding with symlink install."
+  (
+    set +u
+    source /opt/ros/jazzy/setup.bash
+    set -u
+    cd "$WS_ROOT"
+    colcon build --symlink-install
+  )
+  REBUILD_DONE="true"
+}
+
+realign_yaw() {
+  if [ "$REALIGN" != "true" ]; then
+    return 0
+  fi
+  echo "[nav2_tuning] Realigning yaw at waypoint $WAYPOINT"
+  bash "$SCRIPT_DIR/run_realign_yaw.sh" "$WORLD" "waypoint:=$WAYPOINT"
+}
+
+stop_stack_processes() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would stop tuning stack for session $SESSION"
+    echo "[nav2_tuning] Targets: route, rviz, nav2, localization, scan helpers, Nav2 child nodes, twist_mux"
+    return 0
+  fi
+
+  send_ctrl_c_pane "$FOLLOW_PANE_ID" route
+  send_ctrl_c_pane "$RVIZ_PANE_ID" rviz
+  send_ctrl_c_pane "$NAV2_PANE_ID" nav2
+  send_ctrl_c_pane "$LOCALIZATION_PANE_ID" localization
+  sleep "$STACK_STOP_GRACE_S"
+
+  signal_processes_by_pattern "realign_yaw helper" 'scripts/run_realign_yaw\.sh' || true
+  signal_processes_by_pattern "route helper" 'scripts/run_1to1_follow\.sh' || true
+  signal_processes_by_pattern "route launch" 'ros2 launch lrs_halmstad run_1to1_follow\.launch\.py' || true
+  signal_processes_by_pattern "route launch" 'ros2 launch lrs_halmstad run_follow\.launch\.py' || true
+  signal_processes_by_pattern "route launch" 'ros2 launch .*/run_follow\.launch\.py' || true
+
+  signal_processes_by_pattern "RViz helper" 'scripts/run_nav2_rviz\.sh' || true
+  signal_processes_by_pattern "RViz launch" 'ros2 launch nav2_bringup rviz_launch\.py' || true
+
+  signal_processes_by_pattern "Nav2 helper" 'scripts/run_nav2\.sh' || true
+  signal_processes_by_pattern "Nav2 launch" 'ros2 launch clearpath_nav2_demos nav2\.launch\.py' || true
+  signal_processes_by_pattern "Nav2 launch" 'ros2 launch .*/nav2_with_updates\.launch\.py' || true
+  signal_processes_by_pattern "Nav2 child processes" '/opt/ros/[^/]+/lib/nav2_' || true
+  signal_processes_by_pattern "teleop base launch" 'ros2 launch clearpath_control teleop_base\.launch\.py' || true
+  signal_processes_by_pattern "twist mux process" '(^|/)twist_mux($| )' || true
+
+  signal_processes_by_pattern "localization helper" 'scripts/run_localization\.sh' || true
+  signal_processes_by_pattern "localization launch" 'ros2 launch clearpath_nav2_demos localization\.launch\.py' || true
+  signal_processes_by_pattern "localization launch" 'ros2 launch .*/localization_with_params\.launch\.py' || true
+  signal_processes_by_pattern "pointcloud_to_laserscan process" '(^|/)pointcloud_to_laserscan_node($| )' || true
+  signal_processes_by_pattern "latest_scan_relay process" '(^|/)latest_scan_relay($| )' || true
+
+  signal_named_nodes "tuning stack nodes" 'amcl|map_server|planner_server|controller_server|collision_monitor|behavior_server|bt_navigator|waypoint_follower|velocity_smoother|smoother_server|route_server|docking_server|lifecycle_manager_localization|lifecycle_manager_navigation|pointcloud_to_laserscan|latest_scan_relay|ugv_nav2_driver|ugv_amcl_to_odom|ugv_amcl_to_platform_odom|ugv_amcl_to_platform_filtered_odom|ugv_platform_odom_to_tf|ugv_ground_truth_bridge|follow_uav|follow_uav_odom|camera_tracker|twist_mux|rviz2|twist_server_node' || true
+}
+
+stop_base_processes() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would stop base processes for session $SESSION"
+    echo "[nav2_tuning] Targets: rqt, spawn, gazebo, ros_gz_bridge, clock bridge/guard"
+    return 0
+  fi
+
+  send_ctrl_c_pane "$RQT_PANE_ID" rqt
+  send_ctrl_c_pane "$SPAWN_PANE_ID" spawn
+  send_ctrl_c_pane "$GAZEBO_PANE_ID" gazebo
+  sleep "$STACK_STOP_GRACE_S"
+
+  signal_processes_by_pattern "spawn helper" 'scripts/run_spawn_uav\.sh' || true
+  signal_processes_by_pattern "spawn launch" 'ros2 launch lrs_halmstad spawn_uav_1to1\.launch\.py' || true
+  signal_named_nodes "base child nodes" 'uav_simulator|clock_bridge|clock_guard|ugv_ground_truth_bridge|twist_server_node' || true
+  signal_processes_by_pattern "ros_gz_bridge" 'ros_gz_bridge/(bridge_node|parameter_bridge|image_bridge)' || true
+  signal_processes_by_pattern "interactive marker server" 'interactive_marker_twist_server/marker_server --ros-args -r __node:=twist_server_node' || true
+  signal_processes_by_pattern "Gazebo sim" '(^|/)gz sim($| )' || true
+}
+
+restart_stack() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would restart localization/nav2/rviz$( [ "$WITH_FOLLOW" = "true" ] && printf '/route' )"
+    echo "[localization] $(localization_cmd)"
+    echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
+    echo "[nav2] $(nav2_cmd)"
+    echo "[rviz] $(rviz_cmd)"
+    if [ "$WITH_FOLLOW" = "true" ]; then
+      echo "[route] $(follow_cmd)"
+    fi
+    return 0
+  fi
+  maybe_rebuild
+  write_follow_params_file
+  stop_stack_processes
+
+  local effective_map=""
+  effective_map="$(effective_map_path)"
+  if [ -n "$effective_map" ]; then
+    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "$effective_map" "lidar:=$LIDAR"
+  else
+    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "lidar:=$LIDAR"
+  fi
+  wait_for_localization_ready
+  realign_yaw
+  send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR"
+  if [ -n "$RVIZ_CONFIG" ]; then
+    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR" "rviz_config:=$RVIZ_CONFIG"
+  else
+    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR"
+  fi
+
+  if [ "$WITH_FOLLOW" = "true" ]; then
+    sleep "$FOLLOW_START_DELAY_S"
+    send_pane_command "$FOLLOW_PANE_ID" ./run.sh 1to1_follow "$WORLD" "waypoint:=$WAYPOINT" "nav2_goals:=$NAV2_GOALS" "params_file:=$(follow_params_file)"
+  fi
+}
+
+restart_follow_only() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would restart route driver"
+    echo "[route] $(follow_cmd)"
+    return 0
+  fi
+  write_follow_params_file
+  send_ctrl_c_pane "$FOLLOW_PANE_ID" route
+  sleep 1
+  send_pane_command "$FOLLOW_PANE_ID" ./run.sh 1to1_follow "$WORLD" "waypoint:=$WAYPOINT" "nav2_goals:=$NAV2_GOALS" "params_file:=$(follow_params_file)"
+}
+
+stop_route_only() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would stop ugv_nav2_driver only"
+    return 0
+  fi
+  signal_named_nodes "route driver" 'ugv_nav2_driver' || true
+}
+
+stop_all() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would kill tmux session $SESSION"
+    return 0
+  fi
+  if tmux_has_session; then
+    stop_stack_processes || true
+    sleep 2
+    stop_base_processes || true
+    sleep 2
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
+    stop_base_processes || true
+  fi
+  rm -f "$(session_state_file)"
+}
+
+print_status() {
+  local map_status=""
+  map_status="$(effective_map_path)"
+  if [ -z "$map_status" ]; then
+    map_status="<default>"
+  fi
+  cat <<EOF
+Session: $SESSION
+World: $WORLD
+Waypoint: $WAYPOINT
+Nav2 goals: $NAV2_GOALS
+Lidar: $LIDAR
+Pause after goal: $PAUSE_AFTER_GOAL_S
+GUI: $GUI
+Perspective: $PERSPECTIVE
+Start rqt: $START_RQT
+Map: $map_status
+RViz config: ${RVIZ_CONFIG:-<default>}
+Spawn UAV: $SPAWN_UAV
+UAV camera update rate: $UAV_CAMERA_UPDATE_RATE
+With route driver: $WITH_FOLLOW
+Follow start delay: $FOLLOW_START_DELAY_S
+Gazebo ready timeout: $GAZEBO_READY_TIMEOUT_S
+Gazebo settle delay: $GAZEBO_POST_READY_DELAY_S
+Spawn settle delay: $SPAWN_POST_DELAY_S
+EOF
+}
+
+if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
+  case "$1" in
+    start|restart|stack_stop|follow|route_stop|stop|attach|status)
+      ACTION="$1"
+      shift
+      ;;
+    help|-h|--help)
+      usage
+      exit 0
+      ;;
+  esac
+fi
+
+if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
+  WORLD="$1"
+  shift
+fi
+update_session_default
+
+for arg in "$@"; do
+  case "$arg" in
+    waypoint:=*)
+      WAYPOINT="${arg#waypoint:=}"
+      WAYPOINT_EXPLICIT="true"
+      ;;
+    nav2_goals:=*)
+      NAV2_GOALS="${arg#nav2_goals:=}"
+      NAV2_GOALS_EXPLICIT="true"
+      ;;
+    lidar:=*)
+      LIDAR="${arg#lidar:=}"
+      LIDAR_EXPLICIT="true"
+      ;;
+    pause_after_goal_s:=*)
+      PAUSE_AFTER_GOAL_S="${arg#pause_after_goal_s:=}"
+      PAUSE_AFTER_GOAL_EXPLICIT="true"
+      ;;
+    gui:=*)
+      GUI="${arg#gui:=}"
+      GUI_EXPLICIT="true"
+      ;;
+    perspective:=*)
+      PERSPECTIVE="${arg#perspective:=}"
+      PERSPECTIVE_EXPLICIT="true"
+      ;;
+    start_rqt:=*)
+      START_RQT="${arg#start_rqt:=}"
+      START_RQT_EXPLICIT="true"
+      ;;
+    map:=*)
+      MAP_PATH="${arg#map:=}"
+      MAP_EXPLICIT="true"
+      ;;
+    rviz_config:=*)
+      RVIZ_CONFIG="${arg#rviz_config:=}"
+      RVIZ_CONFIG_EXPLICIT="true"
+      ;;
+    config:=*)
+      RVIZ_CONFIG="${arg#config:=}"
+      RVIZ_CONFIG_EXPLICIT="true"
+      ;;
+    spawn_uav:=*|with_uav:=*)
+      SPAWN_UAV="${arg#*=}"
+      SPAWN_UAV_EXPLICIT="true"
+      ;;
+    uav_camera_update_rate:=*)
+      UAV_CAMERA_UPDATE_RATE="${arg#uav_camera_update_rate:=}"
+      UAV_CAMERA_UPDATE_RATE_EXPLICIT="true"
+      ;;
+    with_route_driver:=*)
+      WITH_FOLLOW="${arg#with_route_driver:=}"
+      WITH_FOLLOW_EXPLICIT="true"
+      ;;
+    with_follow:=*)
+      WITH_FOLLOW="${arg#with_follow:=}"
+      WITH_FOLLOW_EXPLICIT="true"
+      ;;
+    follow_start_delay_s:=*)
+      FOLLOW_START_DELAY_S="${arg#follow_start_delay_s:=}"
+      FOLLOW_START_DELAY_EXPLICIT="true"
+      ;;
+    gazebo_ready_timeout_s:=*)
+      GAZEBO_READY_TIMEOUT_S="${arg#gazebo_ready_timeout_s:=}"
+      GAZEBO_READY_TIMEOUT_EXPLICIT="true"
+      ;;
+    gazebo_post_ready_delay_s:=*)
+      GAZEBO_POST_READY_DELAY_S="${arg#gazebo_post_ready_delay_s:=}"
+      GAZEBO_POST_READY_DELAY_EXPLICIT="true"
+      ;;
+    spawn_post_delay_s:=*)
+      SPAWN_POST_DELAY_S="${arg#spawn_post_delay_s:=}"
+      SPAWN_POST_DELAY_EXPLICIT="true"
+      ;;
+    rebuild:=*)
+      REBUILD="${arg#rebuild:=}"
+      ;;
+    realign:=*)
+      REALIGN="${arg#realign:=}"
+      ;;
+    session:=*)
+      SESSION="${arg#session:=}"
+      SESSION_EXPLICIT="true"
+      ;;
+    tmux_attach:=*)
+      TMUX_ATTACH="${arg#tmux_attach:=}"
+      ;;
+    dry_run:=*)
+      DRY_RUN="${arg#dry_run:=}"
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+CLI_WORLD="$WORLD"
+CLI_WAYPOINT="$WAYPOINT"
+CLI_NAV2_GOALS="$NAV2_GOALS"
+CLI_LIDAR="$LIDAR"
+CLI_PAUSE_AFTER_GOAL_S="$PAUSE_AFTER_GOAL_S"
+CLI_GUI="$GUI"
+CLI_PERSPECTIVE="$PERSPECTIVE"
+CLI_START_RQT="$START_RQT"
+CLI_MAP_PATH="$MAP_PATH"
+CLI_RVIZ_CONFIG="$RVIZ_CONFIG"
+CLI_SPAWN_UAV="$SPAWN_UAV"
+CLI_UAV_CAMERA_UPDATE_RATE="$UAV_CAMERA_UPDATE_RATE"
+CLI_WITH_FOLLOW="$WITH_FOLLOW"
+CLI_FOLLOW_START_DELAY_S="$FOLLOW_START_DELAY_S"
+CLI_GAZEBO_READY_TIMEOUT_S="$GAZEBO_READY_TIMEOUT_S"
+CLI_GAZEBO_POST_READY_DELAY_S="$GAZEBO_POST_READY_DELAY_S"
+CLI_SPAWN_POST_DELAY_S="$SPAWN_POST_DELAY_S"
+
+if [ "$SESSION_EXPLICIT" != "true" ]; then
+  SESSION="$(default_session)"
+fi
+
+if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
+  load_state
+  if [ "$WAYPOINT_EXPLICIT" = "true" ]; then
+    WAYPOINT="$CLI_WAYPOINT"
+  fi
+  if [ "$NAV2_GOALS_EXPLICIT" = "true" ]; then
+    NAV2_GOALS="$CLI_NAV2_GOALS"
+  fi
+  if [ "$LIDAR_EXPLICIT" = "true" ]; then
+    LIDAR="$CLI_LIDAR"
+  fi
+  if [ "$PAUSE_AFTER_GOAL_EXPLICIT" = "true" ]; then
+    PAUSE_AFTER_GOAL_S="$CLI_PAUSE_AFTER_GOAL_S"
+  fi
+  if [ "$GUI_EXPLICIT" = "true" ]; then
+    GUI="$CLI_GUI"
+  fi
+  if [ "$PERSPECTIVE_EXPLICIT" = "true" ]; then
+    PERSPECTIVE="$CLI_PERSPECTIVE"
+  fi
+  if [ "$START_RQT_EXPLICIT" = "true" ]; then
+    START_RQT="$CLI_START_RQT"
+  fi
+  if [ "$MAP_EXPLICIT" = "true" ]; then
+    MAP_PATH="$CLI_MAP_PATH"
+  fi
+  if [ "$RVIZ_CONFIG_EXPLICIT" = "true" ]; then
+    RVIZ_CONFIG="$CLI_RVIZ_CONFIG"
+  fi
+  if [ "$SPAWN_UAV_EXPLICIT" = "true" ]; then
+    SPAWN_UAV="$CLI_SPAWN_UAV"
+  fi
+  if [ "$UAV_CAMERA_UPDATE_RATE_EXPLICIT" = "true" ]; then
+    UAV_CAMERA_UPDATE_RATE="$CLI_UAV_CAMERA_UPDATE_RATE"
+  fi
+  if [ "$WITH_FOLLOW_EXPLICIT" = "true" ]; then
+    WITH_FOLLOW="$CLI_WITH_FOLLOW"
+  fi
+  if [ "$FOLLOW_START_DELAY_EXPLICIT" = "true" ]; then
+    FOLLOW_START_DELAY_S="$CLI_FOLLOW_START_DELAY_S"
+  fi
+  if [ "$GAZEBO_READY_TIMEOUT_EXPLICIT" = "true" ]; then
+    GAZEBO_READY_TIMEOUT_S="$CLI_GAZEBO_READY_TIMEOUT_S"
+  fi
+  if [ "$GAZEBO_POST_READY_DELAY_EXPLICIT" = "true" ]; then
+    GAZEBO_POST_READY_DELAY_S="$CLI_GAZEBO_POST_READY_DELAY_S"
+  fi
+  if [ "$SPAWN_POST_DELAY_EXPLICIT" = "true" ]; then
+    SPAWN_POST_DELAY_S="$CLI_SPAWN_POST_DELAY_S"
+  fi
+  write_state
+fi
+
+case "$ACTION" in
+  start)
+    create_session
+    start_base_processes
+    restart_stack
+    if [ "$TMUX_ATTACH" = "true" ] && [ "$DRY_RUN" != "true" ]; then
+      exec tmux attach -t "$SESSION"
+    fi
+    ;;
+  restart)
+    restart_stack
+    ;;
+  stack_stop)
+    stop_stack_processes
+    ;;
+  follow)
+    restart_follow_only
+    ;;
+  route_stop)
+    stop_route_only
+    ;;
+  stop)
+    stop_all
+    ;;
+  attach)
+    if [ "$DRY_RUN" = "true" ]; then
+      echo "tmux attach -t $SESSION"
+    else
+      exec tmux attach -t "$SESSION"
+    fi
+    ;;
+  status)
+    print_status
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

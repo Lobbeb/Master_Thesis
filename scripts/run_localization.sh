@@ -18,8 +18,10 @@ DEFAULT_BAYLANDS_INITIAL_POSE_Y="6.112792742664274"
 DEFAULT_BAYLANDS_INITIAL_POSE_YAW="0.0064542265"
 DEFAULT_BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
+LOCAL_BAYLANDS_LOCALIZATION_PARAMS="$WS_ROOT/src/lrs_halmstad/config/localization.yaml"
 WORLD="$DEFAULT_WORLD"
 MAP_PATH=""
+PARAMS_FILE_OVERRIDE=""
 LOCAL_LOCALIZATION_LAUNCH="$WS_ROOT/src/lrs_halmstad/launch/localization_with_params.launch.py"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
@@ -137,11 +139,20 @@ for arg in "${LIDAR_REMAINING_ARGS[@]}"; do
     scan_relay_start_delay_s:=*)
       SCAN_RELAY_START_DELAY_S="${arg#scan_relay_start_delay_s:=}"
       ;;
+    params_file:=*)
+      PARAMS_FILE_OVERRIDE="${arg#params_file:=}"
+      ;;
     set_initial_pose:=*|always_reset_initial_pose:=*|initial_pose_x:=*|initial_pose_y:=*|initial_pose_yaw:=*)
       has_initial_pose_override="true"
       ;;
   esac
 done
+
+if [ -n "$PARAMS_FILE_OVERRIDE" ]; then
+  PARAMS_FILE_OVERRIDE="$(resolve_localization_map_path "$PARAMS_FILE_OVERRIDE")"
+elif [[ "$WORLD" == baylands* ]] && [ -f "$LOCAL_BAYLANDS_LOCALIZATION_PARAMS" ]; then
+  PARAMS_FILE_OVERRIDE="$LOCAL_BAYLANDS_LOCALIZATION_PARAMS"
+fi
 
 if lidar_mode_is_3d_topic "$LIDAR_SCAN_TOPIC"; then
   if [ -z "$USE_SCAN_RELAY" ]; then
@@ -155,6 +166,13 @@ if lidar_mode_is_3d_topic "$LIDAR_SCAN_TOPIC"; then
   fi
   if [ -z "$SCAN_RELAY_START_DELAY_S" ]; then
     SCAN_RELAY_START_DELAY_S="2.0"
+  fi
+elif [[ "$WORLD" == baylands* ]]; then
+  if [ -z "$USE_SCAN_RELAY" ]; then
+    USE_SCAN_RELAY="true"
+  fi
+  if [ -z "$SCAN_RELAY_HZ" ]; then
+    SCAN_RELAY_HZ="8.0"
   fi
 elif [ -z "$USE_SCAN_RELAY" ]; then
   USE_SCAN_RELAY="false"
@@ -257,6 +275,10 @@ fi
 
 if [ -n "$SCAN_RELAY_START_DELAY_S" ]; then
   LAUNCH_ARGS+=("scan_relay_start_delay_s:=$SCAN_RELAY_START_DELAY_S")
+fi
+
+if [ -n "$PARAMS_FILE_OVERRIDE" ]; then
+  LAUNCH_ARGS+=("params_file:=$PARAMS_FILE_OVERRIDE")
 fi
 
 LAUNCH_ARGS+=("${LIDAR_REMAINING_ARGS[@]}")

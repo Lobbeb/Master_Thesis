@@ -466,6 +466,22 @@ class UgvNav2Driver(Node):
         with open(self.goal_sequence_file, "r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
 
+        file_frame_id = str(data.get("frame_id") or "").strip()
+        goal_sequence_relative = self.goal_sequence_relative_to_current_pose
+        if file_frame_id:
+            normalized_file_frame = file_frame_id.lstrip("/")
+            normalized_goal_frame = self.goal_frame_id.lstrip("/")
+            if normalized_file_frame in {"map", "odom"} or (
+                normalized_goal_frame and normalized_file_frame == normalized_goal_frame
+            ):
+                if goal_sequence_relative:
+                    self.get_logger().warn(
+                        "goal_sequence_relative_to_current_pose=true was requested, but "
+                        f"goal_sequence_file '{self.goal_sequence_file}' declares frame_id='{file_frame_id}'. "
+                        "Treating these file waypoints as absolute goals."
+                    )
+                goal_sequence_relative = False
+
         raw_waypoints = data.get("waypoints")
         if isinstance(raw_waypoints, dict):
             ordered_waypoints = []
@@ -527,7 +543,7 @@ class UgvNav2Driver(Node):
             else:
                 yaw_rad = math.radians(float(yaw_deg))
 
-            if self.goal_sequence_relative_to_current_pose:
+            if goal_sequence_relative:
                 dx, dy = rotate_offset(x_val, y_val, start_pose.yaw)
                 goal_x = start_pose.x + dx
                 goal_y = start_pose.y + dy
@@ -669,7 +685,11 @@ class UgvNav2Driver(Node):
             return
 
         path = Path()
-        path.header.stamp = self.get_clock().now().to_msg()
+        # Keep the debug path in "latest transform" time so RViz and Nav2
+        # inspection stay aligned with whichever map->odom transform is
+        # currently available.
+        path.header.stamp.sec = 0
+        path.header.stamp.nanosec = 0
         path.header.frame_id = frame_id
 
         for waypoint in waypoints:
@@ -688,7 +708,10 @@ class UgvNav2Driver(Node):
     def _send_goal(self, frame_id: str, x: float, y: float, yaw: float) -> bool:
         for attempt in range(self.goal_reject_retry_count + 1):
             goal = NavigateToPose.Goal()
-            goal.pose.header.stamp = self.get_clock().now().to_msg()
+            # Use zero-time goals so Nav2 transforms them with the latest
+            # available map->odom TF instead of requiring an exact future stamp.
+            goal.pose.header.stamp.sec = 0
+            goal.pose.header.stamp.nanosec = 0
             goal.pose.header.frame_id = frame_id
             goal.pose.pose.position.x = float(x)
             goal.pose.pose.position.y = float(y)

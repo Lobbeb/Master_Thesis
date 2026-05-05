@@ -10,6 +10,7 @@ VIEW_FOLLOW_SPAWN_SET="false"
 VIEW_DISTANCE_SET="false"
 VIEW_HEIGHT_SET="false"
 ENABLE_WSL_SOFTWARE_RENDERING="${ENABLE_WSL_SOFTWARE_RENDERING:-auto}"
+REBUILD="${REBUILD:-false}"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_PID_FILE="$STATE_DIR/gazebo_sim.pid"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
@@ -104,6 +105,9 @@ while [ "$#" -gt 0 ]; do
     gui:=*)
       GUI="${1#gui:=}"
       GUI_SET="true"
+      ;;
+    rebuild:=*|build:=*)
+      REBUILD="${1#*=}"
       ;;
     view_follow_spawn:=*)
       VIEW_FOLLOW_SPAWN_SET="true"
@@ -353,10 +357,22 @@ set +u
 source /opt/ros/jazzy/setup.bash
 
 cd "$WS_ROOT"
-# Limit package discovery to the ROS workspace source tree.
-# This avoids accidentally building reference repos or notes stored elsewhere
-# under the workspace root.
-colcon build --symlink-install --base-paths src
+case "$REBUILD" in
+  true)
+    echo "[run_gazebo_sim] rebuild:=true -> running colcon build --symlink-install --base-paths src"
+    # Limit package discovery to the ROS workspace source tree.
+    # This avoids accidentally building reference repos or notes stored elsewhere
+    # under the workspace root.
+    colcon build --symlink-install --base-paths src
+    ;;
+  false)
+    echo "[run_gazebo_sim] rebuild:=false -> skipping workspace build"
+    ;;
+  *)
+    echo "[run_gazebo_sim] Invalid rebuild/build option: $REBUILD (use true or false)" >&2
+    exit 2
+    ;;
+esac
 
 source "$WS_ROOT/install/setup.bash"
 source "$WS_ROOT/src/lrs_halmstad/clearpath/setup.bash"

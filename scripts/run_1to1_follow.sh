@@ -81,6 +81,7 @@ HAVE_UGV_INITIAL_POSE_X="false"
 HAVE_UGV_INITIAL_POSE_Y="false"
 HAVE_UGV_INITIAL_POSE_YAW="false"
 HAVE_UGV_GOAL_SEQUENCE="false"
+HAVE_UGV_SET_INITIAL_POSE="false"
 for arg in "$@"; do
   case "$arg" in
     camera:=*|camera_mode:=*)
@@ -148,6 +149,10 @@ for arg in "$@"; do
       ;;
     ugv_initial_pose_yaw_deg:=*)
       HAVE_UGV_INITIAL_POSE_YAW="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    ugv_set_initial_pose:=*)
+      HAVE_UGV_SET_INITIAL_POSE="true"
       EXTRA_ARGS+=("$arg")
       ;;
     goal_sequence_file:=*)
@@ -379,6 +384,10 @@ if [[ "$WORLD" == baylands* ]]; then
   fi
 fi
 
+if [ "$HAVE_UGV_SET_INITIAL_POSE" = "false" ]; then
+  EXTRA_ARGS+=("ugv_set_initial_pose:=true")
+fi
+
 set +u
 source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/install/setup.bash"
@@ -387,7 +396,6 @@ set -u
 set +e
 ros2 launch lrs_halmstad run_follow.launch.py \
   ugv_mode:=nav2 \
-  ugv_set_initial_pose:=true \
   leader_mode:=odom \
   "${EXTRA_ARGS[@]}" \
   world:="$WORLD"

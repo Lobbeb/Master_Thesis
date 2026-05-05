@@ -44,18 +44,28 @@ ARGUMENTS = [
         choices=["true", "false"],
         description="Convert an incoming point cloud into a 2D LaserScan before Nav2",
     ),
-    DeclareLaunchArgument("pc2ls_min_height", default_value="-0.35"),
-    DeclareLaunchArgument("pc2ls_max_height", default_value="0.05"),
+    DeclareLaunchArgument("pc2ls_min_height", default_value="0.2"),
+    DeclareLaunchArgument("pc2ls_max_height", default_value="0.5"),
     DeclareLaunchArgument("pc2ls_angle_min", default_value="-3.141592653589793"),
     DeclareLaunchArgument("pc2ls_angle_max", default_value="3.141592653589793"),
     DeclareLaunchArgument("pc2ls_angle_increment", default_value="0.006981317007977318"),
     DeclareLaunchArgument("pc2ls_scan_time", default_value="0.05"),
-    DeclareLaunchArgument("pc2ls_range_min", default_value="0.5"),
+    DeclareLaunchArgument("pc2ls_range_min", default_value="0.25"),
     DeclareLaunchArgument("pc2ls_range_max", default_value="25.0"),
-    DeclareLaunchArgument("pc2ls_queue_size", default_value="20"),
+    DeclareLaunchArgument("pc2ls_queue_size", default_value="40"),
     DeclareLaunchArgument("pc2ls_target_frame", default_value="odom"),
     DeclareLaunchArgument("pc2ls_transform_tolerance", default_value="0.2"),
     DeclareLaunchArgument("pc2ls_use_inf", default_value="true", choices=["true", "false"]),
+    DeclareLaunchArgument(
+        "use_scan_relay",
+        default_value="false",
+        choices=["true", "false"],
+        description="Relay the latest scan at a slower, stable rate for Nav2 consumers.",
+    ),
+    DeclareLaunchArgument("scan_relay_hz", default_value="4.0"),
+    DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.25"),
+    DeclareLaunchArgument("scan_relay_restamp", default_value="true", choices=["true", "false"]),
+    DeclareLaunchArgument("scan_relay_start_delay_s", default_value="2.0"),
     DeclareLaunchArgument(
         "params_file",
         default_value="",
@@ -92,6 +102,11 @@ def launch_setup(context, *args, **kwargs):
     pc2ls_target_frame = LaunchConfiguration("pc2ls_target_frame")
     pc2ls_transform_tolerance = LaunchConfiguration("pc2ls_transform_tolerance")
     pc2ls_use_inf = LaunchConfiguration("pc2ls_use_inf")
+    use_scan_relay = LaunchConfiguration("use_scan_relay")
+    scan_relay_hz = LaunchConfiguration("scan_relay_hz")
+    scan_relay_max_age_s = LaunchConfiguration("scan_relay_max_age_s")
+    scan_relay_restamp = LaunchConfiguration("scan_relay_restamp")
+    scan_relay_start_delay_s = LaunchConfiguration("scan_relay_start_delay_s")
     params_file = LaunchConfiguration("params_file")
     start_teleop_base = LaunchConfiguration("start_teleop_base")
 
@@ -113,14 +128,6 @@ def launch_setup(context, *args, **kwargs):
         eval_params_file = os.path.join(
             pkg_clearpath_nav2_demos, "config", platform_model, "nav2.yaml"
         )
-
-    rewritten_parameters = RewrittenYaml(
-        source_file=eval_params_file,
-        param_rewrites={
-            "topic": eval_scan_topic,
-        },
-        convert_types=True,
-    )
 
     launch_nav2 = PathJoinSubstitution([pkg_nav2_bringup, "launch", "navigation_launch.py"])
     launch_teleop_base = PathJoinSubstitution([pkg_clearpath_control, "launch", "teleop_base.launch.py"])
@@ -155,12 +162,44 @@ def launch_setup(context, *args, **kwargs):
             ],
         )
 
+    relay_node = None
+    if use_scan_relay.perform(context) == "true":
+        relay_input_topic = eval_scan_topic
+        eval_scan_topic = f"{relay_input_topic}_relay"
+        relay_node = Node(
+            package="lrs_halmstad",
+            executable="latest_scan_relay",
+            name="latest_scan_relay",
+            output="screen",
+            parameters=[
+                {
+                    "use_sim_time": use_sim_time,
+                    "input_topic": relay_input_topic,
+                    "output_topic": eval_scan_topic,
+                    "publish_hz": scan_relay_hz,
+                    "max_age_s": scan_relay_max_age_s,
+                    "restamp": scan_relay_restamp,
+                    "startup_hold_s": scan_relay_start_delay_s,
+                }
+            ],
+        )
+
+    rewritten_parameters = RewrittenYaml(
+        source_file=eval_params_file,
+        param_rewrites={
+            "topic": eval_scan_topic,
+        },
+        convert_types=True,
+    )
+
     group_actions = [
         PushRosNamespace(namespace),
         SetRemap("/" + namespace + "/odom", "/" + namespace + "/platform/odom"),
     ]
     if converter_node is not None:
         group_actions.append(converter_node)
+    if relay_node is not None:
+        group_actions.append(relay_node)
     group_actions.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(launch_nav2),

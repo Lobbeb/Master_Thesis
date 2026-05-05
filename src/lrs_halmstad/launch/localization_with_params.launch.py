@@ -21,6 +21,11 @@ ARGUMENTS = [
     DeclareLaunchArgument("scan_topic", default_value=""),
     DeclareLaunchArgument("pointcloud_topic", default_value=""),
     DeclareLaunchArgument(
+        "params_file",
+        default_value="",
+        description="Optional localization params YAML override.",
+    ),
+    DeclareLaunchArgument(
         "set_initial_pose",
         default_value="false",
         choices=["true", "false"],
@@ -28,7 +33,7 @@ ARGUMENTS = [
     ),
     DeclareLaunchArgument(
         "always_reset_initial_pose",
-        default_value="true",
+        default_value="false",
         choices=["true", "false"],
         description="Force AMCL to use the provided initial pose on every startup.",
     ),
@@ -73,6 +78,7 @@ def launch_setup(context, *args, **kwargs):
     map_path = LaunchConfiguration("map")
     scan_topic = LaunchConfiguration("scan_topic")
     pointcloud_topic = LaunchConfiguration("pointcloud_topic")
+    params_file = LaunchConfiguration("params_file")
     set_initial_pose = LaunchConfiguration("set_initial_pose")
     always_reset_initial_pose = LaunchConfiguration("always_reset_initial_pose")
     initial_pose_x = LaunchConfiguration("initial_pose_x")
@@ -162,9 +168,13 @@ def launch_setup(context, *args, **kwargs):
             ],
         )
 
-    file_parameters = PathJoinSubstitution(
-        [pkg_clearpath_nav2_demos, "config", platform_model, "localization.yaml"]
-    )
+    eval_params_file = params_file.perform(context)
+    if len(eval_params_file) == 0:
+        file_parameters = PathJoinSubstitution(
+            [pkg_clearpath_nav2_demos, "config", platform_model, "localization.yaml"]
+        )
+    else:
+        file_parameters = eval_params_file
 
     rewritten_parameters = RewrittenYaml(
         source_file=file_parameters,

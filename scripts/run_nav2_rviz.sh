@@ -3,19 +3,68 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BASE_RVIZ_CONFIG="$WS_ROOT/src/lrs_halmstad/config/nav2_namespaced_waypoints.rviz"
+RVIZ_CONFIG_DIR="$WS_ROOT/src/lrs_halmstad/config"
+BASE_RVIZ_CONFIG="$RVIZ_CONFIG_DIR/nav2_namespaced_waypoints.rviz"
+RVIZ_CONFIG_OVERRIDE=""
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 
 lidar_mode_parse_args 2d "$@"
+
+if [ "$LIDAR_MODE" = "3d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
+  LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
+  echo "[run_nav2_rviz] 3D lidar mode: using throttled relay topic $LIDAR_SCAN_TOPIC" >&2
+fi
+
+RVIZ_PASSTHROUGH_ARGS=()
+for arg in "${LIDAR_REMAINING_ARGS[@]}"; do
+  case "$arg" in
+    rviz_config:=*)
+      RVIZ_CONFIG_OVERRIDE="${arg#rviz_config:=}"
+      ;;
+    config:=*)
+      RVIZ_CONFIG_OVERRIDE="${arg#config:=}"
+      ;;
+    *)
+      RVIZ_PASSTHROUGH_ARGS+=("$arg")
+      ;;
+  esac
+done
+LIDAR_REMAINING_ARGS=("${RVIZ_PASSTHROUGH_ARGS[@]}")
+
+if [ -n "$RVIZ_CONFIG_OVERRIDE" ]; then
+  RVIZ_CONFIG_CANDIDATES=()
+  if [[ "$RVIZ_CONFIG_OVERRIDE" = /* ]]; then
+    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_OVERRIDE")
+  else
+    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_DIR/$RVIZ_CONFIG_OVERRIDE")
+    if [[ "$RVIZ_CONFIG_OVERRIDE" != *.rviz ]]; then
+      RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_DIR/$RVIZ_CONFIG_OVERRIDE.rviz")
+    fi
+    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_OVERRIDE")
+    RVIZ_CONFIG_CANDIDATES+=("$WS_ROOT/$RVIZ_CONFIG_OVERRIDE")
+  fi
+
+  for candidate in "${RVIZ_CONFIG_CANDIDATES[@]}"; do
+    if [ -f "$candidate" ]; then
+      BASE_RVIZ_CONFIG="$candidate"
+      break
+    fi
+  done
+
+  if [ ! -f "$BASE_RVIZ_CONFIG" ]; then
+    echo "[run_nav2_rviz] RViz config not found: $RVIZ_CONFIG_OVERRIDE" >&2
+    exit 2
+  fi
+fi
 
 set +u
 source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/install/setup.bash"
 set -u
 
-RVIZ_VIEW_X=""
-RVIZ_VIEW_Y=""
+RVIZ_VIEW_X="0.0"
+RVIZ_VIEW_Y="0.0"
 AMCL_TMP="$(mktemp)"
 AMCL_ERR_TMP="$(mktemp)"
 if timeout 2s ros2 topic echo --no-daemon --once /a201_0000/amcl_pose >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
@@ -61,7 +110,9 @@ if [ "$LIDAR_MODE" = "2d" ] || [ "$LIDAR_SCAN_TOPIC" != "$(lidar_mode_raw_scan_t
     RVIZ_SCAN_TOPIC="<robot_namespace>/${RVIZ_SCAN_TOPIC#/a201_0000/}"
   fi
   mkdir -p /tmp/halmstad_ws
-  RVIZ_CONFIG="/tmp/halmstad_ws/nav2_namespaced_waypoints.$(echo "$LIDAR_MODE" | tr -cd '[:alnum:]').rviz"
+  RVIZ_CONFIG_STEM="$(basename "$BASE_RVIZ_CONFIG")"
+  RVIZ_CONFIG_STEM="${RVIZ_CONFIG_STEM%.rviz}"
+  RVIZ_CONFIG="/tmp/halmstad_ws/${RVIZ_CONFIG_STEM}.$(echo "$LIDAR_MODE" | tr -cd '[:alnum:]').rviz"
   RVIZ_SCAN_TOPIC="$RVIZ_SCAN_TOPIC" RVIZ_VIEW_X="$RVIZ_VIEW_X" RVIZ_VIEW_Y="$RVIZ_VIEW_Y" \
     python3 - "$BASE_RVIZ_CONFIG" "$RVIZ_CONFIG" <<'PY'
 import os
