@@ -110,7 +110,10 @@ route_lidar_preset_args() {
   case "$route" in
     strip)
       if ! extra_arg_present "pc2ls_min_height:="; then
-        printf '%s\n' "pc2ls_min_height:=-0.20"
+        printf '%s\n' "pc2ls_min_height:=-0.36"
+      fi
+      if ! extra_arg_present "pc2ls_max_height:="; then
+        printf '%s\n' "pc2ls_max_height:=0.12"
       fi
       ;;
     rotundan)
