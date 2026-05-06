@@ -1,0 +1,37 @@
+frame_id: map
+waypoints:
+- name: road_to_east_0
+  x: -17.31788046548818
+  y: 75.8230883544306
+  yaw_deg: -67.00786729165442
+  group: road_to_east
+- name: road_to_east_1
+  x: -5.284056383215968
+  y: 62.063483248284506
+  yaw_deg: -55.74887085811553
+  group: road_to_east
+- name: road_to_east_2
+  x: 4.658918147143612
+  y: 51.23578980164
+  yaw_deg: -57.49419955415446
+  group: road_to_east
+- name: road_to_east_3
+  x: 13.408287836589302
+  y: 40.2868747536093
+  yaw_deg: -39.53327907411805
+  group: road_to_east
+- name: road_to_east_4
+  x: 19.570041083498808
+  y: 32.20513794080113
+  yaw_deg: -92.14681214729019
+  group: road_to_east
+- name: road_to_east_5
+  x: 17.75557665794713
+  y: 28.408815886971297
+  yaw_deg: -175.2533021682151
+  group: road_to_east
+- name: road_to_east_6
+  x: 9.088153914929395
+  y: 31.141202241585294
+  yaw_deg: -177.5371513921323
+  group: road_to_east

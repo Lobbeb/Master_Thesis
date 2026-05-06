@@ -29,6 +29,8 @@ UAV_CHECK_MIN_Z=5.0
 UAV_CHECK_HOLD_UGV_S=0
 UAV_CHECK_REQUIRE_COMMAND="false"
 SKIP_REMAINING_ON_COMPLETE="true"
+CHAIN_ROUTE_STARTS="false"
+FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE="false"
 WAYPOINT_CONFIG_DIR="$WS_ROOT/src/lrs_halmstad/config/baylands_waypoints"
 GROUP_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 PLAIN_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
@@ -70,6 +72,8 @@ Options:
   uav_check_timeout_s:=seconds
   uav_check_hold_ugv_s:=seconds  Optional UGV start delay while checking
   skip_remaining_on_complete:=true|false
+  chain_route_starts:=true|false  In sweep:=routes, start each route at the previous route's last waypoint
+  fallback_waypoints_on_route_failure:=true|false  In sweep:=routes, try sliced waypoint starts if the full route fails
   dry_run:=true|false
 
 Any other tmux_1to1 argument is forwarded, such as gui:=false, rtf:=1.0,
@@ -116,7 +120,26 @@ route_lidar_preset_args() {
         printf '%s\n' "pc2ls_max_height:=0.12"
       fi
       ;;
+    road_to_strip|road_to_spawn)
+      if ! extra_arg_present "pc2ls_min_height:="; then
+        printf '%s\n' "pc2ls_min_height:=-0.4"
+      fi
+      if ! extra_arg_present "pc2ls_max_height:="; then
+        printf '%s\n' "pc2ls_max_height:=0.4"
+      fi
+      ;;
+    road_to_west)
+      if ! extra_arg_present "pc2ls_min_height:="; then
+        printf '%s\n' "pc2ls_min_height:=-0.38"
+      fi
+      if ! extra_arg_present "pc2ls_max_height:="; then
+        printf '%s\n' "pc2ls_max_height:=0.0"
+      fi
+      ;;
     rotundan)
+      if ! extra_arg_present "pc2ls_min_height:="; then
+        printf '%s\n' "pc2ls_min_height:=-0.05"
+      fi
       if ! extra_arg_present "pc2ls_max_height:="; then
         printf '%s\n' "pc2ls_max_height:=0.10"
       fi
@@ -150,20 +173,31 @@ result_context() {
 }
 
 discover_routes() {
-  local file base route
-  shopt -s nullglob
-  for file in "$WAYPOINT_CONFIG_DIR"/baylands_waypoints_*.yaml; do
-    base="${file##*/}"
-    [[ "$base" == *_rviz.yaml ]] && continue
-    route="${base#baylands_waypoints_}"
-    route="${route%.yaml}"
-    case "$route" in
-      ""|none|rviz)
-        continue
-        ;;
-    esac
-    printf '%s\n' "$route"
-  done | sort
+  python3 - "$WAYPOINT_CONFIG_DIR" "$GROUP_CSV" <<'PY'
+import csv
+import os
+import sys
+
+waypoint_config_dir, group_csv = sys.argv[1:]
+seen = set()
+
+def emit(route: str) -> None:
+    route = str(route).strip()
+    if not route or route in {"none", "rviz"} or route in seen:
+        return
+    if not os.path.exists(os.path.join(waypoint_config_dir, f"baylands_waypoints_{route}.yaml")):
+        return
+    seen.add(route)
+    print(route)
+
+try:
+    with open(group_csv, "r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            emit(row.get("group", ""))
+except FileNotFoundError:
+    pass
+
+PY
 }
 
 split_routes() {
@@ -264,6 +298,22 @@ for waypoint in data.get("waypoints") or []:
 PY
 }
 
+last_waypoint_for_route() {
+  local route="$1"
+  local last=""
+  while IFS= read -r waypoint_name; do
+    [ -n "$waypoint_name" ] && last="$waypoint_name"
+  done < <(route_waypoint_names "$route")
+
+  if [ -n "$last" ]; then
+    printf '%s\n' "$last"
+    return 0
+  fi
+
+  echo "No last waypoint found for route '$route'" >&2
+  return 1
+}
+
 write_route_slice() {
   local route="$1"
   local start_index="$2"
@@ -291,6 +341,36 @@ os.makedirs(os.path.dirname(out_path), exist_ok=True)
 with open(out_path, "w", encoding="utf-8") as handle:
     yaml.safe_dump(data, handle, sort_keys=False)
 PY
+}
+
+append_waypoint_jobs() {
+  local route="$1"
+  local label_prefix="$2"
+  local route_file waypoint_name slice_path index
+  local -a waypoint_names
+
+  route_file="$(route_yaml_path "$route")"
+  if [ ! -f "$route_file" ]; then
+    echo "Skipping route '$route': missing route file $route_file" >&2
+    return 1
+  fi
+
+  mapfile -t waypoint_names < <(route_waypoint_names "$route")
+  if [ "${#waypoint_names[@]}" -eq 0 ]; then
+    echo "Skipping route '$route': no named waypoints in $route_file" >&2
+    return 1
+  fi
+
+  for index in "${!waypoint_names[@]}"; do
+    waypoint_name="${waypoint_names[$index]}"
+    slice_path="$RUN_DIR/slices/$(sanitize_name "${label_prefix}${route}")_${index}_$(sanitize_name "$waypoint_name").yaml"
+    if [ "$DRY_RUN" != true ]; then
+      write_route_slice "$route" "$index" "$slice_path"
+    fi
+    JOB_START_WAYPOINTS+=("$waypoint_name")
+    JOB_NAV2_GOALS+=("$slice_path")
+    JOB_LABELS+=("${label_prefix}${route}_${index}_${waypoint_name}")
+  done
 }
 
 session_state_file() {
@@ -584,6 +664,12 @@ for arg in "$@"; do
     skip_remaining_on_complete:=*)
       SKIP_REMAINING_ON_COMPLETE="${arg#skip_remaining_on_complete:=}"
       ;;
+    chain_route_starts:=*|chain_routes:=*)
+      CHAIN_ROUTE_STARTS="${arg#*:=}"
+      ;;
+    fallback_waypoints_on_route_failure:=*|fallback_waypoints:=*)
+      FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE="${arg#*:=}"
+      ;;
     stop_before_each:=*)
       STOP_BEFORE_EACH="${arg#stop_before_each:=}"
       ;;
@@ -646,6 +732,8 @@ write_summary_file() {
     printf 'mode: %s\n' "$MODE"
     printf 'lidar: %s\n' "$LIDAR"
     printf 'sweep: %s\n' "$SWEEP_MODE"
+    printf 'chain_route_starts: %s\n' "$CHAIN_ROUTE_STARTS"
+    printf 'fallback_waypoints_on_route_failure: %s\n' "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE"
     printf 'routes: %s\n' "${ROUTES[*]}"
     if [ -n "$CURRENT_SESSION" ]; then
       printf 'active_session: %s\n' "$CURRENT_SESSION"
@@ -688,50 +776,41 @@ fi
 echo "  uav follow check: $CHECK_UAV_FOLLOW"
 echo "  uav command required: $UAV_CHECK_REQUIRE_COMMAND"
 echo "  skip remaining on complete: $SKIP_REMAINING_ON_COMPLETE"
+echo "  chain route starts: $CHAIN_ROUTE_STARTS"
+echo "  fallback waypoints on route failure: $FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE"
 echo "  routes: ${ROUTES[*]}"
 if [ "$DRY_RUN" != true ]; then
   echo "  logs: $RUN_DIR"
 fi
 
+PREVIOUS_ROUTE_LAST_WAYPOINT=""
 for route in "${ROUTES[@]}"; do
   JOB_START_WAYPOINTS=()
   JOB_NAV2_GOALS=()
   JOB_LABELS=()
+  route_last_waypoint=""
 
   case "$SWEEP_MODE" in
     routes|route)
-      first_waypoint="$(first_waypoint_for_route "$route")" || {
-        echo "Skipping route '$route': could not resolve first waypoint" >&2
-        RESULTS+=("$route skipped no_first_waypoint")
-        continue
-      }
+      if [ "$CHAIN_ROUTE_STARTS" = true ] && [ -n "$PREVIOUS_ROUTE_LAST_WAYPOINT" ]; then
+        first_waypoint="$PREVIOUS_ROUTE_LAST_WAYPOINT"
+      else
+        first_waypoint="$(first_waypoint_for_route "$route")" || {
+          echo "Skipping route '$route': could not resolve first waypoint" >&2
+          RESULTS+=("$route skipped no_first_waypoint")
+          continue
+        }
+      fi
+      route_last_waypoint="$(last_waypoint_for_route "$route" 2>/dev/null || true)"
       JOB_START_WAYPOINTS+=("$first_waypoint")
       JOB_NAV2_GOALS+=("$route")
       JOB_LABELS+=("$route")
       ;;
     waypoints|waypoint)
-      route_file="$(route_yaml_path "$route")"
-      if [ ! -f "$route_file" ]; then
-        echo "Skipping route '$route': missing route file $route_file" >&2
+      if ! append_waypoint_jobs "$route" ""; then
         RESULTS+=("$route skipped no_route_file")
         continue
       fi
-      mapfile -t waypoint_names < <(route_waypoint_names "$route")
-      if [ "${#waypoint_names[@]}" -eq 0 ]; then
-        echo "Skipping route '$route': no named waypoints in $route_file" >&2
-        RESULTS+=("$route skipped no_waypoints")
-        continue
-      fi
-      for index in "${!waypoint_names[@]}"; do
-        waypoint_name="${waypoint_names[$index]}"
-        slice_path="$RUN_DIR/slices/$(sanitize_name "$route")_${index}_$(sanitize_name "$waypoint_name").yaml"
-        if [ "$DRY_RUN" != true ]; then
-          write_route_slice "$route" "$index" "$slice_path"
-        fi
-        JOB_START_WAYPOINTS+=("$waypoint_name")
-        JOB_NAV2_GOALS+=("$slice_path")
-        JOB_LABELS+=("${route}_${index}_${waypoint_name}")
-      done
       ;;
     *)
       echo "Invalid sweep mode: $SWEEP_MODE" >&2
@@ -740,7 +819,8 @@ for route in "${ROUTES[@]}"; do
       ;;
   esac
 
-  for job_index in "${!JOB_START_WAYPOINTS[@]}"; do
+  job_index=0
+  while [ "$job_index" -lt "${#JOB_START_WAYPOINTS[@]}" ]; do
     first_waypoint="${JOB_START_WAYPOINTS[$job_index]}"
     nav2_goals_arg="${JOB_NAV2_GOALS[$job_index]}"
     job_label="${JOB_LABELS[$job_index]}"
@@ -783,6 +863,7 @@ for route in "${ROUTES[@]}"; do
       echo "[dry-run] start:"
       print_cmd "${run_cmd[@]}"
       RESULTS+=("$job_label dry_run $first_waypoint $run_context")
+      job_index=$((job_index + 1))
       continue
     fi
 
@@ -790,6 +871,7 @@ for route in "${ROUTES[@]}"; do
       echo "Route '$job_label' failed to launch." >&2
       RESULTS+=("$job_label launch_failed $first_waypoint $run_context")
       stop_session "$session"
+      job_index=$((job_index + 1))
       continue
     fi
 
@@ -806,6 +888,7 @@ for route in "${ROUTES[@]}"; do
         if [ "$BETWEEN_S" != "0" ] && [ "$BETWEEN_S" != "0.0" ]; then
           sleep "$BETWEEN_S"
         fi
+        job_index=$((job_index + 1))
         continue
       fi
     fi
@@ -832,6 +915,13 @@ for route in "${ROUTES[@]}"; do
     CURRENT_START_WAYPOINT=""
     CURRENT_RUN_CONTEXT=""
 
+    if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
+      if [ "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE" = true ] && [ "$job_index" -eq 0 ] && [ "$status" != "completed" ]; then
+        echo "Route '$route' failed as a full route; falling back to sliced waypoint starts."
+        append_waypoint_jobs "$route" "fallback_" || true
+      fi
+    fi
+
     if [ "$BETWEEN_S" != "0" ] && [ "$BETWEEN_S" != "0.0" ]; then
       sleep "$BETWEEN_S"
     fi
@@ -840,7 +930,20 @@ for route in "${ROUTES[@]}"; do
       echo "Route '$route' completed from '$first_waypoint'; skipping remaining start waypoints for this route."
       break
     fi
+    if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
+      if [ "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE" = true ] && [[ "$job_label" == fallback_* ]] && [ "$SKIP_REMAINING_ON_COMPLETE" = true ] && [ "$status" = "completed" ]; then
+        echo "Route '$route' completed from fallback '$first_waypoint'; skipping remaining fallback waypoints for this route."
+        break
+      fi
+    fi
+    job_index=$((job_index + 1))
   done
+
+  if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
+    if [ -n "$route_last_waypoint" ]; then
+      PREVIOUS_ROUTE_LAST_WAYPOINT="$route_last_waypoint"
+    fi
+  fi
 done
 
 CURRENT_SESSION=""
