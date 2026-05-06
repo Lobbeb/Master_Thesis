@@ -18,7 +18,7 @@ slam_state_source_env() {
 
 slam_state_default_name() {
   local sim_world_file="/tmp/halmstad_ws/gazebo_sim.world"
-  local world="warehouse"
+  local world="baylands"
   local sim_world=""
 
   if [ -f "$sim_world_file" ]; then

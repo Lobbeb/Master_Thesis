@@ -85,7 +85,7 @@ if sim_helper_running; then
   echo "[run_support_capture_pair] Gazebo helper detected; stopping the capture pair when the sim helper exits."
 fi
 
-WORLD="warehouse"
+WORLD="baylands"
 if sim_helper_running && [ -f "$SIM_WORLD_FILE" ]; then
   sim_world="$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)"
   if [ -n "$sim_world" ]; then

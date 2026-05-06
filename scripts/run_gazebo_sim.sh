@@ -197,7 +197,7 @@ if [ -n "$SPAWN_STATE_NAME" ]; then
 fi
 
 if [ -z "$WORLD" ]; then
-  WORLD="warehouse"
+  WORLD="baylands"
 fi
 
 if [ "$WORLD" = "baylands" ] && \

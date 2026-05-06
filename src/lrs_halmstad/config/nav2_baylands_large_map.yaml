@@ -24,16 +24,16 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 1.0
+    failure_tolerance: 0.3
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
     use_realtime_priority: false
     progress_checker:
       plugin: "nav2_controller::PoseProgressChecker"
-      required_movement_radius: 0.05
-      required_movement_angle: 0.2
-      movement_time_allowance: 30.0
+      required_movement_radius: 0.15
+      required_movement_angle: 0.35
+      movement_time_allowance: 8.0
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -52,10 +52,10 @@ controller_server:
       vx_std: 0.12
       vy_std: 0.2
       wz_std: 0.25
-      vx_max: 0.35
-      vx_min: -0.2
+      vx_max: 0.6
+      vx_min: -0.6
       vy_max: 0.5
-      wz_max: 1.0
+      wz_max: 0.8
       iteration_count: 1
       prune_distance: 1.7
       transform_tolerance: 0.1
@@ -76,7 +76,7 @@ controller_server:
       ConstraintCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 2.0
+        cost_weight: 4.0
       GoalCritic:
         enabled: true
         cost_power: 1
@@ -90,13 +90,13 @@ controller_server:
       PreferForwardCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 3.0
         threshold_to_consider: 0.5
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 2.4
-        critical_cost: 300.0
+        cost_weight: 4.0
+        critical_cost: 400.0
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 1.0
@@ -104,7 +104,7 @@ controller_server:
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 10.0
+        cost_weight: 8.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 4
         threshold_to_consider: 0.5
@@ -113,7 +113,7 @@ controller_server:
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 8.0
         offset_from_furthest: 5
         threshold_to_consider: 1.4
       PathAngleCritic:
@@ -152,11 +152,11 @@ local_costmap:
           data_type: "LaserScan"
           marking: true
           clearing: true
-          max_obstacle_height: 2.0
-          raytrace_max_range: 2.0
-          raytrace_min_range: 0.5
-          obstacle_max_range: 1.0
-          obstacle_min_range: 0.5
+          max_obstacle_height: 0.25
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.60
+          obstacle_max_range: 3.0
+          obstacle_min_range: 0.60
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
         enabled: true
@@ -180,14 +180,14 @@ global_costmap:
       track_unknown_space: true
       trinary_costmap: true
       always_send_full_costmap: false
-      plugins: ["static_layer", "inflation_layer"]
+      plugins: ["static_layer", "inflation_layer", "obstacle_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.65
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.78
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: false
@@ -201,9 +201,9 @@ global_costmap:
           marking: true
           clearing: true
           obstacle_min_range: 0.35
+          obstacle_max_range: 2.0
           raytrace_min_range: 0.35
-          obstacle_max_range: 1.0
-          raytrace_max_range: 1.5
+          raytrace_max_range: 3.0
           max_obstacle_height: 2.0
           min_obstacle_height: 0.0
           inf_is_valid: false
@@ -284,7 +284,7 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 1.0]
+    max_velocity: [0.7, 0.0, 1.0]
     min_velocity: [-1.0, 0.0, -1.0]
     max_accel: [1.0, 0.0, 1.0]
     max_decel: [-1.0, 0.0, -1.0]

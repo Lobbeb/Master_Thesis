@@ -6,7 +6,7 @@ WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_PID_FILE="$STATE_DIR/gazebo_sim.pid"
 TMUX_STATE_DIR="$STATE_DIR/tmux_sessions"
-WORLD="warehouse"
+WORLD="baylands"
 SESSION="halmstad-1to1"
 MAP_PATH=""
 GUI="false"
@@ -25,6 +25,8 @@ LOCALIZATION_DELAY_OVERRIDE=""
 NAV2_DELAY_OVERRIDE=""
 FOLLOW_DELAY_OVERRIDE=""
 RECORD_DELAY_OVERRIDE=""
+GAZEBO_READY_TIMEOUT_S=180
+GAZEBO_READY_SETTLE_S=10
 UAV_NAME="dji0"
 ROS_DOMAIN_ID_EFFECTIVE="${ROS_DOMAIN_ID:-3}"
 RMW_IMPLEMENTATION_EFFECTIVE="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
@@ -49,7 +51,7 @@ BAYLANDS_NAV_SPAWN_X="-14.085738068"
 BAYLANDS_NAV_SPAWN_Y="-54.861874768"
 BAYLANDS_NAV_SPAWN_Z="0.100975479"
 BAYLANDS_NAV_SPAWN_YAW="0.484129496"
-BAYLANDS_NAV_LIDAR_MODE="3d"
+BAYLANDS_NAV_LIDAR_MODE="2d"
 NAV_LIDAR_MODE=""
 BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
@@ -66,6 +68,7 @@ FOLLOW_WAIT_TOPICS=""
 SPAWN_ARGS=()
 FOLLOW_ARGS=()
 GAZEBO_ARGS=()
+NAV_LIDAR_ARGS=()
 RECORD_CMD=()
 OMNET="false"
 
@@ -258,6 +261,12 @@ for arg in "$@"; do
     spawn_delay_s:=*)
       SPAWN_DELAY_OVERRIDE="${arg#spawn_delay_s:=}"
       ;;
+    gazebo_ready_timeout_s:=*|sim_ready_timeout_s:=*)
+      GAZEBO_READY_TIMEOUT_S="${arg#*:=}"
+      ;;
+    gazebo_ready_settle_s:=*|sim_ready_settle_s:=*)
+      GAZEBO_READY_SETTLE_S="${arg#*:=}"
+      ;;
     localization_delay_s:=*)
       LOCALIZATION_DELAY_OVERRIDE="${arg#localization_delay_s:=}"
       ;;
@@ -278,6 +287,9 @@ for arg in "$@"; do
       ;;
     lidar:=3d|scan_sensor:=3d)
       NAV_LIDAR_MODE="3d"
+      ;;
+    scan_topic:=*|pointcloud_topic:=*|use_scan_relay:=*|scan_relay_hz:=*|scan_relay_max_age_s:=*|scan_relay_restamp:=*|scan_relay_start_delay_s:=*|pc2ls_min_height:=*|pc2ls_max_height:=*|pc2ls_angle_min:=*|pc2ls_angle_max:=*|pc2ls_angle_increment:=*|pc2ls_scan_time:=*|pc2ls_range_min:=*|pc2ls_range_max:=*|pc2ls_queue_size:=*|pc2ls_target_frame:=*|pc2ls_transform_tolerance:=*|pc2ls_use_inf:=*)
+      NAV_LIDAR_ARGS+=("$arg")
       ;;
     camera_mode:=*|uav_camera_mode:=*)
       echo "Use camera:=attached with $0." >&2
@@ -359,7 +371,7 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown argument: $arg" >&2
-      echo "Usage: $0 [world] [mode:=follow|yolo] [record:=true|false] [record_profile:=default|step2_light|vision] [record_tag:=name] [record_out:=bags/experiments/...] [camera:=attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [publish_follow_debug_topics:=true|false] [publish_pose_cmd_topics:=true|false] [publish_camera_debug_topics:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [yolo_control_mode:=visual_bridge|follow_uav_estimate] [visual_follow_logic:=legacy|follow_core] [obb:=true|false] [tracker:=true|false] [external_detection_node:=detector|tracker] [tracker_config:=botsort.yaml] [detector_backend:=ultralytics|onnx_cpu|onnx_directml] [detector_async_inference:=true|false] [yolo_device:=cpu|auto] [detector_onnx_model:=...] [params_file:=/path/run_follow_defaults.yaml] [ugv_start_delay_s:=12.0] [follow_point_prefer_target_pose_heading:=true|false] [follow_point_prefer_target_pose_position:=true|false] [start_visual_actuation_bridge:=true|false] [start_visual_follow_point_generator:=true|false] [start_visual_follow_planner:=true|false] [start_visual_follow_controller:=true|false] [nav2_goals:=parkinglot_east|route.yaml] [ugv_goal_sequence_csv:=x,y,yaw;...] [ugv_goal_sequence_randomize:=true|false] [ugv_goal_sequence_random_reverse:=true|false] [ugv_goal_sequence_relative_to_current_pose:=true|false] [folder:=...] [map:=/path/map.yaml] [lidar:=2d|3d] [gui:=true|false] [rtf:=1.0] [x:=...] [y:=...] [z:=...] [yaw:=...] [state:=checkpoint] [waypoint:=name] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [follow_wait_topics:=/topic_a,/topic_b] [record_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes] [omnet:=true|false] [omnet_network:=wifi|5g|lora] [omnet_ui:=cmdenv|qtenv] [omnet_project:=/path/UAV_UGV] [omnet_result_dir:=/path] [omnet_bridge_port:=5555] [omnet_start_delay_s:=3.0] [ugv_start_delay_s:=3.0] [uav_start_delay_s:=12.0]" >&2
+      echo "Usage: $0 [world] [mode:=follow|yolo] [record:=true|false] [record_profile:=default|step2_light|vision] [record_tag:=name] [record_out:=bags/experiments/...] [camera:=attached] [follow_yaw:=true|false] [pan_enable:=true|false] [use_tilt:=true|false] [publish_follow_debug_topics:=true|false] [publish_pose_cmd_topics:=true|false] [publish_camera_debug_topics:=true|false] [height:=7] [mount_pitch_deg:=45] [uav_name:=dji0] [weights:=...] [target:=...] [yolo_control_mode:=visual_bridge|follow_uav_estimate] [visual_follow_logic:=legacy|follow_core] [obb:=true|false] [tracker:=true|false] [external_detection_node:=detector|tracker] [tracker_config:=botsort.yaml] [detector_backend:=ultralytics|onnx_cpu|onnx_directml] [detector_async_inference:=true|false] [yolo_device:=cpu|auto] [detector_onnx_model:=...] [params_file:=/path/run_follow_defaults.yaml] [ugv_start_delay_s:=12.0] [follow_point_prefer_target_pose_heading:=true|false] [follow_point_prefer_target_pose_position:=true|false] [start_visual_actuation_bridge:=true|false] [start_visual_follow_point_generator:=true|false] [start_visual_follow_planner:=true|false] [start_visual_follow_controller:=true|false] [nav2_goals:=parkinglot_east|route.yaml] [ugv_goal_sequence_csv:=x,y,yaw;...] [ugv_goal_sequence_randomize:=true|false] [ugv_goal_sequence_random_reverse:=true|false] [ugv_goal_sequence_relative_to_current_pose:=true|false] [folder:=...] [map:=/path/map.yaml] [lidar:=2d|3d] [pc2ls_min_height:=...] [pc2ls_max_height:=...] [scan_relay_hz:=...] [gui:=true|false] [rtf:=1.0] [x:=...] [y:=...] [z:=...] [yaw:=...] [state:=checkpoint] [waypoint:=name] [delay_s:=9] [spawn_delay_s:=9] [localization_delay_s:=11] [nav2_delay_s:=11] [follow_delay_s:=13] [follow_wait_topics:=/topic_a,/topic_b] [record_delay_s:=13] [session:=name] [tmux_attach:=true|false] [dry_run:=true|false] [layout:=windows|panes] [omnet:=true|false] [omnet_network:=wifi|5g|lora] [omnet_ui:=cmdenv|qtenv] [omnet_project:=/path/UAV_UGV] [omnet_result_dir:=/path] [omnet_bridge_port:=5555] [omnet_start_delay_s:=3.0] [ugv_start_delay_s:=3.0] [uav_start_delay_s:=12.0]" >&2
       exit 2
       ;;
   esac
@@ -508,11 +520,45 @@ build_line() {
   if [ "$delay_s" != "0" ] && [ "$delay_s" != "0.0" ]; then
     printf -v line '%ssleep %q && ' "$line" "$delay_s"
   fi
+  if [ "$wait_for_sim" = true ]; then
+    printf -v line '%sbash -lc %q && ' "$line" "$(build_gazebo_ready_cmd)"
+  fi
   if [ -n "$ready_cmd" ]; then
     printf -v line '%sbash -lc %q && ' "$line" "$ready_cmd"
   fi
   printf -v line '%s%s' "$line" "$(shell_join "$@")"
   printf '%s' "$line"
+}
+
+build_gazebo_ready_cmd() {
+  cat <<EOF
+set +u
+source /opt/ros/jazzy/setup.bash >/dev/null 2>&1
+source "$WS_ROOT/install/setup.bash" >/dev/null 2>&1
+export ROS_DOMAIN_ID="$ROS_DOMAIN_ID_EFFECTIVE"
+export RMW_IMPLEMENTATION="$RMW_IMPLEMENTATION_EFFECTIVE"
+set -u
+deadline=\$((SECONDS + $GAZEBO_READY_TIMEOUT_S))
+wait_for_topic_once() {
+  local topic="\$1"
+  local label="\$2"
+  while (( SECONDS < deadline )); do
+    if timeout 4s ros2 topic echo --no-daemon --once "\$topic" >/dev/null 2>&1; then
+      echo "[gazebo_ready] \$label ready on \$topic"
+      return 0
+    fi
+    echo "[gazebo_ready] waiting for \$label on \$topic"
+    sleep 2
+  done
+  echo "[gazebo_ready] timed out waiting for \$label on \$topic" >&2
+  return 1
+}
+wait_for_topic_once /clock clock
+if [ "$GAZEBO_READY_SETTLE_S" != "0" ] && [ "$GAZEBO_READY_SETTLE_S" != "0.0" ]; then
+  echo "[gazebo_ready] settling for $GAZEBO_READY_SETTLE_S seconds"
+  sleep "$GAZEBO_READY_SETTLE_S"
+fi
+EOF
 }
 
 build_localization_ready_cmd() {
@@ -523,9 +569,16 @@ source "$WS_ROOT/install/setup.bash" >/dev/null 2>&1
 export ROS_DOMAIN_ID="$ROS_DOMAIN_ID_EFFECTIVE"
 export RMW_IMPLEMENTATION="$RMW_IMPLEMENTATION_EFFECTIVE"
 set -u
-while ! ros2 lifecycle get /$UGV_NAMESPACE/map_server 2>/dev/null | grep -q 'active \[3\]'; do sleep 1; done
+lifecycle_state_matches() {
+  local node="\$1"
+  local cli_regex="\$2"
+  local service_regex="\$3"
+  ros2 lifecycle get "\$node" 2>/dev/null | grep -Eq "\$cli_regex" && return 0
+  timeout 3s ros2 service call "\${node}/get_state" lifecycle_msgs/srv/GetState "{}" 2>/dev/null | grep -Eq "\$service_regex"
+}
+while ! lifecycle_state_matches /$UGV_NAMESPACE/map_server 'active \[3\]' "id=3|label='active'"; do sleep 1; done
 # AMCL can be inactive here until nav2 lifecycle manager transitions it.
-while ! ros2 lifecycle get /$UGV_NAMESPACE/amcl 2>/dev/null | grep -Eq '(inactive \[2\]|active \[3\])'; do sleep 1; done
+while ! lifecycle_state_matches /$UGV_NAMESPACE/amcl '(inactive \[2\]|active \[3\])' "id=[23]|label='(inactive|active)'"; do sleep 1; done
 EOF
 }
 
@@ -537,20 +590,27 @@ source "$WS_ROOT/install/setup.bash" >/dev/null 2>&1
 export ROS_DOMAIN_ID="$ROS_DOMAIN_ID_EFFECTIVE"
 export RMW_IMPLEMENTATION="$RMW_IMPLEMENTATION_EFFECTIVE"
 set -u
+lifecycle_state_matches() {
+  local node="\$1"
+  local cli_regex="\$2"
+  local service_regex="\$3"
+  ros2 lifecycle get "\$node" 2>/dev/null | grep -Eq "\$cli_regex" && return 0
+  timeout 3s ros2 service call "\${node}/get_state" lifecycle_msgs/srv/GetState "{}" 2>/dev/null | grep -Eq "\$service_regex"
+}
 while true; do
-  if ! ros2 lifecycle get /$UGV_NAMESPACE/map_server 2>/dev/null | grep -q 'active \[3\]'; then
+  if ! lifecycle_state_matches /$UGV_NAMESPACE/map_server 'active \[3\]' "id=3|label='active'"; then
     sleep 1
     continue
   fi
-  if ! ros2 lifecycle get /$UGV_NAMESPACE/amcl 2>/dev/null | grep -q 'active \[3\]'; then
+  if ! lifecycle_state_matches /$UGV_NAMESPACE/amcl 'active \[3\]' "id=3|label='active'"; then
     sleep 1
     continue
   fi
-  if ! ros2 lifecycle get /$UGV_NAMESPACE/controller_server 2>/dev/null | grep -q 'active \[3\]'; then
+  if ! lifecycle_state_matches /$UGV_NAMESPACE/controller_server 'active \[3\]' "id=3|label='active'"; then
     sleep 1
     continue
   fi
-  if ! ros2 lifecycle get /$UGV_NAMESPACE/bt_navigator 2>/dev/null | grep -q 'active \[3\]'; then
+  if ! lifecycle_state_matches /$UGV_NAMESPACE/bt_navigator 'active \[3\]' "id=3|label='active'"; then
     sleep 1
     continue
   fi
@@ -820,6 +880,10 @@ if [ -n "$EFFECTIVE_NAV_LIDAR_MODE" ]; then
   LOCALIZATION_CMD+=("lidar:=$EFFECTIVE_NAV_LIDAR_MODE")
   NAV2_CMD+=("lidar:=$EFFECTIVE_NAV_LIDAR_MODE")
 fi
+if [ "${#NAV_LIDAR_ARGS[@]}" -gt 0 ]; then
+  LOCALIZATION_CMD+=("${NAV_LIDAR_ARGS[@]}")
+  NAV2_CMD+=("${NAV_LIDAR_ARGS[@]}")
+fi
 if [ "$MODE" = "yolo" ]; then
   FOLLOW_CMD=(./run.sh 1to1_yolo "$WORLD" "${FOLLOW_ARGS[@]}")
 else
@@ -829,7 +893,6 @@ fi
 LOCALIZATION_READY_CMD="$(build_localization_ready_cmd)"
 NAV2_READY_CMD="$(build_nav2_ready_cmd)"
 FOLLOW_READY_CMD="$(build_follow_ready_cmd)"
-
 if [ "$RECORD" = true ]; then
   RECORD_CMD=(./run.sh record_experiment "$WORLD" "mode:=$MODE" "uav_name:=$UAV_NAME" "profile:=$RECORD_PROFILE")
   if [ -n "$RECORD_TAG" ]; then

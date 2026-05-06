@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORLD="warehouse"
+WORLD="baylands"
 SESSION=""
 GROUP_GRACE_S=4
 FINAL_GRACE_S=4

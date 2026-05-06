@@ -80,30 +80,120 @@ waypoints:
   y: 185.3861158209806
   yaw_deg: -0.37926327105935376
   group: parkinglot_west
+- name: parkinglot_west_5
+  x: -70.81746955391576
+  y: 164.71214440181592
+  yaw_deg: -4.3214508389633
+  group: parkinglot_west
+- name: parkinglot_west_6
+  x: -52.99527355391446
+  y: 165.2954741962787
+  yaw_deg: 2.429226252229965
+  group: parkinglot_west
+- name: parkinglot_west_7
+  x: -50.95369451163398
+  y: 155.80939876736275
+  yaw_deg: -58.54579028549011
+  group: parkinglot_west
+- name: parkinglot_west_8
+  x: -43.70940654650033
+  y: 155.23458802313573
+  yaw_deg: 1.995240159166557
+  group: parkinglot_west
+- name: parkinglot_west_9
+  x: -51.32248494065045
+  y: 145.59872492147508
+  yaw_deg: 176.40405219558292
+  group: parkinglot_west
+- name: parkinglot_west_10
+  x: -71.01606513497649
+  y: 144.44100795629583
+  yaw_deg: -95.12701461316857
+  group: parkinglot_west
+- name: parkinglot_west_11
+  x: -71.0406623604704
+  y: 135.34511535056026
+  yaw_deg: -103.83801345878463
+  group: parkinglot_west
+- name: parkinglot_west_12
+  x: -71.34031380996655
+  y: 128.21164135490082
+  yaw_deg: -45.73598227928207
+  group: parkinglot_west
+- name: parkinglot_west_13
+  x: -61.227368161897964
+  y: 125.74418886038903
+  yaw_deg: -88.11160257336024
+  group: parkinglot_west
+- name: parkinglot_west_14
+  x: -60.251454150100436
+  y: 121.14724335504245
+  yaw_deg: -87.87374419905957
+  group: parkinglot_west
+- name: parkinglot_west_15
+  x: -45.29777336803457
+  y: 120.25821291239008
+  yaw_deg: -0.179758977254069
+  group: parkinglot_west
+- name: parkinglot_west_16
+  x: -31.059981061695197
+  y: 121.25986768718958
+  yaw_deg: -0.758016400910872
+  group: parkinglot_west
+- name: parkinglot_west_17
+  x: -26.043369106952277
+  y: 125.08260845021046
+  yaw_deg: -3.391371968754758
+  group: parkinglot_west
+- name: parkinglot_west_18
+  x: -20.9811905723525
+  y: 128.6436340936916
+  yaw_deg: 23.70576724756033
+  group: parkinglot_west
+- name: parkinglot_west_19
+  x: -12.476407539919636
+  y: 143.3109446367199
+  yaw_deg: 90.41548383901176
+  group: parkinglot_west
+- name: parkinglot_west_20
+  x: -1.250103134698326
+  y: 147.71999419726887
+  yaw_deg: -4.447007572308578
+  group: parkinglot_west
+- name: parkinglot_west_21
+  x: 8.936898088632104
+  y: 148.17701101825065
+  yaw_deg: 6.010855747562831
+  group: parkinglot_west
 - name: spawn_0
-  x: -26.501493322704924
-  y: 90.6685997783741
-  yaw_deg: 178.71827711537486
+  x: -34.82005668567761
+  y: 89.47610095712658
+  yaw_deg: -177.20988857849125
   group: spawn
 - name: spawn_1
-  x: -79.51719606801676
-  y: 91.27986583035636
-  yaw_deg: 178.93860863378393
+  x: -48.031543577831506
+  y: 91.04646154624345
+  yaw_deg: -177.26235798961068
   group: spawn
 - name: spawn_2
-  x: -78.89163472640503
-  y: 81.23993093862278
-  yaw_deg: -0.9625011176401208
+  x: -82.50665945639142
+  y: 87.19114355543013
+  yaw_deg: -90.44480139805532
   group: spawn
 - name: spawn_3
-  x: -50.34562247453806
-  y: 79.9174810720501
-  yaw_deg: -0.9987399072081538
+  x: -79.73409252127493
+  y: 81.54432491479284
+  yaw_deg: -29.539685007560834
   group: spawn
 - name: spawn_4
-  x: -38.95809060653054
-  y: 84.32576463839185
-  yaw_deg: 94.61770110022393
+  x: -62.96120732577301
+  y: 81.03237292878299
+  yaw_deg: -2.2976663014548255
+  group: spawn
+- name: spawn_5
+  x: -43.01508923813704
+  y: 81.22765038394543
+  yaw_deg: 12.43299766052508
   group: spawn
 - name: art_0
   x: 84.98445101752255
@@ -175,11 +265,6 @@ waypoints:
   y: -309.9
   yaw_deg: 69.86071816478002
   group: strip
-- name: rotundan_0
-  x: 66.30798771941033
-  y: 231.42990657523126
-  yaw_deg: 93.4299211146371
-  group: rotundan
 - name: rotundan_1
   x: 66.88222902882593
   y: 237.15084904414442
@@ -286,9 +371,9 @@ waypoints:
   yaw_deg: -37.645129432933736
   group: playground_2
 - name: playground_12
-  x: 145.74730263359933
-  y: 31.106991684505516
-  yaw_deg: 36.49055350085206
+  x: 144.54581024262885
+  y: 29.730520470601107
+  yaw_deg: 31.252785718252696
   group: playground_2
 - name: playground_13
   x: 147.88367373132314
@@ -370,3 +455,40 @@ waypoints:
   y: 45.56384804012675
   yaw_deg: -161.24063491172132
   group: playground_3
+- name: road_to_spawn_0
+  x: 10.045836782845715
+  y: 148.76225424940333
+  yaw_deg: -27.182587407279193
+  group: road_to_spawn
+- name: road_to_spawn_1
+  x: 14.755627776638073
+  y: 142.67117625834814
+  yaw_deg: -51.18780454352926
+- name: road_to_spawn_2
+  x: 17.87446688850363
+  y: 130.90500534702375
+  yaw_deg: -84.56142404666481
+- name: road_to_spawn_3
+  x: 25.78821476731882
+  y: 115.3098570000748
+  yaw_deg: -88.36921631721707
+- name: road_to_spawn_4
+  x: 17.140306833978826
+  y: 98.9853214294167
+  yaw_deg: -94.49017912934092
+  group: road_to_spawn
+- name: road_to_spawn_5
+  x: 8.883296915017645
+  y: 93.63869328725006
+  yaw_deg: -156.18165098385882
+  group: road_to_spawn
+- name: road_to_spawn_6
+  x: 0.31221300819501546
+  y: 91.36573126578448
+  yaw_deg: 177.95782134908876
+  group: road_to_spawn
+- name: road_to_spawn_7
+  x: -14.327472026201738
+  y: 90.9716612007629
+  yaw_deg: 178.57911621031036
+  group: road_to_spawn

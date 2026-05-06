@@ -1,0 +1,27 @@
+frame_id: map
+waypoints:
+- name: road_to_spawn_0
+  x: 10.045836782845715
+  y: 148.76225424940333
+  yaw_deg: -27.182587407279193
+  group: road_to_spawn
+- name: road_to_spawn_4
+  x: 17.140306833978826
+  y: 98.9853214294167
+  yaw_deg: -94.49017912934092
+  group: road_to_spawn
+- name: road_to_spawn_5
+  x: 8.883296915017645
+  y: 93.63869328725006
+  yaw_deg: -156.18165098385882
+  group: road_to_spawn
+- name: road_to_spawn_6
+  x: 0.31221300819501546
+  y: 91.36573126578448
+  yaw_deg: 177.95782134908876
+  group: road_to_spawn
+- name: road_to_spawn_7
+  x: -14.327472026201738
+  y: 90.9716612007629
+  yaw_deg: 178.57911621031036
+  group: road_to_spawn

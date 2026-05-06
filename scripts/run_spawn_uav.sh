@@ -9,6 +9,8 @@ SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 FOLLOW_SIM=false
 LAUNCH_PID=""
 WATCH_PID=""
+WAIT_FOR_GAZEBO="${WAIT_FOR_GAZEBO:-true}"
+GAZEBO_READY_TIMEOUT_S="${GAZEBO_READY_TIMEOUT_S:-180}"
 
 sim_helper_running() {
   if [ ! -f "$SIM_PID_FILE" ]; then
@@ -96,7 +98,7 @@ if sim_helper_running; then
   echo "[run_spawn_uav] Gazebo helper detected; stopping this launcher when the sim helper exits."
 fi
 
-DEFAULT_WORLD="warehouse"
+DEFAULT_WORLD="baylands"
 if sim_helper_running && [ -f "$SIM_WORLD_FILE" ]; then
   sim_world="$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)"
   if [ -n "$sim_world" ]; then
@@ -113,6 +115,12 @@ fi
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
+    wait_for_gazebo:=*)
+      WAIT_FOR_GAZEBO="${arg#wait_for_gazebo:=}"
+      ;;
+    gazebo_ready_timeout_s:=*|sim_ready_timeout_s:=*)
+      GAZEBO_READY_TIMEOUT_S="${arg#*:=}"
+      ;;
     camera:=*)
       camera_mode="${arg#camera:=}"
       case "$camera_mode" in
@@ -155,6 +163,60 @@ set -u
 if [ -n "$ORIG_ROS_DOMAIN_ID" ]; then
   export ROS_DOMAIN_ID="$ORIG_ROS_DOMAIN_ID"
 fi
+
+gazebo_world_name() {
+  case "$1" in
+    construction)
+      printf '%s\n' "office_construction"
+      ;;
+    *)
+      printf '%s\n' "$1"
+      ;;
+  esac
+}
+
+wait_for_gazebo_ready() {
+  local gz_world
+  local deadline
+  gz_world="$(gazebo_world_name "$WORLD")"
+  deadline=$((SECONDS + GAZEBO_READY_TIMEOUT_S))
+
+  echo "[run_spawn_uav] Waiting for Gazebo clock and /world/${gz_world}/create"
+  while (( SECONDS < deadline )); do
+    if timeout 4s ros2 topic echo --no-daemon --once /clock >/dev/null 2>&1; then
+      echo "[run_spawn_uav] Gazebo clock is publishing."
+      break
+    fi
+    sleep 2
+  done
+  if (( SECONDS >= deadline )); then
+    echo "[run_spawn_uav] Timed out waiting for /clock after ${GAZEBO_READY_TIMEOUT_S}s" >&2
+    return 1
+  fi
+
+  while (( SECONDS < deadline )); do
+    if command -v gz >/dev/null 2>&1 && timeout 4s gz service -l 2>/dev/null | grep -qx "/world/${gz_world}/create"; then
+      echo "[run_spawn_uav] Gazebo create service is ready."
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "[run_spawn_uav] Timed out waiting for /world/${gz_world}/create after ${GAZEBO_READY_TIMEOUT_S}s" >&2
+  return 1
+}
+
+case "$WAIT_FOR_GAZEBO" in
+  true)
+    wait_for_gazebo_ready
+    ;;
+  false)
+    ;;
+  *)
+    echo "[run_spawn_uav] Invalid wait_for_gazebo option: $WAIT_FOR_GAZEBO (use true or false)" >&2
+    exit 2
+    ;;
+esac
 
 setsid ros2 launch lrs_halmstad spawn_uav_1to1.launch.py world:="$WORLD" "${ARGS[@]}" &
 LAUNCH_PID=$!

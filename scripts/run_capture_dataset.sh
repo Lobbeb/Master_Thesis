@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
-WORLD="warehouse"
+WORLD="baylands"
 OUTPUT_DIR=""
 EXTRA_ARGS=()
 

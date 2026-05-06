@@ -17,7 +17,7 @@ TMUX_STATE_DIR="$STATE_DIR/tmux_sessions"
 
 # Defaults — overridden by the loaded state file.
 SESSION=""
-WORLD="warehouse"
+WORLD="baylands"
 MODE="yolo"
 UAV_NAME="dji0"
 UGV_NAMESPACE="a201_0000"

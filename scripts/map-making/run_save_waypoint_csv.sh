@@ -13,11 +13,14 @@ OUTPUT_PATH="$WS_ROOT/maps/waypoints_baylands.csv"
 GROUP=""
 REPLACE="true"
 DRY_RUN="false"
+AMCL_TIMEOUT_S="8"
+AMCL_RETRY_COUNT="3"
+AMCL_RETRY_DELAY_S="1.0"
 POSITIONAL_ARGS=()
 
 usage() {
   cat <<'EOF'
-Usage: ./run.sh save_waypoint_csv <name> [world] [output:=path] [group:=name] [replace:=true|false] [dry_run:=true|false]
+Usage: ./run.sh save_waypoint_csv <name> [world] [output:=path] [group:=name] [replace:=true|false] [dry_run:=true|false] [amcl_timeout_s:=8] [amcl_retry_count:=3] [amcl_retry_delay_s:=1.0]
        ./run.sh save_waypoint_csv [world] [output:=path] [group:=name] [replace:=true|false] [dry_run:=true|false] name:=<name>
 
 Examples:
@@ -27,6 +30,7 @@ Examples:
   ./run.sh save_waypoint_csv baylands output:=waypoints_baylands_groups.csv group:=strip name:=strip_test
   ./run.sh save_waypoint_csv strip_test output:=maps/waypoints_baylands.csv
   ./run.sh save_waypoint_csv strip_test dry_run:=true
+  ./run.sh save_waypoint_csv strip_test amcl_timeout_s:=10 amcl_retry_count:=5
 EOF
 }
 
@@ -86,6 +90,15 @@ while [ "$#" -gt 0 ]; do
       ;;
     dry_run:=*)
       DRY_RUN="$(coerce_bool "${1#dry_run:=}")"
+      ;;
+    amcl_timeout_s:=*)
+      AMCL_TIMEOUT_S="${1#amcl_timeout_s:=}"
+      ;;
+    amcl_retry_count:=*)
+      AMCL_RETRY_COUNT="${1#amcl_retry_count:=}"
+      ;;
+    amcl_retry_delay_s:=*)
+      AMCL_RETRY_DELAY_S="${1#amcl_retry_delay_s:=}"
       ;;
     *)
       if [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
@@ -166,25 +179,20 @@ set -u
 
 NAMESPACE="$(slam_state_namespace "$WS_ROOT")" || exit 1
 AMCL_TOPIC="/${NAMESPACE}/amcl_pose"
-AMCL_TMP="$(mktemp)"
-AMCL_ERR_TMP="$(mktemp)"
 
 cleanup() {
-  rm -f "$AMCL_TMP" "$AMCL_ERR_TMP"
+  rm -f "${AMCL_TMP:-}" "${AMCL_ERR_TMP:-}"
 }
 trap cleanup EXIT
 
-if ! timeout 5s ros2 topic echo --no-daemon --once "$AMCL_TOPIC" >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
-  AMCL_ERR_TEXT="$(tr '\n' ' ' < "$AMCL_ERR_TMP" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
-  if [ -z "$AMCL_ERR_TEXT" ]; then
-    echo "[run_save_waypoint_csv] Failed to read AMCL pose from $AMCL_TOPIC." >&2
-  else
-    echo "[run_save_waypoint_csv] Failed to read AMCL pose from $AMCL_TOPIC: $AMCL_ERR_TEXT" >&2
-  fi
-  exit 1
-fi
-
-if ! AMCL_ENV="$(python3 - "$AMCL_TMP" <<'PY'
+AMCL_WARNING=""
+total_amcl_attempts=$((AMCL_RETRY_COUNT + 1))
+amcl_attempt=1
+while [ "$amcl_attempt" -le "$total_amcl_attempts" ]; do
+  AMCL_TMP="$(mktemp)"
+  AMCL_ERR_TMP="$(mktemp)"
+  if timeout "${AMCL_TIMEOUT_S}s" ros2 topic echo --no-daemon --once "$AMCL_TOPIC" >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
+    if AMCL_ENV="$(python3 - "$AMCL_TMP" <<'PY'
 import math
 import sys
 from pathlib import Path
@@ -226,12 +234,41 @@ print(f"amcl_x={x!r}")
 print(f"amcl_y={y!r}")
 print(f"amcl_yaw={yaw!r}")
 PY
-)"; then
-  echo "[run_save_waypoint_csv] Failed to parse AMCL pose from $AMCL_TOPIC." >&2
+    )"; then
+      eval "$AMCL_ENV"
+      rm -f "$AMCL_TMP" "$AMCL_ERR_TMP"
+      AMCL_TMP=""
+      AMCL_ERR_TMP=""
+      break
+    fi
+    AMCL_WARNING="[run_save_waypoint_csv] Received $AMCL_TOPIC but could not parse a usable pose message."
+  else
+    AMCL_ERR_TEXT="$(tr '\n' ' ' < "$AMCL_ERR_TMP" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
+    if [ -z "$AMCL_ERR_TEXT" ]; then
+      AMCL_WARNING="[run_save_waypoint_csv] AMCL pose unavailable from $AMCL_TOPIC within ${AMCL_TIMEOUT_S}s. Make sure localization is running and AMCL has settled."
+    else
+      AMCL_WARNING="[run_save_waypoint_csv] AMCL pose unavailable from $AMCL_TOPIC: $AMCL_ERR_TEXT"
+    fi
+  fi
+  rm -f "$AMCL_TMP" "$AMCL_ERR_TMP"
+  AMCL_TMP=""
+  AMCL_ERR_TMP=""
+
+  if [ "$amcl_attempt" -lt "$total_amcl_attempts" ]; then
+    echo "[run_save_waypoint_csv] Waiting for $AMCL_TOPIC (attempt ${amcl_attempt}/${total_amcl_attempts} failed, retrying in ${AMCL_RETRY_DELAY_S}s)..." >&2
+    sleep "$AMCL_RETRY_DELAY_S"
+  fi
+  amcl_attempt=$((amcl_attempt + 1))
+done
+
+if [ -z "${amcl_x:-}" ] || [ -z "${amcl_y:-}" ] || [ -z "${amcl_yaw:-}" ]; then
+  if [ -n "$AMCL_WARNING" ]; then
+    printf '%s\n' "$AMCL_WARNING" >&2
+  else
+    echo "[run_save_waypoint_csv] Failed to read AMCL pose from $AMCL_TOPIC." >&2
+  fi
   exit 1
 fi
-
-eval "$AMCL_ENV"
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 

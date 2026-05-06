@@ -1,10 +1,5 @@
 frame_id: map
 waypoints:
-- name: rotundan_0
-  x: 66.30798771941033
-  y: 231.42990657523126
-  yaw_deg: 93.4299211146371
-  group: rotundan
 - name: rotundan_1
   x: 66.88222902882593
   y: 237.15084904414442

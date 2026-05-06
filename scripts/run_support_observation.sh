@@ -89,7 +89,7 @@ if sim_helper_running; then
   echo "[run_support_observation] Gazebo helper detected; stopping this overlay when the sim helper exits."
 fi
 
-DEFAULT_WORLD="warehouse"
+DEFAULT_WORLD="baylands"
 if sim_helper_running && [ -f "$SIM_WORLD_FILE" ]; then
   sim_world="$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)"
   if [ -n "$sim_world" ]; then

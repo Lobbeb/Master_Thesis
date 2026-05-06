@@ -449,7 +449,7 @@ wait_for_localization_ready() {
   local waited=0
   echo "[nav2_tuning] Waiting for localization readiness..."
   while [ "$waited" -lt "$LOCALIZATION_READY_TIMEOUT_S" ]; do
-    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; ros2 lifecycle get /a201_0000/map_server 2>/dev/null | grep -q 'active \\[3\\]' && ros2 lifecycle get /a201_0000/amcl 2>/dev/null | grep -Eq '(inactive \\[2\\]|active \\[3\\])'"; then
+    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; lifecycle_state_matches() { local node=\"\$1\"; local cli_regex=\"\$2\"; local service_regex=\"\$3\"; ros2 lifecycle get \"\$node\" 2>/dev/null | grep -Eq \"\$cli_regex\" && return 0; timeout 3s ros2 service call \"\${node}/get_state\" lifecycle_msgs/srv/GetState \"{}\" 2>/dev/null | grep -Eq \"\$service_regex\"; }; lifecycle_state_matches /a201_0000/map_server 'active \\[3\\]' \"id=3|label='active'\" && lifecycle_state_matches /a201_0000/amcl '(inactive \\[2\\]|active \\[3\\])' \"id=[23]|label='(inactive|active)'\""; then
       echo "[nav2_tuning] Localization ready"
       return 0
     fi
