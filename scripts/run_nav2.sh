@@ -26,7 +26,7 @@ if [ "$BASE_NAV2_PARAMS" = "$BAYLANDS_NAV2_PARAMS" ]; then
   echo "[run_nav2] Baylands detected: using large-map Nav2 profile" >&2
 fi
 
-lidar_mode_parse_args 2d "$@"
+lidar_mode_parse_args 3d "$@"
 USE_POINTCLOUD_TO_LASERSCAN="false"
 USE_SCAN_RELAY="false"
 USE_SCAN_RELAY_OVERRIDE=""

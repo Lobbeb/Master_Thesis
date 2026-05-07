@@ -52,7 +52,7 @@ ARGUMENTS = [
     DeclareLaunchArgument("pc2ls_scan_time", default_value="0.05"),
     DeclareLaunchArgument("pc2ls_range_min", default_value="0.5"),
     DeclareLaunchArgument("pc2ls_range_max", default_value="25.0"),
-    DeclareLaunchArgument("pc2ls_queue_size", default_value="20"),
+    DeclareLaunchArgument("pc2ls_queue_size", default_value="40"),
     DeclareLaunchArgument("pc2ls_target_frame", default_value=""),
     DeclareLaunchArgument("pc2ls_transform_tolerance", default_value="0.2"),
     DeclareLaunchArgument("pc2ls_use_inf", default_value="true", choices=["true", "false"]),

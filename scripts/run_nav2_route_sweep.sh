@@ -10,9 +10,10 @@ WORLD="baylands"
 MODE="follow"
 LIDAR="3d"
 ROUTES_RAW="all"
+EXCLUDE_ROUTES_RAW="${EXCLUDE_ROUTES_RAW:-art,playground_1,playground_2,playground_3}"
 SWEEP_MODE="waypoints"
 SESSION_PREFIX="halmstad-nav2-route-sweep"
-TMUX_ATTACH="true"
+TMUX_ATTACH="false"
 DRY_RUN="false"
 STOP_BEFORE_EACH="true"
 STOP_AFTER_EACH="true"
@@ -37,6 +38,8 @@ PLAIN_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 EXTRA_TMUX_ARGS=()
 HAVE_UGV_START_DELAY_ARG="false"
 
+source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
+
 usage() {
   cat <<EOF
 Usage:
@@ -58,6 +61,7 @@ What it does:
 
 Options:
   routes:=all|a,b             Route YAML stems, e.g. rotundan,strip
+  exclude_routes:=a,b          Routes skipped when routes:=all, default art/playground routes
   sweep:=waypoints|routes     Default waypoints
   mode:=follow|yolo           tmux_1to1 mode, default follow
   lidar:=2d|3d                Nav2/localization lidar mode, default 3d
@@ -96,55 +100,6 @@ print_cmd() {
   printf '  '
   printf '%q ' "$@"
   printf '\n'
-}
-
-extra_arg_present() {
-  local prefix="$1"
-  local arg=""
-  for arg in "${EXTRA_TMUX_ARGS[@]}"; do
-    [[ "$arg" == "$prefix"* ]] && return 0
-  done
-  return 1
-}
-
-route_lidar_preset_args() {
-  local route="$1"
-  [ "$LIDAR" = "3d" ] || return 0
-
-  case "$route" in
-    strip)
-      if ! extra_arg_present "pc2ls_min_height:="; then
-        printf '%s\n' "pc2ls_min_height:=-0.36"
-      fi
-      if ! extra_arg_present "pc2ls_max_height:="; then
-        printf '%s\n' "pc2ls_max_height:=0.12"
-      fi
-      ;;
-    road_to_strip|road_to_spawn)
-      if ! extra_arg_present "pc2ls_min_height:="; then
-        printf '%s\n' "pc2ls_min_height:=-0.4"
-      fi
-      if ! extra_arg_present "pc2ls_max_height:="; then
-        printf '%s\n' "pc2ls_max_height:=0.4"
-      fi
-      ;;
-    road_to_west)
-      if ! extra_arg_present "pc2ls_min_height:="; then
-        printf '%s\n' "pc2ls_min_height:=-0.38"
-      fi
-      if ! extra_arg_present "pc2ls_max_height:="; then
-        printf '%s\n' "pc2ls_max_height:=0.0"
-      fi
-      ;;
-    rotundan)
-      if ! extra_arg_present "pc2ls_min_height:="; then
-        printf '%s\n' "pc2ls_min_height:=-0.05"
-      fi
-      if ! extra_arg_present "pc2ls_max_height:="; then
-        printf '%s\n' "pc2ls_max_height:=0.10"
-      fi
-      ;;
-  esac
 }
 
 arg_value_or_default() {
@@ -212,6 +167,19 @@ split_routes() {
     route="$(trim "$part")"
     [ -n "$route" ] && printf '%s\n' "$route"
   done
+}
+
+route_is_excluded() {
+  local route="$1"
+  local part excluded
+  IFS=',' read -ra parts <<< "$EXCLUDE_ROUTES_RAW"
+  for part in "${parts[@]}"; do
+    excluded="$(trim "$part")"
+    if [ "$route" = "$excluded" ]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 first_waypoint_for_route() {
@@ -609,6 +577,9 @@ for arg in "$@"; do
     routes:=*|nav2_goals:=*)
       ROUTES_RAW="${arg#*:=}"
       ;;
+    exclude_routes:=*)
+      EXCLUDE_ROUTES_RAW="${arg#exclude_routes:=}"
+      ;;
     sweep:=*|sweep_mode:=*)
       SWEEP_MODE="${arg#*:=}"
       ;;
@@ -705,6 +676,14 @@ for arg in "$@"; do
 done
 
 mapfile -t ROUTES < <(split_routes "$ROUTES_RAW")
+FILTERED_ROUTES=()
+for route in "${ROUTES[@]}"; do
+  if route_is_excluded "$route"; then
+    continue
+  fi
+  FILTERED_ROUTES+=("$route")
+done
+ROUTES=("${FILTERED_ROUTES[@]}")
 if [ "${#ROUTES[@]}" -eq 0 ]; then
   echo "No routes selected." >&2
   exit 2
@@ -734,6 +713,7 @@ write_summary_file() {
     printf 'sweep: %s\n' "$SWEEP_MODE"
     printf 'chain_route_starts: %s\n' "$CHAIN_ROUTE_STARTS"
     printf 'fallback_waypoints_on_route_failure: %s\n' "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE"
+    printf 'exclude_routes: %s\n' "$EXCLUDE_ROUTES_RAW"
     printf 'routes: %s\n' "${ROUTES[*]}"
     if [ -n "$CURRENT_SESSION" ]; then
       printf 'active_session: %s\n' "$CURRENT_SESSION"
@@ -778,6 +758,7 @@ echo "  uav command required: $UAV_CHECK_REQUIRE_COMMAND"
 echo "  skip remaining on complete: $SKIP_REMAINING_ON_COMPLETE"
 echo "  chain route starts: $CHAIN_ROUTE_STARTS"
 echo "  fallback waypoints on route failure: $FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE"
+echo "  exclude routes: $EXCLUDE_ROUTES_RAW"
 echo "  routes: ${ROUTES[*]}"
 if [ "$DRY_RUN" != true ]; then
   echo "  logs: $RUN_DIR"
@@ -789,6 +770,7 @@ for route in "${ROUTES[@]}"; do
   JOB_NAV2_GOALS=()
   JOB_LABELS=()
   route_last_waypoint=""
+  route_completed="false"
 
   case "$SWEEP_MODE" in
     routes|route)
@@ -828,7 +810,7 @@ for route in "${ROUTES[@]}"; do
     CURRENT_SESSION="$session"
     route_log="$RUN_DIR/$(sanitize_name "$job_label").follow.log"
     tmp_log="${route_log}.startup"
-    mapfile -t route_lidar_args < <(route_lidar_preset_args "$route")
+    mapfile -t route_lidar_args < <(route_lidar_preset_args "$route" "$LIDAR" "${EXTRA_TMUX_ARGS[@]}")
     run_context="$(result_context "${route_lidar_args[@]}")"
     CURRENT_JOB_LABEL="$job_label"
     CURRENT_START_WAYPOINT="$first_waypoint"
@@ -863,6 +845,9 @@ for route in "${ROUTES[@]}"; do
       echo "[dry-run] start:"
       print_cmd "${run_cmd[@]}"
       RESULTS+=("$job_label dry_run $first_waypoint $run_context")
+      if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
+        route_completed="true"
+      fi
       job_index=$((job_index + 1))
       continue
     fi
@@ -871,6 +856,10 @@ for route in "${ROUTES[@]}"; do
       echo "Route '$job_label' failed to launch." >&2
       RESULTS+=("$job_label launch_failed $first_waypoint $run_context")
       stop_session "$session"
+      CURRENT_SESSION=""
+      CURRENT_JOB_LABEL=""
+      CURRENT_START_WAYPOINT=""
+      CURRENT_RUN_CONTEXT=""
       job_index=$((job_index + 1))
       continue
     fi
@@ -885,6 +874,10 @@ for route in "${ROUTES[@]}"; do
         if [ "$STOP_AFTER_EACH" = true ]; then
           stop_session "$session"
         fi
+        CURRENT_SESSION=""
+        CURRENT_JOB_LABEL=""
+        CURRENT_START_WAYPOINT=""
+        CURRENT_RUN_CONTEXT=""
         if [ "$BETWEEN_S" != "0" ] && [ "$BETWEEN_S" != "0.0" ]; then
           sleep "$BETWEEN_S"
         fi
@@ -906,6 +899,9 @@ for route in "${ROUTES[@]}"; do
 
     echo "Route '$job_label' result: $status"
     RESULTS+=("$job_label $status $first_waypoint $run_context")
+    if [ "$status" = "completed" ]; then
+      route_completed="true"
+    fi
 
     if [ "$STOP_AFTER_EACH" = true ]; then
       stop_session "$session"
@@ -916,7 +912,7 @@ for route in "${ROUTES[@]}"; do
     CURRENT_RUN_CONTEXT=""
 
     if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
-      if [ "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE" = true ] && [ "$job_index" -eq 0 ] && [ "$status" != "completed" ]; then
+      if [ "$FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE" = true ] && [ "$CHAIN_ROUTE_STARTS" != true ] && [ "$job_index" -eq 0 ] && [ "$status" != "completed" ]; then
         echo "Route '$route' failed as a full route; falling back to sliced waypoint starts."
         append_waypoint_jobs "$route" "fallback_" || true
       fi
@@ -940,8 +936,10 @@ for route in "${ROUTES[@]}"; do
   done
 
   if [ "$SWEEP_MODE" = "routes" ] || [ "$SWEEP_MODE" = "route" ]; then
-    if [ -n "$route_last_waypoint" ]; then
+    if [ "$route_completed" = "true" ] && [ -n "$route_last_waypoint" ]; then
       PREVIOUS_ROUTE_LAST_WAYPOINT="$route_last_waypoint"
+    else
+      PREVIOUS_ROUTE_LAST_WAYPOINT=""
     fi
   fi
 done

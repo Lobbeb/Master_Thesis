@@ -51,7 +51,7 @@ BAYLANDS_NAV_SPAWN_X="-14.085738068"
 BAYLANDS_NAV_SPAWN_Y="-54.861874768"
 BAYLANDS_NAV_SPAWN_Z="0.100975479"
 BAYLANDS_NAV_SPAWN_YAW="0.484129496"
-BAYLANDS_NAV_LIDAR_MODE="2d"
+BAYLANDS_NAV_LIDAR_MODE="3d"
 NAV_LIDAR_MODE=""
 BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
@@ -65,6 +65,7 @@ GAZEBO_SPAWN_YAW_OVERRIDE=""
 HAVE_UGV_GOAL_SEQUENCE="false"
 HAVE_RANGE_MODE="false"
 FOLLOW_WAIT_TOPICS=""
+NAV2_GOALS_FOR_LIDAR=""
 SPAWN_ARGS=()
 FOLLOW_ARGS=()
 GAZEBO_ARGS=()
@@ -73,6 +74,7 @@ RECORD_CMD=()
 OMNET="false"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 
 resolve_baylands_waypoint() {
   local waypoint_name="$1"
@@ -306,13 +308,19 @@ for arg in "$@"; do
       ;;
     goal_sequence_file:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
-      FOLLOW_ARGS+=("nav2_goals:=${arg#goal_sequence_file:=}")
+      NAV2_GOALS_FOR_LIDAR="${arg#goal_sequence_file:=}"
+      FOLLOW_ARGS+=("nav2_goals:=$NAV2_GOALS_FOR_LIDAR")
       ;;
     goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       FOLLOW_ARGS+=("ugv_goal_sequence_csv:=${arg#goal_sequence_csv:=}")
       ;;
-    nav2_goals:=*|ugv_goal_sequence_file:=*|ugv_goal_sequence_csv:=*)
+    nav2_goals:=*)
+      HAVE_UGV_GOAL_SEQUENCE="true"
+      NAV2_GOALS_FOR_LIDAR="${arg#nav2_goals:=}"
+      FOLLOW_ARGS+=("$arg")
+      ;;
+    ugv_goal_sequence_file:=*|ugv_goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       FOLLOW_ARGS+=("$arg")
       ;;
@@ -777,6 +785,7 @@ fi
 
 if [[ "$WORLD" == baylands* ]] && [ "$HAVE_UGV_GOAL_SEQUENCE" = "false" ]; then
   FOLLOW_ARGS+=("nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS")
+  NAV2_GOALS_FOR_LIDAR="$BAYLANDS_DEFAULT_NAV2_GOALS"
   echo "[run_tmux_1to1] Baylands default Nav2 goals: nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS"
 fi
 
@@ -882,7 +891,21 @@ if [ -n "$EFFECTIVE_NAV_LIDAR_MODE" ]; then
 fi
 if [ "${#NAV_LIDAR_ARGS[@]}" -gt 0 ]; then
   LOCALIZATION_CMD+=("${NAV_LIDAR_ARGS[@]}")
-  NAV2_CMD+=("${NAV_LIDAR_ARGS[@]}")
+  for nav_lidar_arg in "${NAV_LIDAR_ARGS[@]}"; do
+    case "$nav_lidar_arg" in
+      pc2ls_*|pointcloud_topic:=*)
+        ;;
+      *)
+        NAV2_CMD+=("$nav_lidar_arg")
+        ;;
+    esac
+  done
+fi
+if [[ "$WORLD" == baylands* ]] && [ -n "$NAV2_GOALS_FOR_LIDAR" ]; then
+  mapfile -t route_default_lidar_args < <(route_lidar_preset_args "$NAV2_GOALS_FOR_LIDAR" "${EFFECTIVE_NAV_LIDAR_MODE:-}" "${NAV_LIDAR_ARGS[@]}")
+  if [ "${#route_default_lidar_args[@]}" -gt 0 ]; then
+    LOCALIZATION_CMD+=("${route_default_lidar_args[@]}")
+  fi
 fi
 if [ "$MODE" = "yolo" ]; then
   FOLLOW_CMD=(./run.sh 1to1_yolo "$WORLD" "${FOLLOW_ARGS[@]}")

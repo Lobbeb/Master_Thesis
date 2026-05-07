@@ -11,7 +11,7 @@ ACTIVE_SLAM_LIDAR_MODE_FILE="$STATE_DIR/slam.lidar_mode"
 
 source "$SHARED_SCRIPTS_DIR/lidar_mode_common.sh"
 
-lidar_mode_parse_args 2d "$@"
+lidar_mode_parse_args 3d "$@"
 
 USE_SCAN_RELAY=""
 SCAN_RELAY_HZ=""

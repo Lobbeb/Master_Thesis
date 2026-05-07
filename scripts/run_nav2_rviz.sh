@@ -12,7 +12,7 @@ RVIZ_SOFTWARE_RENDERING="${RVIZ_SOFTWARE_RENDERING:-auto}"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 
-lidar_mode_parse_args 2d "$@"
+lidar_mode_parse_args 3d "$@"
 
 if [ "$LIDAR_MODE" = "3d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
   LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"

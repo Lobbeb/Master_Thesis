@@ -1,14 +1,14 @@
 frame_id: map
 waypoints:
-- name: road_to_strip_1
-  x: 19.579666975047846
-  y: -34.14585113333436
-  yaw_deg: -86.25166951876031
-  group: road_to_strip
 - name: road_to_strip_0
   x: 6.413105961603299
   y: -30.512237869362803
   yaw_deg: 9.871694242288653
+  group: road_to_strip
+- name: road_to_strip_1
+  x: 19.579666975047846
+  y: -34.14585113333436
+  yaw_deg: -86.25166951876031
   group: road_to_strip
 - name: road_to_strip_2
   x: 19.440972474701574

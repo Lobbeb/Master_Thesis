@@ -294,13 +294,14 @@ if [ -z "$TARGET_Z" ]; then
   TARGET_Z="$CURRENT_Z"
 fi
 
-if [ "$WITH_UAV" = "true" ] && [ -z "$UAV_Z" ]; then
+if [ "$WITH_UAV" = "true" ]; then
   UAV_POSE_ENV="$(slam_state_capture_gazebo_named_pose_env "$WORLD" "$UAV_NAME" 2)" || true
-  if [ -n "${UAV_POSE_ENV:-}" ]; then
+  if [ -z "${UAV_POSE_ENV:-}" ]; then
+    echo "[run_realign_yaw] UAV '$UAV_NAME' is not spawned; skipping UAV pose realign" >&2
+    WITH_UAV="false"
+  elif [ -z "$UAV_Z" ]; then
     eval "$UAV_POSE_ENV"
     UAV_Z="$spawn_z"
-  else
-    UAV_Z="7.0"
   fi
 fi
 

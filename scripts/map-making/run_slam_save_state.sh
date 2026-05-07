@@ -45,14 +45,14 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "${#SAVE_ARGS[@]}" -gt 0 ]; then
-  lidar_mode_parse_args 2d "${SAVE_ARGS[@]}"
+  lidar_mode_parse_args 3d "${SAVE_ARGS[@]}"
   SAVE_SCAN_TOPIC="$LIDAR_SCAN_TOPIC"
 elif [ -f "$ACTIVE_SLAM_SCAN_TOPIC_FILE" ]; then
   SAVE_SCAN_TOPIC="$(cat "$ACTIVE_SLAM_SCAN_TOPIC_FILE" 2>/dev/null || true)"
 fi
 
 if [ -z "$SAVE_SCAN_TOPIC" ]; then
-  lidar_mode_parse_args 2d
+  lidar_mode_parse_args 3d
   SAVE_SCAN_TOPIC="$LIDAR_SCAN_TOPIC"
 fi
 

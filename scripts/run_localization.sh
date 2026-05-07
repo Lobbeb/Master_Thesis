@@ -113,7 +113,7 @@ if [ -n "$MAP_PATH" ]; then
   MAP_PATH="$(resolve_localization_map_path "$MAP_PATH")"
 fi
 
-lidar_mode_parse_args 2d "$@"
+lidar_mode_parse_args 3d "$@"
 USE_POINTCLOUD_TO_LASERSCAN="false"
 USE_SCAN_RELAY="true"
 SCAN_RELAY_HZ=""

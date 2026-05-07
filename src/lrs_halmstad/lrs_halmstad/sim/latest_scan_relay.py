@@ -29,10 +29,16 @@ class LatestScanRelay(Node):
         self.restamp = bool(self.get_parameter("restamp").value)
         startup_hold_s = max(0.0, float(self.get_parameter("startup_hold_s").value))
 
-        sensor_qos = QoSProfile(
+        input_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
             reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        output_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
         )
 
@@ -40,8 +46,8 @@ class LatestScanRelay(Node):
         self.latest_received_ns: int | None = None
         self.ready_after_ns = self.get_clock().now().nanoseconds + int(startup_hold_s * 1e9)
 
-        self.create_subscription(LaserScan, input_topic, self._on_scan, sensor_qos)
-        self.publisher = self.create_publisher(LaserScan, output_topic, sensor_qos)
+        self.create_subscription(LaserScan, input_topic, self._on_scan, input_qos)
+        self.publisher = self.create_publisher(LaserScan, output_topic, output_qos)
         self.create_timer(1.0 / publish_hz, self._on_timer)
 
         self.get_logger().info(

@@ -8,6 +8,7 @@ from typing import Optional
 
 import rclpy
 import yaml
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import PoseWithCovarianceStamped
@@ -17,6 +18,8 @@ from lifecycle_msgs.srv import GetState
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path
+from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+from rcl_interfaces.srv import SetParameters
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
@@ -129,6 +132,9 @@ class UgvNav2Driver(Node):
             max(0.0, float(yaml_param(self, "min_goal_yaw_delta_deg")))
         )
         self.continue_on_goal_failure = coerce_bool(yaml_param(self, "continue_on_goal_failure"))
+        self.lidar_settings_file = str(yaml_param(self, "lidar_settings_file")).strip()
+        self.pc2ls_node_name = str(yaml_param(self, "pc2ls_node_name")).strip()
+        self.pc2ls_update_timeout_s = max(0.0, float(yaml_param(self, "pc2ls_update_timeout_s")))
 
         self._latest_pose: Optional[Pose2DState] = None
         self._active_goal_handle = None
@@ -153,6 +159,8 @@ class UgvNav2Driver(Node):
             depth=10,
         )
         self._lifecycle_clients: dict[str, any] = {}
+        self._pc2ls_client = None
+        self._lidar_settings = self._load_lidar_settings()
         self._pose_subscriptions = []
 
         if self.pose_topic_type in ("pose", "pose_with_covariance", "posewithcovariancestamped"):
@@ -395,6 +403,119 @@ class UgvNav2Driver(Node):
         for node_name in self.nav2_required_lifecycle_nodes:
             self._wait_for_lifecycle_node_active(node_name)
 
+    def _default_lidar_settings_file(self) -> str:
+        try:
+            share_dir = get_package_share_directory("lrs_halmstad")
+        except PackageNotFoundError:
+            return ""
+        candidate = f"{share_dir}/config/baylands_route_lidar.yaml"
+        return candidate
+
+    def _load_lidar_settings(self) -> dict:
+        settings_file = self.lidar_settings_file or self._default_lidar_settings_file()
+        if not settings_file:
+            return {}
+
+        try:
+            with open(settings_file, "r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle) or {}
+        except FileNotFoundError:
+            self.get_logger().warn(f"Lidar settings file not found: {settings_file}")
+            return {}
+        except Exception as exc:
+            self.get_logger().warn(f"Failed to read lidar settings file '{settings_file}': {exc}")
+            return {}
+
+        waypoints = data.get("waypoints") or {}
+        if not isinstance(waypoints, dict):
+            self.get_logger().warn(f"Ignoring malformed waypoint lidar settings in {settings_file}")
+            return {}
+
+        self.get_logger().info(f"Loaded waypoint lidar settings from {settings_file}")
+        return waypoints
+
+    def _pc2ls_param_name(self, config_key: str) -> str:
+        if config_key.startswith("pc2ls_"):
+            return config_key[len("pc2ls_") :]
+        return config_key
+
+    def _pc2ls_set_parameters_client(self):
+        if self._pc2ls_client is not None:
+            return self._pc2ls_client
+        if not self.pc2ls_node_name:
+            return None
+        self._pc2ls_client = self.create_client(SetParameters, f"{self.pc2ls_node_name}/set_parameters")
+        return self._pc2ls_client
+
+    def _apply_waypoint_lidar_settings(self, waypoint_name: str) -> None:
+        if not waypoint_name or waypoint_name == "route_goal":
+            return
+        raw_settings = self._lidar_settings.get(waypoint_name)
+        if not raw_settings:
+            return
+        if not isinstance(raw_settings, dict):
+            self.get_logger().warn(f"Ignoring malformed lidar settings for waypoint '{waypoint_name}'")
+            return
+
+        supported_keys = {
+            "pc2ls_min_height",
+            "pc2ls_max_height",
+            "min_height",
+            "max_height",
+        }
+        params = []
+        log_parts = []
+        for key, value in raw_settings.items():
+            if key not in supported_keys:
+                continue
+            param_name = self._pc2ls_param_name(str(key))
+            param_value = float(value)
+            params.append(
+                Parameter(
+                    name=param_name,
+                    value=ParameterValue(
+                        type=ParameterType.PARAMETER_DOUBLE,
+                        double_value=param_value,
+                    ),
+                )
+            )
+            log_parts.append(f"{param_name}={param_value:g}")
+
+        if not params:
+            return
+
+        client = self._pc2ls_set_parameters_client()
+        if client is None:
+            self.get_logger().warn(
+                f"Waypoint '{waypoint_name}' has lidar settings but pc2ls_node_name is empty"
+            )
+            return
+        if not client.wait_for_service(timeout_sec=self.pc2ls_update_timeout_s):
+            self.get_logger().warn(
+                f"Could not update lidar settings for waypoint '{waypoint_name}': "
+                f"{self.pc2ls_node_name}/set_parameters unavailable"
+            )
+            return
+
+        request = SetParameters.Request()
+        request.parameters = params
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=self.pc2ls_update_timeout_s)
+        if not future.done() or future.result() is None:
+            self.get_logger().warn(f"Timed out updating lidar settings for waypoint '{waypoint_name}'")
+            return
+
+        failed = [result.reason for result in future.result().results if not result.successful]
+        if failed:
+            self.get_logger().warn(
+                f"Failed updating lidar settings for waypoint '{waypoint_name}': {'; '.join(failed)}"
+            )
+            return
+
+        self.get_logger().info(
+            f"Applied lidar settings before waypoint '{waypoint_name}': {', '.join(log_parts)}"
+        )
+
     def _settle_before_goals(self) -> None:
         if self.goal_start_delay_s <= 0.0:
             return
@@ -555,7 +676,7 @@ class UgvNav2Driver(Node):
 
             base_waypoints.append(
                 MotionWaypoint(
-                    segment_name="route_goal",
+                    segment_name=str(waypoint.get("name") or "route_goal"),
                     x=goal_x,
                     y=goal_y,
                     yaw=goal_yaw,
@@ -820,6 +941,7 @@ class UgvNav2Driver(Node):
                 f"{waypoint.segment_name} -> x={waypoint.x:.2f} y={waypoint.y:.2f} "
                 f"yaw={math.degrees(waypoint.yaw):.1f}deg"
             )
+            self._apply_waypoint_lidar_settings(waypoint.segment_name)
             success = self._send_goal(goal_frame_id, waypoint.x, waypoint.y, waypoint.yaw)
             if not success:
                 if self.continue_on_goal_failure:

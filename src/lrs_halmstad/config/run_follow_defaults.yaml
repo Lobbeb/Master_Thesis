@@ -420,13 +420,13 @@ ugv_nav2_driver:
     # Startup and lifecycle gating.
     start_delay_s: 0.0           # Delay before starting route generation and Nav2 goal handling.
     nav2_required_lifecycle_nodes: [map_server, amcl, controller_server, bt_navigator]  # Lifecycle nodes that must be ACTIVE before the first goal is sent.
-    goal_server_timeout_s: 20.0                 # Timeout waiting for the Nav2 action server to become ready.
-    goal_start_delay_s: 0.5                    # Delay before sending the first goal to let Nav2/TF/costmaps settle; keep 0.2-2 s.
+    goal_server_timeout_s: 30.0                 # Timeout waiting for the Nav2 action server to become ready.
+    goal_start_delay_s: 2.0                    # Delay before sending the first goal to let Nav2/TF/costmaps settle; keep 0.2-2 s.
 
     # Localization input.
     pose_topic: amcl_pose                 # Localization topic used to read the UGV pose.
     pose_topic_type: pose_with_covariance  # Message type on pose_topic: pose_with_covariance or odom.
-    pose_timeout_s: 10.0        # Timeout waiting for the first localization pose; keep 5-30 s.
+    pose_timeout_s: 15.0        # Timeout waiting for the first localization pose; keep 5-30 s.
     pose_stale_timeout_s: 2.0  # Reject localization poses older than this; keep 1-5 s.
 
     # Initial pose publication.
@@ -456,13 +456,16 @@ ugv_nav2_driver:
     goal_sequence_seed: -1                       # RNG seed for waypoint randomization; -1 = time-based seed.
 
     # Goal acceptance/results behavior.
-    continue_on_goal_failure: false        # Move to the next goal when Nav2 rejects or fails the current one.
+    continue_on_goal_failure: true        # Move to the next goal when Nav2 rejects or fails the current one.
     goal_reject_retry_count: 20            # Retries when a goal is rejected by the Nav2 action server; keep 2-20.
     goal_reject_retry_delay_s: 0.5          # Delay between goal-rejection retries; keep 0.2-1.0 s.
     goal_result_timeout_s: 600.0             # Cancel and advance if Nav2 has not returned a result within this timeout.
     min_goal_xy_delta_m: 0.05                 # Skip a goal if its XY distance from current pose is below this; keep 0.01-0.5 m.
     min_goal_yaw_delta_deg: 2.0              # Skip a goal if its yaw distance from current pose is below this; keep 1-10 deg.
     pause_after_goal_s: 0.0                 # Dwell time at each completed goal before sending the next one.
+    lidar_settings_file: ""                 # Optional YAML with waypoints.<name>.pc2ls_* runtime overrides.
+    pc2ls_node_name: /a201_0000/pointcloud_to_laserscan  # Node updated when waypoint lidar overrides are present.
+    pc2ls_update_timeout_s: 2.0             # Timeout for runtime pointcloud_to_laserscan parameter updates.
 
     # Internal generated route profile.
     motion_profile: route              # Named motion profile for internal route generation.

@@ -11,17 +11,18 @@ ACTION="start"
 WORLD="baylands"
 WAYPOINT="rotundan_0"
 NAV2_GOALS="rotundan"
-LIDAR="2d"
+LIDAR="3d"
 PAUSE_AFTER_GOAL_S="0.0"
 GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="true"
+START_RVIZ="false"
 MAP_PATH=""
 RVIZ_CONFIG="$WS_ROOT/src/lrs_halmstad/config/waypoints_testing.rviz"
 SESSION=""
 TMUX_ATTACH="false"
-SPAWN_UAV="true"
-UAV_CAMERA_UPDATE_RATE="2"
+SPAWN_UAV="false"
+UAV_CAMERA_UPDATE_RATE="20"
 WITH_FOLLOW="true"
 REBUILD="false"
 REBUILD_DONE="false"
@@ -41,6 +42,7 @@ LIDAR_EXPLICIT="false"
 GUI_EXPLICIT="false"
 PERSPECTIVE_EXPLICIT="false"
 START_RQT_EXPLICIT="false"
+START_RVIZ_EXPLICIT="false"
 MAP_EXPLICIT="false"
 RVIZ_CONFIG_EXPLICIT="false"
 SPAWN_UAV_EXPLICIT="false"
@@ -68,6 +70,7 @@ CLI_PAUSE_AFTER_GOAL_S=""
 CLI_GUI=""
 CLI_PERSPECTIVE=""
 CLI_START_RQT=""
+CLI_START_RVIZ=""
 CLI_MAP_PATH=""
 CLI_RVIZ_CONFIG=""
 CLI_SPAWN_UAV=""
@@ -77,6 +80,10 @@ CLI_FOLLOW_START_DELAY_S=""
 CLI_GAZEBO_READY_TIMEOUT_S=""
 CLI_GAZEBO_POST_READY_DELAY_S=""
 CLI_SPAWN_POST_DELAY_S=""
+CLI_TUNING_LIDAR_ARGS=()
+TUNING_LIDAR_ARGS=()
+
+source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 
 shell_join() {
   local out=""
@@ -89,11 +96,12 @@ shell_join() {
 
 usage() {
   cat <<EOF
-Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|attach|status] [world]
+Usage: ./run.sh nav2_tuning [start|restart|stack_stop|rviz|follow|route_stop|stop|attach|status]
+  [world:=baylands]
   [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
   [pause_after_goal_s:=10.0]
-  [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [map:=maps/baylands.yaml]
-  [rviz_config:=src/lrs_halmstad/config/nav2_namespaced_waypoints.rviz]
+  [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_rviz:=true|false] [map:=maps/baylands.yaml]
+  [rviz_config:=src/lrs_halmstad/config/waypoints_testing.rviz]
   [spawn_uav:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
   [uav_camera_update_rate:=2]
   [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
@@ -103,8 +111,10 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
 
 Examples:
   ./run.sh nav2_tuning start
+  ./run.sh nav2_tuning start waypoint:=rotundan_0
   ./run.sh nav2_tuning restart
   ./run.sh nav2_tuning stack_stop
+  ./run.sh nav2_tuning rviz
   ./run.sh nav2_tuning follow
   ./run.sh nav2_tuning route_stop
   ./run.sh nav2_tuning stop
@@ -154,6 +164,7 @@ write_state() {
     printf 'GUI=%q\n' "$GUI"
     printf 'PERSPECTIVE=%q\n' "$PERSPECTIVE"
     printf 'START_RQT=%q\n' "$START_RQT"
+    printf 'START_RVIZ=%q\n' "$START_RVIZ"
     printf 'MAP_PATH=%q\n' "$MAP_PATH"
     printf 'RVIZ_CONFIG=%q\n' "$RVIZ_CONFIG"
     printf 'SPAWN_UAV=%q\n' "$SPAWN_UAV"
@@ -163,6 +174,12 @@ write_state() {
     printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
     printf 'GAZEBO_POST_READY_DELAY_S=%q\n' "$GAZEBO_POST_READY_DELAY_S"
     printf 'SPAWN_POST_DELAY_S=%q\n' "$SPAWN_POST_DELAY_S"
+    printf 'TUNING_LIDAR_ARGS=('
+    local arg=""
+    for arg in "${TUNING_LIDAR_ARGS[@]}"; do
+      printf '%q ' "$arg"
+    done
+    printf ')\n'
     printf 'GAZEBO_PANE_ID=%q\n' "$GAZEBO_PANE_ID"
     printf 'SPAWN_PANE_ID=%q\n' "$SPAWN_PANE_ID"
     printf 'RQT_PANE_ID=%q\n' "$RQT_PANE_ID"
@@ -269,6 +286,86 @@ effective_map_path() {
   fi
 }
 
+resolve_first_waypoint_for_nav2_goals() {
+  local goals="$1"
+  python3 - "$WS_ROOT" "$goals" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+import yaml
+
+ws_root = Path(sys.argv[1])
+goals = sys.argv[2]
+config_dir = ws_root / "src" / "lrs_halmstad" / "config"
+csv_path = ws_root / "maps" / "waypoints_baylands_groups.csv"
+
+
+def goal_name(value: str) -> str:
+    name = Path(value).name
+    if name.endswith(".yaml"):
+        name = name[:-5]
+    if name.startswith("baylands_waypoints_"):
+        name = name[len("baylands_waypoints_") :]
+    if name.endswith("_rviz"):
+        name = name[:-5]
+    return name
+
+
+def candidate_yaml_files(value: str):
+    raw = Path(value)
+    if raw.is_absolute() or "/" in value:
+        yield raw if raw.is_absolute() else ws_root / raw
+        return
+
+    yield config_dir / value
+    yield config_dir / "baylands_waypoints" / value
+    if not value.endswith(".yaml"):
+        yield config_dir / f"{value}.yaml"
+        yield config_dir / "baylands_waypoints" / f"{value}.yaml"
+        yield config_dir / "baylands_waypoints" / f"baylands_waypoints_{value}.yaml"
+
+
+for path in candidate_yaml_files(goals):
+    if not path.is_file():
+        continue
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    waypoints = data.get("waypoints") or []
+    if waypoints:
+        first = waypoints[0].get("name")
+        if first:
+            print(first)
+            raise SystemExit(0)
+
+group = goal_name(goals)
+if csv_path.is_file():
+    with csv_path.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            if row.get("group") == group and row.get("place"):
+                print(row["place"])
+                raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+apply_nav2_goals_default_waypoint() {
+  if [ "$WAYPOINT_EXPLICIT" = "true" ]; then
+    return 0
+  fi
+  if [ "$NAV2_GOALS_EXPLICIT" != "true" ]; then
+    return 0
+  fi
+
+  local resolved=""
+  resolved="$(resolve_first_waypoint_for_nav2_goals "$NAV2_GOALS" 2>/dev/null || true)"
+  if [ -z "$resolved" ]; then
+    echo "Could not resolve first waypoint for nav2_goals: $NAV2_GOALS" >&2
+    exit 2
+  fi
+  WAYPOINT="$resolved"
+}
+
 localization_cmd() {
   local effective_map=""
   effective_map="$(effective_map_path)"
@@ -276,6 +373,7 @@ localization_cmd() {
   if [ -n "$effective_map" ]; then
     cmd+=("$effective_map")
   fi
+  cmd+=("${TUNING_LIDAR_ARGS[@]}")
   echo "$(shell_join "${cmd[@]}")"
 }
 
@@ -312,7 +410,7 @@ write_follow_params_file() {
   local output_file
   output_file="$(follow_params_file)"
   mkdir -p "$STATE_DIR"
-  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" <<'PY'
+  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" "$WS_ROOT/src/lrs_halmstad/config/baylands_route_lidar.yaml" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -320,10 +418,12 @@ import yaml
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
 pause_after_goal_s = float(sys.argv[3])
+lidar_settings_file = sys.argv[4]
 
 data = yaml.safe_load(src.read_text(encoding="utf-8"))
 params = data.setdefault("ugv_nav2_driver", {}).setdefault("ros__parameters", {})
 params["pause_after_goal_s"] = pause_after_goal_s
+params["lidar_settings_file"] = lidar_settings_file
 
 dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 PY
@@ -345,7 +445,11 @@ create_session() {
     fi
     echo "[stack/localization] $(localization_cmd)"
     echo "[stack/nav2]         $(nav2_cmd)"
-    echo "[stack/rviz]         $(rviz_cmd)"
+    if [ "$START_RVIZ" = "true" ]; then
+      echo "[stack/rviz]         $(rviz_cmd)"
+    else
+      echo "[stack/rviz]         <manual: ./run.sh nav2_tuning rviz>"
+    fi
     if [ "$WITH_FOLLOW" = "true" ]; then
       echo "[stack/route]        $(follow_cmd)"
     fi
@@ -546,11 +650,15 @@ stop_base_processes() {
 
 restart_stack() {
   if [ "$DRY_RUN" = "true" ]; then
-    echo "[nav2_tuning] Would restart localization/nav2/rviz$( [ "$WITH_FOLLOW" = "true" ] && printf '/route' )"
+    echo "[nav2_tuning] Would restart localization/nav2$( [ "$START_RVIZ" = "true" ] && printf '/rviz' )$( [ "$WITH_FOLLOW" = "true" ] && printf '/route' )"
     echo "[localization] $(localization_cmd)"
     echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
     echo "[nav2] $(nav2_cmd)"
-    echo "[rviz] $(rviz_cmd)"
+    if [ "$START_RVIZ" = "true" ]; then
+      echo "[rviz] $(rviz_cmd)"
+    else
+      echo "[rviz] <manual: ./run.sh nav2_tuning rviz>"
+    fi
     if [ "$WITH_FOLLOW" = "true" ]; then
       echo "[route] $(follow_cmd)"
     fi
@@ -563,22 +671,39 @@ restart_stack() {
   local effective_map=""
   effective_map="$(effective_map_path)"
   if [ -n "$effective_map" ]; then
-    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "$effective_map" "lidar:=$LIDAR"
+    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "$effective_map" "lidar:=$LIDAR" "${TUNING_LIDAR_ARGS[@]}"
   else
-    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "lidar:=$LIDAR"
+    send_pane_command "$LOCALIZATION_PANE_ID" ./run.sh localization "$WORLD" "lidar:=$LIDAR" "${TUNING_LIDAR_ARGS[@]}"
   fi
   wait_for_localization_ready
   realign_yaw
   send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR"
-  if [ -n "$RVIZ_CONFIG" ]; then
-    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR" "rviz_config:=$RVIZ_CONFIG"
+  if [ "$START_RVIZ" = "true" ]; then
+    if [ -n "$RVIZ_CONFIG" ]; then
+      send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR" "rviz_config:=$RVIZ_CONFIG"
+    else
+      send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR"
+    fi
   else
-    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR"
+    send_pane_command "$RVIZ_PANE_ID" bash -lc "printf 'RViz disabled for nav2_tuning. Run: ./run.sh nav2_tuning rviz\\n'; exec bash"
   fi
 
   if [ "$WITH_FOLLOW" = "true" ]; then
     sleep "$FOLLOW_START_DELAY_S"
     send_pane_command "$FOLLOW_PANE_ID" ./run.sh 1to1_follow "$WORLD" "waypoint:=$WAYPOINT" "nav2_goals:=$NAV2_GOALS" "params_file:=$(follow_params_file)"
+  fi
+}
+
+restart_rviz_only() {
+  if [ "$DRY_RUN" = "true" ]; then
+    echo "[nav2_tuning] Would start RViz"
+    echo "[rviz] $(rviz_cmd)"
+    return 0
+  fi
+  if [ -n "$RVIZ_CONFIG" ]; then
+    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR" "rviz_config:=$RVIZ_CONFIG"
+  else
+    send_pane_command "$RVIZ_PANE_ID" ./run.sh nav2_rviz "lidar:=$LIDAR"
   fi
 }
 
@@ -634,6 +759,7 @@ Pause after goal: $PAUSE_AFTER_GOAL_S
 GUI: $GUI
 Perspective: $PERSPECTIVE
 Start rqt: $START_RQT
+Start RViz: $START_RVIZ
 Map: $map_status
 RViz config: ${RVIZ_CONFIG:-<default>}
 Spawn UAV: $SPAWN_UAV
@@ -646,9 +772,9 @@ Spawn settle delay: $SPAWN_POST_DELAY_S
 EOF
 }
 
-if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
+if [ "$#" -gt 0 ]; then
   case "$1" in
-    start|restart|stack_stop|follow|route_stop|stop|attach|status)
+    start|restart|stack_stop|rviz|follow|route_stop|stop|attach|status)
       ACTION="$1"
       shift
       ;;
@@ -656,17 +782,22 @@ if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
       usage
       exit 0
       ;;
+    *)
+      echo "Unknown nav2_tuning action: $1" >&2
+      echo "Use an explicit action, for example: ./run.sh nav2_tuning start $1" >&2
+      usage >&2
+      exit 2
+      ;;
   esac
 fi
 
-if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
-  WORLD="$1"
-  shift
-fi
 update_session_default
 
 for arg in "$@"; do
   case "$arg" in
+    world:=*)
+      WORLD="${arg#world:=}"
+      ;;
     waypoint:=*)
       WAYPOINT="${arg#waypoint:=}"
       WAYPOINT_EXPLICIT="true"
@@ -694,6 +825,10 @@ for arg in "$@"; do
     start_rqt:=*)
       START_RQT="${arg#start_rqt:=}"
       START_RQT_EXPLICIT="true"
+      ;;
+    start_rviz:=*)
+      START_RVIZ="${arg#start_rviz:=}"
+      START_RVIZ_EXPLICIT="true"
       ;;
     map:=*)
       MAP_PATH="${arg#map:=}"
@@ -755,6 +890,9 @@ for arg in "$@"; do
     dry_run:=*)
       DRY_RUN="${arg#dry_run:=}"
       ;;
+    pc2ls_*|scan_relay_*|use_scan_relay:=*)
+      TUNING_LIDAR_ARGS+=("$arg")
+      ;;
     *)
       echo "Unknown argument: $arg" >&2
       usage >&2
@@ -762,6 +900,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+apply_nav2_goals_default_waypoint
+mapfile -t route_default_lidar_args < <(route_lidar_preset_args "$NAV2_GOALS" "$LIDAR" "${TUNING_LIDAR_ARGS[@]}")
+TUNING_LIDAR_ARGS+=("${route_default_lidar_args[@]}")
 
 CLI_WORLD="$WORLD"
 CLI_WAYPOINT="$WAYPOINT"
@@ -771,6 +913,7 @@ CLI_PAUSE_AFTER_GOAL_S="$PAUSE_AFTER_GOAL_S"
 CLI_GUI="$GUI"
 CLI_PERSPECTIVE="$PERSPECTIVE"
 CLI_START_RQT="$START_RQT"
+CLI_START_RVIZ="$START_RVIZ"
 CLI_MAP_PATH="$MAP_PATH"
 CLI_RVIZ_CONFIG="$RVIZ_CONFIG"
 CLI_SPAWN_UAV="$SPAWN_UAV"
@@ -780,6 +923,7 @@ CLI_FOLLOW_START_DELAY_S="$FOLLOW_START_DELAY_S"
 CLI_GAZEBO_READY_TIMEOUT_S="$GAZEBO_READY_TIMEOUT_S"
 CLI_GAZEBO_POST_READY_DELAY_S="$GAZEBO_POST_READY_DELAY_S"
 CLI_SPAWN_POST_DELAY_S="$SPAWN_POST_DELAY_S"
+CLI_TUNING_LIDAR_ARGS=("${TUNING_LIDAR_ARGS[@]}")
 
 if [ "$SESSION_EXPLICIT" != "true" ]; then
   SESSION="$(default_session)"
@@ -808,6 +952,9 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   if [ "$START_RQT_EXPLICIT" = "true" ]; then
     START_RQT="$CLI_START_RQT"
   fi
+  if [ "$START_RVIZ_EXPLICIT" = "true" ]; then
+    START_RVIZ="$CLI_START_RVIZ"
+  fi
   if [ "$MAP_EXPLICIT" = "true" ]; then
     MAP_PATH="$CLI_MAP_PATH"
   fi
@@ -835,6 +982,7 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   if [ "$SPAWN_POST_DELAY_EXPLICIT" = "true" ]; then
     SPAWN_POST_DELAY_S="$CLI_SPAWN_POST_DELAY_S"
   fi
+  apply_nav2_goals_default_waypoint
   write_state
 fi
 
@@ -852,6 +1000,9 @@ case "$ACTION" in
     ;;
   stack_stop)
     stop_stack_processes
+    ;;
+  rviz)
+    restart_rviz_only
     ;;
   follow)
     restart_follow_only

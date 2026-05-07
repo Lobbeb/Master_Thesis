@@ -1,46 +1,46 @@
 frame_id: map
 waypoints:
-- name: rotundan_1
+- name: rotundan_0
   x: 66.88222902882593
   y: 237.15084904414442
   yaw_deg: 152.8028169714359
   group: rotundan
-- name: rotundan_2
+- name: rotundan_1
   x: 61.98302186238938
   y: 238.28776276470325
   yaw_deg: 144.9145432086794
   group: rotundan
-- name: rotundan_3
+- name: rotundan_2
   x: 58.56347768828148
   y: 248.3315058816306
   yaw_deg: 121.8088614895416
   group: rotundan
-- name: rotundan_4
+- name: rotundan_3
   x: 51.84449325644657
   y: 256.44669997701624
   yaw_deg: 74.07792454539498
   group: rotundan
-- name: rotundan_5
+- name: rotundan_4
   x: 67.18577055028935
   y: 261.10498842955104
   yaw_deg: -74.6295293930429
   group: rotundan
-- name: rotundan_6
+- name: rotundan_5
   x: 66.48372095125183
   y: 255.15226755588841
   yaw_deg: -4.630516929762632
   group: rotundan
-- name: rotundan_7
+- name: rotundan_6
   x: 71.45019986139545
   y: 253.31061602701132
   yaw_deg: -22.685096544441276
   group: rotundan
-- name: rotundan_8
+- name: rotundan_7
   x: 75.65325787935234
   y: 245.80547839480658
   yaw_deg: -178.02577464313424
   group: rotundan
-- name: rotundan_9
+- name: rotundan_8
   x: 66.9391053313046
   y: 245.72598972279457
   yaw_deg: -83.55633032915186
