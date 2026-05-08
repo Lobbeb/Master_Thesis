@@ -55,14 +55,20 @@ waypoints:
     pc2ls_min_height: -0.34
     pc2ls_max_height: 0.4
   road_to_east_1:
-    pc2ls_min_height: -0.37
-    pc2ls_max_height: 0.4
+    pc2ls_min_height: -0.38
+    pc2ls_max_height: 0.5
+  road_to_east_2:
+    pc2ls_min_height: -0.41
+    pc2ls_max_height: 0.0
   road_to_east_3:
-    pc2ls_min_height: -0.26
-    pc2ls_max_height: 0.4
-  road_to_east_6:
-    pc2ls_min_height: -0.36
-    pc2ls_max_height: 0.4
+    pc2ls_min_height: -0.33
+    pc2ls_max_height: -0.05
+  road_to_east_4:
+    pc2ls_min_height: -0.29
+    pc2ls_max_height: -0.1
+  road_to_east_5:
+    pc2ls_min_height: -0.3
+    pc2ls_max_height: 0.25
   rotundan_8:
     pc2ls_min_height: 0.5
     pc2ls_max_height: 1.0

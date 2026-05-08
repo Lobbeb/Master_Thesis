@@ -164,7 +164,7 @@ with input_csv.open("r", encoding="utf-8", newline="") as handle:
 if not rows:
     raise SystemExit(f"No waypoint rows found in {input_csv}")
 
-def build_route_doc(selected_rows):
+def build_route_doc(selected_rows, group_name=""):
     route_waypoints = []
     for row in selected_rows:
         entry = {
@@ -176,7 +176,10 @@ def build_route_doc(selected_rows):
         if row["group"]:
             entry["group"] = row["group"]
         route_waypoints.append(entry)
-    return {"frame_id": frame_id, "waypoints": route_waypoints}
+    doc = {"frame_id": frame_id, "waypoints": route_waypoints}
+    if group_name:
+        doc["group"] = group_name
+    return doc
 
 
 route_doc = build_route_doc(rows)
@@ -188,14 +191,21 @@ for row in rows:
 
 rviz_docs = {}
 
-def build_rviz_doc(selected_rows):
+def build_rviz_doc(selected_rows, group_name=""):
     waypoints = {}
     for idx, row in enumerate(selected_rows):
-        waypoints[f"waypoint{idx}"] = {
+        entry = {
+            "name": row["name"],
             "pose": [row["x"], row["y"], 0.0],
             "orientation": yaw_to_quaternion(row["yaw_rad"]),
         }
-    return {"waypoints": waypoints}
+        if row["group"]:
+            entry["group"] = row["group"]
+        waypoints[f"waypoint{idx}"] = entry
+    doc = {"waypoints": waypoints}
+    if group_name:
+        doc["group"] = group_name
+    return doc
 
 rviz_docs["baylands_waypoints_rviz.yaml"] = build_rviz_doc(rows)
 route_docs = {}
@@ -208,8 +218,8 @@ for group_name, selected_rows in grouped.items():
         loop_row = dict(selected_rows[0])
         loop_row["name"] = f'{selected_rows[0]["name"]}_loop'
         group_rows.append(loop_row)
-    rviz_docs[rviz_filename] = build_rviz_doc(group_rows)
-    route_docs[route_filename] = build_route_doc(group_rows)
+    rviz_docs[rviz_filename] = build_rviz_doc(group_rows, group_name=group_name)
+    route_docs[route_filename] = build_route_doc(group_rows, group_name=group_name)
 
 if dry_run:
     print(f"# dry-run: would write route YAML to {route_output}")

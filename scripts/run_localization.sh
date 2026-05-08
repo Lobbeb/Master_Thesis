@@ -24,6 +24,7 @@ LOCAL_LOCALIZATION_LAUNCH="$WS_ROOT/src/lrs_halmstad/launch/localization_with_pa
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 resolve_localization_map_path() {
@@ -119,6 +120,12 @@ USE_SCAN_RELAY="true"
 SCAN_RELAY_HZ=""
 SCAN_RELAY_MAX_AGE_S=""
 SCAN_RELAY_START_DELAY_S=""
+SIM_SPAWN_WAYPOINT=""
+ROUTE_LIDAR_ARGS=()
+
+if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ]; then
+  SIM_SPAWN_WAYPOINT="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
+fi
 
 if [ -n "$LIDAR_POINTCLOUD_TOPIC" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
   USE_POINTCLOUD_TO_LASERSCAN="true"
@@ -230,12 +237,10 @@ for compat_map in "${DEFAULT_BAYLANDS_INITIAL_POSE_COMPAT_MAPS[@]}"; do
 done
 
 if [[ "$WORLD" == baylands* ]] && [ "$baylands_pose_compatible_map" = "true" ] && [ "$has_initial_pose_override" = "false" ]; then
-  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ] && [ -f "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" ]; then
-    spawn_waypoint="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
-    if [ -n "$spawn_waypoint" ]; then
-      if waypoint_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint" 2>/dev/null)"; then
+  if [ -n "$SIM_SPAWN_WAYPOINT" ] && [ -f "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" ]; then
+      if waypoint_pose_env="$(resolve_baylands_amcl_waypoint_pose "$SIM_SPAWN_WAYPOINT" 2>/dev/null)"; then
         eval "$waypoint_pose_env"
-        echo "[run_localization] Baylands waypoint '$spawn_waypoint' detected: using matching AMCL initial pose" >&2
+        echo "[run_localization] Baylands waypoint '$SIM_SPAWN_WAYPOINT' detected: using matching AMCL initial pose" >&2
         LAUNCH_ARGS+=(
           set_initial_pose:=true
           always_reset_initial_pose:=true
@@ -244,9 +249,8 @@ if [[ "$WORLD" == baylands* ]] && [ "$baylands_pose_compatible_map" = "true" ] &
           initial_pose_yaw:="$initial_pose_yaw"
         )
       else
-        echo "[run_localization] Baylands waypoint '$spawn_waypoint' has no complete AMCL pose; falling back to saved default initial pose" >&2
+        echo "[run_localization] Baylands waypoint '$SIM_SPAWN_WAYPOINT' has no complete AMCL pose; falling back to saved default initial pose" >&2
       fi
-    fi
   fi
 
   if ! printf '%s\n' "${LAUNCH_ARGS[@]}" | rg -q '^set_initial_pose:=true$'; then
@@ -258,6 +262,14 @@ if [[ "$WORLD" == baylands* ]] && [ "$baylands_pose_compatible_map" = "true" ] &
       initial_pose_y:="$DEFAULT_BAYLANDS_INITIAL_POSE_Y"
       initial_pose_yaw:="$DEFAULT_BAYLANDS_INITIAL_POSE_YAW"
     )
+  fi
+fi
+
+if [[ "$WORLD" == baylands* ]] && [ "$LIDAR_MODE" = "3d" ] && [ -n "$SIM_SPAWN_WAYPOINT" ]; then
+  spawn_route="$(route_lidar_waypoint_route "$SIM_SPAWN_WAYPOINT")"
+  mapfile -t ROUTE_LIDAR_ARGS < <(route_lidar_preset_args "$spawn_route" "$LIDAR_MODE" "${LIDAR_REMAINING_ARGS[@]}")
+  if [ "${#ROUTE_LIDAR_ARGS[@]}" -gt 0 ]; then
+    echo "[run_localization] Applying route lidar defaults for '$spawn_route': ${ROUTE_LIDAR_ARGS[*]}" >&2
   fi
 fi
 
@@ -281,6 +293,7 @@ if [ -n "$PARAMS_FILE_OVERRIDE" ]; then
   LAUNCH_ARGS+=("params_file:=$PARAMS_FILE_OVERRIDE")
 fi
 
+LAUNCH_ARGS+=("${ROUTE_LIDAR_ARGS[@]}")
 LAUNCH_ARGS+=("${LIDAR_REMAINING_ARGS[@]}")
 
 ros2 launch "$LOCAL_LOCALIZATION_LAUNCH" "${LAUNCH_ARGS[@]}"

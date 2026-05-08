@@ -1,5 +1,6 @@
 waypoints:
   waypoint0:
+    name: road_to_west_0
     pose:
     - 67.53548198672482
     - 227.78398304970628
@@ -9,7 +10,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7393069656141646
+    group: road_to_west
   waypoint1:
+    name: road_to_west_1
     pose:
     - 67.19167052697985
     - 223.6788007777229
@@ -19,7 +22,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7206775170107838
+    group: road_to_west
   waypoint2:
+    name: road_to_west_2
     pose:
     - 66.657121339049
     - 216.29241643850077
@@ -29,7 +34,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7651226129711018
+    group: road_to_west
   waypoint3:
+    name: road_to_west_3
     pose:
     - 65.56055516278978
     - 211.60136278200164
@@ -39,7 +46,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.8502066441750943
+    group: road_to_west
   waypoint4:
+    name: road_to_west_4
     pose:
     - 61.14308352660519
     - 207.8156530657084
@@ -49,7 +58,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.9997031938828428
+    group: road_to_west
   waypoint5:
+    name: road_to_west_5
     pose:
     - 43.22675582926255
     - 209.02000341375125
@@ -59,7 +70,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.9979726863860187
+    group: road_to_west
   waypoint6:
+    name: road_to_west_6
     pose:
     - 24.367434465726564
     - 206.77526401040882
@@ -69,7 +82,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.9929635768547863
+    group: road_to_west
   waypoint7:
+    name: road_to_west_7
     pose:
     - 17.584446049063324
     - 201.69912372961946
@@ -79,7 +94,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7823383063321628
+    group: road_to_west
   waypoint8:
+    name: road_to_west_8
     pose:
     - 8.940350038318554
     - 200.927074135273
@@ -89,3 +106,5 @@ waypoints:
     - 0.0
     - 0.0
     - 0.9865836527361168
+    group: road_to_west
+group: road_to_west

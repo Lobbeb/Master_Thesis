@@ -1,5 +1,6 @@
 waypoints:
   waypoint0:
+    name: spawn_0
     pose:
     - -34.82005668567761
     - 89.47610095712658
@@ -9,7 +10,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.9997035944124262
+    group: spawn
   waypoint1:
+    name: spawn_1
     pose:
     - -48.031543577831506
     - 91.04646154624345
@@ -19,7 +22,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.9997146371687385
+    group: spawn
   waypoint2:
+    name: spawn_2
     pose:
     - -82.50665945639142
     - 87.19114355543013
@@ -29,7 +34,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7098461702842677
+    group: spawn
   waypoint3:
+    name: spawn_3
     pose:
     - -79.73409252127493
     - 81.54432491479284
@@ -39,7 +46,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.25493683740141276
+    group: spawn
   waypoint4:
+    name: spawn_4
     pose:
     - -62.96120732577301
     - 81.03237292878299
@@ -49,7 +58,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.020049577519769147
+    group: spawn
   waypoint5:
+    name: spawn_5
     pose:
     - -43.01508923813704
     - 81.22765038394543
@@ -59,7 +70,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.1082856258531604
+    group: spawn
   waypoint6:
+    name: spawn_6
     pose:
     - -31.32341463044825
     - 80.51546467406426
@@ -69,7 +82,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.019004083522393363
+    group: spawn
   waypoint7:
+    name: spawn_7
     pose:
     - -20.19964435766163
     - 81.69316714651966
@@ -79,7 +94,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.053088466413916874
+    group: spawn
   waypoint8:
+    name: spawn_8
     pose:
     - -19.6319265610235
     - 80.299549300729
@@ -89,3 +106,5 @@ waypoints:
     - 0.0
     - 0.0
     - -0.6075673867469543
+    group: spawn
+group: spawn

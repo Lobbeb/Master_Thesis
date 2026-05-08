@@ -7,6 +7,7 @@ GZ_BIN="/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 
 WORLD=""
 TARGET_X=""
@@ -23,6 +24,8 @@ UAV_Z=""
 KEEP_PAUSED="false"
 DRY_RUN="false"
 BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
+PC2LS_UPDATE_TIMEOUT_S="8"
+LIDAR_SCAN_WAIT_S="3"
 
 BRIDGE_PID=""
 STARTED_BRIDGE="false"
@@ -369,6 +372,26 @@ EOF
 ros2 service call ${SERVICE_NAME} ros_gz_interfaces/srv/SetEntityPose "{entity: {name: '${UAV_NAME}', type: 2}, pose: {position: {x: ${uav_x}, y: ${uav_y}, z: ${uav_z}}, orientation: {x: 0.0, y: 0.0, z: ${uav_qz}, w: ${uav_qw}}}}"
 EOF
   fi
+  if [ -n "$WAYPOINT_NAME" ]; then
+    while IFS= read -r lidar_arg; do
+      [ -n "${lidar_arg:-}" ] || continue
+      param_name="${lidar_arg%%:=*}"
+      param_value="${lidar_arg#*:=}"
+      case "$param_name" in
+        pc2ls_min_height)
+          param_name="min_height"
+          ;;
+        pc2ls_max_height)
+          param_name="max_height"
+          ;;
+      esac
+      cat <<EOF
+
+[dry-run] Would set lidar setting:
+ros2 param set $(route_lidar_pc2ls_node_name) ${param_name} ${param_value}
+EOF
+    done < <(route_lidar_waypoint_args "$WAYPOINT_NAME")
+  fi
   if [ "$KEEP_PAUSED" != "true" ]; then
     cat <<EOF
 
@@ -417,6 +440,14 @@ if [ "$WITH_UAV" = "true" ]; then
     "{entity: {name: '${UAV_NAME}', type: 2}, pose: {position: {x: ${uav_x}, y: ${uav_y}, z: ${uav_z}}, orientation: {x: 0.0, y: 0.0, z: ${uav_qz}, w: ${uav_qw}}}}" >/dev/null
 fi
 
+LIDAR_ARGS=()
+if [ -n "$WAYPOINT_NAME" ]; then
+  mapfile -t LIDAR_ARGS < <(route_lidar_waypoint_args "$WAYPOINT_NAME")
+  if [ "${#LIDAR_ARGS[@]}" -gt 0 ]; then
+    route_lidar_apply_pc2ls_args "waypoint '$WAYPOINT_NAME'" "$PC2LS_UPDATE_TIMEOUT_S" "${LIDAR_ARGS[@]}"
+  fi
+fi
+
 if [ "$STARTED_BRIDGE" = "true" ] && [ -n "$BRIDGE_PID" ]; then
   stop_bridge_process "$BRIDGE_PID" || true
   STARTED_BRIDGE="false"
@@ -427,4 +458,21 @@ echo "[run_realign_yaw] Done"
 if [ "$KEEP_PAUSED" = "true" ]; then
   echo "[run_realign_yaw] Simulation left paused on request"
   PAUSED_SIM="false"
+else
+  echo "[run_realign_yaw] Unpausing simulation"
+  "$GZ_BIN" service \
+    -s "/world/${GZ_WORLD}/control" \
+    --reqtype gz.msgs.WorldControl \
+    --reptype gz.msgs.Boolean \
+    --timeout 3000 \
+    --req 'pause: false' >/dev/null
+  PAUSED_SIM="false"
+
+  if [ "${#LIDAR_ARGS[@]}" -gt 0 ]; then
+    if route_lidar_wait_for_scan_once "$(route_lidar_pc2ls_scan_relay_topic)" "$LIDAR_SCAN_WAIT_S"; then
+      echo "[run_realign_yaw] Lidar relay produced a scan after applying waypoint settings"
+    else
+      echo "[run_realign_yaw] Warning: no relay scan received within ${LIDAR_SCAN_WAIT_S}s after waypoint lidar update" >&2
+    fi
+  fi
 fi

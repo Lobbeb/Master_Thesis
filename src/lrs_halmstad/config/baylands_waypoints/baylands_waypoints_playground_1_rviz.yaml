@@ -1,5 +1,6 @@
 waypoints:
   waypoint0:
+    name: playground_0
     pose:
     - 141.45934853163197
     - 1.6903764981326466
@@ -9,7 +10,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.9804748808746607
+    group: playground_1
   waypoint1:
+    name: playground_1
     pose:
     - 136.3763696371555
     - 10.024536227894139
@@ -19,7 +22,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.8564396612582091
+    group: playground_1
   waypoint2:
+    name: playground_2
     pose:
     - 133.47225015362054
     - 15.298181007810925
@@ -29,7 +34,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.8114536688369488
+    group: playground_1
   waypoint3:
+    name: playground_3
     pose:
     - 130.7322777645212
     - 17.991278406953157
@@ -39,7 +46,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.7290868058633451
+    group: playground_1
   waypoint4:
+    name: playground_5
     pose:
     - 133.29921446547996
     - 28.521607491799863
@@ -49,7 +58,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.9525550714904
+    group: playground_1
   waypoint5:
+    name: playground_6
     pose:
     - 128.48498476010423
     - 32.068640902227
@@ -59,7 +70,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.6237752840190641
+    group: playground_1
   waypoint6:
+    name: playground_7
     pose:
     - 132.5953767234123
     - 34.37393226232746
@@ -69,7 +82,9 @@ waypoints:
     - 0.0
     - 0.0
     - -0.015073353638517414
+    group: playground_1
   waypoint7:
+    name: playground_8
     pose:
     - 134.02462685701917
     - 36.50409412838074
@@ -79,7 +94,9 @@ waypoints:
     - 0.0
     - 0.0
     - 0.7392715181424515
+    group: playground_1
   waypoint8:
+    name: playground_9
     pose:
     - 136.37789124655188
     - 36.962889374121616
@@ -89,3 +106,5 @@ waypoints:
     - 0.0
     - 0.0
     - -0.06646701072242693
+    group: playground_1
+group: playground_1

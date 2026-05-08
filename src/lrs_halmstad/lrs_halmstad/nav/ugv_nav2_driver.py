@@ -490,10 +490,26 @@ class UgvNav2Driver(Node):
                 f"Waypoint '{waypoint_name}' has lidar settings but pc2ls_node_name is empty"
             )
             return
-        if not client.wait_for_service(timeout_sec=self.pc2ls_update_timeout_s):
+        wait_deadline = time.monotonic() + self.pc2ls_update_timeout_s
+        while rclpy.ok():
+            wait_timeout = min(0.5, max(0.0, wait_deadline - time.monotonic()))
+            if client.wait_for_service(timeout_sec=wait_timeout):
+                break
+            if time.monotonic() >= wait_deadline:
+                self.get_logger().warn(
+                    f"Could not update lidar settings for waypoint '{waypoint_name}': "
+                    f"{self.pc2ls_node_name}/set_parameters unavailable"
+                )
+                return
+            self.get_logger().warn(
+                f"Waiting for {self.pc2ls_node_name}/set_parameters before applying lidar settings for '{waypoint_name}'"
+            )
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        if not rclpy.ok():
             self.get_logger().warn(
                 f"Could not update lidar settings for waypoint '{waypoint_name}': "
-                f"{self.pc2ls_node_name}/set_parameters unavailable"
+                "ROS shutdown"
             )
             return
 
@@ -513,7 +529,7 @@ class UgvNav2Driver(Node):
             return
 
         self.get_logger().info(
-            f"Applied lidar settings before waypoint '{waypoint_name}': {', '.join(log_parts)}"
+            f"Applied lidar settings at waypoint '{waypoint_name}': {', '.join(log_parts)}"
         )
 
     def _settle_before_goals(self) -> None:
@@ -941,13 +957,14 @@ class UgvNav2Driver(Node):
                 f"{waypoint.segment_name} -> x={waypoint.x:.2f} y={waypoint.y:.2f} "
                 f"yaw={math.degrees(waypoint.yaw):.1f}deg"
             )
-            self._apply_waypoint_lidar_settings(waypoint.segment_name)
             success = self._send_goal(goal_frame_id, waypoint.x, waypoint.y, waypoint.yaw)
             if not success:
                 if self.continue_on_goal_failure:
                     self.get_logger().warn("Continuing to next Nav2 waypoint after failure")
                     continue
                 return 2
+
+            self._apply_waypoint_lidar_settings(waypoint.segment_name)
 
             if self.pause_after_goal_s > 0.0:
                 time.sleep(self.pause_after_goal_s)

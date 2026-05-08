@@ -1,5 +1,6 @@
 waypoints:
   waypoint0:
+    name: playground_4
     pose:
     - 131.76762412864224
     - 25.671043631436476
@@ -9,3 +10,5 @@ waypoints:
     - 0.0
     - 0.0
     - 0.630646210322093
+    group: playground_
+group: playground_
