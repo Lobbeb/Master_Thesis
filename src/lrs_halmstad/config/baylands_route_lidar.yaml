@@ -1,46 +1,41 @@
 routes:
   rotundan:
     pc2ls_min_height: -0.05
-    pc2ls_max_height: 0.10
+    pc2ls_max_height: 0.1
   road_to_west:
     pc2ls_min_height: -0.39
     pc2ls_max_height: 0.4
   parkinglot_west:
     pc2ls_min_height: -0.385
-    pc2ls_max_height: 0.20
+    pc2ls_max_height: 0.2
   road_to_spawn:
-    pc2ls_min_height: -0.40
-    pc2ls_max_height: 0.40
+    pc2ls_min_height: -0.4
+    pc2ls_max_height: 0.4
   road_to_east:
-    pc2ls_min_height: -0.19
-    pc2ls_max_height: 0.50
+    pc2ls_min_height: -0.34
+    pc2ls_max_height: 0.4
   road_to_strip:
-    pc2ls_min_height: -0.40
-    pc2ls_max_height: 0.40
+    pc2ls_min_height: -0.4
+    pc2ls_max_height: 0.4
   strip:
     pc2ls_min_height: -0.36
     pc2ls_max_height: 0.12
-
-# Optional per-waypoint runtime overrides. The UGV Nav2 driver applies these
-# before sending the matching waypoint goal.
 waypoints:
-
   road_to_west_3:
     pc2ls_min_height: -0.05
     pc2ls_max_height: 0.4
   road_to_west_4:
     pc2ls_min_height: -0.36
-    pc2ls_max_height: 0.10
+    pc2ls_max_height: 0.1
   road_to_west_5:
     pc2ls_min_height: -0.36
-    pc2ls_max_height: 0.10
+    pc2ls_max_height: 0.1
   road_to_west_6:
     pc2ls_min_height: -0.29
-    pc2ls_max_height: 0.50
+    pc2ls_max_height: 0.5
   road_to_west_8:
     pc2ls_min_height: -0.09
-    pc2ls_max_height: 0.40
-
+    pc2ls_max_height: 0.4
   road_to_spawn_3:
     pc2ls_min_height: -0.325
     pc2ls_max_height: 0.05
@@ -56,7 +51,9 @@ waypoints:
   road_to_spawn_9:
     pc2ls_min_height: -0.37
     pc2ls_max_height: 0.5
-
+  road_to_east_0:
+    pc2ls_min_height: -0.34
+    pc2ls_max_height: 0.4
   road_to_east_1:
     pc2ls_min_height: -0.37
     pc2ls_max_height: 0.4
@@ -66,4 +63,6 @@ waypoints:
   road_to_east_6:
     pc2ls_min_height: -0.36
     pc2ls_max_height: 0.4
-
+  rotundan_8:
+    pc2ls_min_height: 0.5
+    pc2ls_max_height: 1.0

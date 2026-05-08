@@ -35,13 +35,3 @@ waypoints:
   y: 253.31061602701132
   yaw_deg: -22.685096544441276
   group: rotundan
-- name: rotundan_7
-  x: 75.65325787935234
-  y: 245.80547839480658
-  yaw_deg: -178.02577464313424
-  group: rotundan
-- name: rotundan_8
-  x: 66.9391053313046
-  y: 245.72598972279457
-  yaw_deg: -83.55633032915186
-  group: rotundan

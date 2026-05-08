@@ -28,14 +28,14 @@ BAYLANDS_DEFAULT_Y="0.0"
 BAYLANDS_DEFAULT_Z="0.8"
 BAYLANDS_DEFAULT_YAW="0.0"
 BAYLANDS_DEFAULT_WAYPOINT="parkinglot_west_0"
-BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
-BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 resolve_baylands_waypoint() {
   local waypoint_name="$1"
-  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import sys
 
@@ -216,8 +216,8 @@ if [ -n "$WAYPOINT_NAME" ]; then
     echo "[run_gazebo_sim] waypoint:=... is currently supported for Baylands only." >&2
     exit 2
   fi
-  if [ ! -f "$BAYLANDS_GROUP_WAYPOINT_CSV" ] && [ ! -f "$BAYLANDS_WAYPOINT_CSV" ]; then
-    echo "[run_gazebo_sim] Baylands waypoint CSVs not found: $BAYLANDS_GROUP_WAYPOINT_CSV or $BAYLANDS_WAYPOINT_CSV" >&2
+  if [ ! -f "$BAYLANDS_GROUP_WAYPOINT_CSV" ]; then
+    echo "[run_gazebo_sim] Baylands waypoint CSV not found: $BAYLANDS_GROUP_WAYPOINT_CSV" >&2
     exit 1
   fi
 

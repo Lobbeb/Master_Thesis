@@ -6,10 +6,11 @@ SHARED_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 source "$SHARED_SCRIPTS_DIR/slam_state_common.sh"
+source "$SHARED_SCRIPTS_DIR/baylands_waypoint_common.sh"
 
 NAME=""
 WORLD=""
-OUTPUT_PATH="$WS_ROOT/maps/waypoints_baylands.csv"
+OUTPUT_PATH="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 GROUP=""
 REPLACE="true"
 DRY_RUN="false"
@@ -28,7 +29,6 @@ Examples:
   ./run.sh save_waypoint_csv strip_test baylands
   ./run.sh save_waypoint_csv strip_test output:=waypoints_baylands_groups.csv group:=strip
   ./run.sh save_waypoint_csv baylands output:=waypoints_baylands_groups.csv group:=strip name:=strip_test
-  ./run.sh save_waypoint_csv strip_test output:=maps/waypoints_baylands.csv
   ./run.sh save_waypoint_csv strip_test dry_run:=true
   ./run.sh save_waypoint_csv strip_test amcl_timeout_s:=10 amcl_retry_count:=5
 EOF
@@ -368,3 +368,7 @@ if [ "$DRY_RUN" = "true" ]; then
 fi
 
 printf '%s\n' "[run_save_waypoint_csv] Saved waypoint '$NAME' to $OUTPUT_PATH"
+
+if [ "$(readlink -f "$OUTPUT_PATH" 2>/dev/null || printf '%s' "$OUTPUT_PATH")" = "$(readlink -f "$(baylands_group_waypoint_csv)" 2>/dev/null || printf '%s' "$(baylands_group_waypoint_csv)")" ]; then
+  baylands_sync_waypoints false
+fi

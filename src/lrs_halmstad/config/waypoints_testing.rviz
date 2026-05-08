@@ -7,8 +7,9 @@ Panels:
         - /Global Options1
         - /TF1/Frames1
         - /TF1/Tree1
+        - /Global Planner1/Global Costmap1
       Splitter Ratio: 0.5833333134651184
-    Tree Height: 443
+    Tree Height: 291
   - Class: rviz_common/Views
     Expanded:
       - /Current View1
@@ -48,146 +49,155 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /a201_0000/robot_description
-      Enabled: false
+      Enabled: true
       Links:
         All Links Enabled: true
         Expand Joint Details: false
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
+        base_footprint:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        camera_0_bottom_screw_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        camera_0_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        default_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        front_bumper_base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        front_bumper_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_bumper_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        front_left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        inertial_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        lidar2d_0_laser:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        lidar2d_0_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        lidar3d_0_laser:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        lidar3d_0_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_bumper_base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        rear_bumper_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_bumper_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        rear_left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        top_chassis_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        top_plate_default_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        top_plate_front_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        top_plate_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        top_plate_rear_mount:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        top_plate_user_rail_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Mass Properties:
         Inertia: false
         Mass: false
       Name: RobotModel
       TF Prefix: ""
       Update Interval: 0
-      Value: false
+      Value: true
       Visual Enabled: true
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Filter (blacklist): ""
       Filter (whitelist): ""
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        a201_0000/robot/base_link/camera_0:
-          Value: true
-        a201_0000/robot/base_link/lidar2d_0:
-          Value: true
-        a201_0000/robot/base_link/lidar3d_0:
-          Value: true
-        base_footprint:
-          Value: true
-        base_link:
-          Value: true
-        camera_0_bottom_screw_frame:
-          Value: true
-        camera_0_link:
-          Value: true
-        default_mount:
-          Value: true
-        front_bumper_base_link:
-          Value: true
-        front_bumper_link:
-          Value: true
-        front_bumper_mount:
-          Value: true
-        front_left_wheel_link:
-          Value: true
-        front_right_wheel_link:
-          Value: true
-        inertial_link:
-          Value: true
-        lidar2d_0_laser:
-          Value: true
-        lidar2d_0_link:
-          Value: true
-        lidar3d_0_laser:
-          Value: true
-        lidar3d_0_link:
-          Value: true
-        map:
-          Value: true
-        odom:
-          Value: true
-        rear_bumper_base_link:
-          Value: true
-        rear_bumper_link:
-          Value: true
-        rear_bumper_mount:
-          Value: true
-        rear_left_wheel_link:
-          Value: true
-        rear_right_wheel_link:
-          Value: true
-        top_chassis_link:
-          Value: true
-        top_plate_default_mount:
-          Value: true
-        top_plate_front_mount:
-          Value: true
-        top_plate_link:
-          Value: true
-        top_plate_rear_mount:
-          Value: true
-        top_plate_user_rail_link:
-          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        map:
-          odom:
-            base_link:
-              base_footprint:
-                {}
-              camera_0_bottom_screw_frame:
-                camera_0_link:
-                  a201_0000/robot/base_link/camera_0:
-                    {}
-              default_mount:
-                lidar3d_0_link:
-                  a201_0000/robot/base_link/lidar3d_0:
-                    {}
-                  lidar3d_0_laser:
-                    {}
-                top_plate_user_rail_link:
-                  top_plate_link:
-                    top_plate_default_mount:
-                      {}
-                    top_plate_front_mount:
-                      {}
-                    top_plate_rear_mount:
-                      {}
-              front_bumper_mount:
-                front_bumper_base_link:
-                  front_bumper_link:
-                    {}
-              front_left_wheel_link:
-                {}
-              front_right_wheel_link:
-                {}
-              inertial_link:
-                {}
-              lidar2d_0_link:
-                a201_0000/robot/base_link/lidar2d_0:
-                  {}
-                lidar2d_0_laser:
-                  {}
-              rear_bumper_mount:
-                rear_bumper_base_link:
-                  rear_bumper_link:
-                    {}
-              rear_left_wheel_link:
-                {}
-              rear_right_wheel_link:
-                {}
-              top_chassis_link:
-                {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -225,8 +235,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 13.101140975952148
-        Min Value: -1.5970723628997803
+        Max Value: 11.238966941833496
+        Min Value: -3.3257200717926025
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -236,15 +246,15 @@ Visualization Manager:
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
-      Max Color: 244; 206; 255
-      Max Intensity: 0
-      Min Color: 255; 8; 234
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
       Min Intensity: 0
       Name: 3D Lidar
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 1
-      Size (m): 0.019999999552965164
+      Size (m): 0.029999999329447746
       Style: Flat Squares
       Topic:
         Depth: 20
@@ -296,7 +306,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_common/Group
       Displays:
-        - Alpha: 0.15000000596046448
+        - Alpha: 0.20000000298023224
           Binary representation: false
           Binary threshold: 100
           Class: rviz_default_plugins/Map
@@ -491,37 +501,37 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/ThirdPersonFollower
-      Distance: 33.61916732788086
+      Distance: 22.76383399963379
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -3.549531936645508
-        Y: 0.12184476852416992
-        Z: 3.930624643544434e-06
+        X: -3.5649969577789307
+        Y: -1.3027324676513672
+        Z: 2.0232760107319336e-06
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5997970104217529
+      Pitch: 0.8347969055175781
       Target Frame: base_link
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 3.1423888206481934
+      Yaw: 4.412389755249023
     Saved: ~
 Window Geometry:
   Displays:
-    collapsed: true
-  Height: 994
-  Hide Left Dock: true
+    collapsed: false
+  Height: 999
+  Hide Left Dock: false
   Hide Right Dock: true
   Navigation 2:
-    collapsed: true
-  QMainWindow State: 000000ff00000000fd00000004000000000000016a00000391fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000000000000000fb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb000000100044006900730070006c006100790073000000003b000001c4000000c700fffffffb0000000a00560069006500770073000000015f000000a0000000a000fffffffb00000018004e0061007600690067006100740069006f006e002000320000000205000001c7000001c700ffffff000000010000010f00000338fc0200000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004420000003efc0100000002fb0000000800540069006d00650100000000000004420000000000000000fb0000000800540069006d00650100000000000004500000000000000000000003b40000038c00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd00000004000000000000016a00000391fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000000000000000fb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb000000100044006900730070006c006100790073010000003b0000015e000000c700fffffffb0000000a00560069006500770073000000015f000000a0000000a000fffffffb00000018004e0061007600690067006100740069006f006e00200032010000019f0000022d000001b600ffffff000000010000010f00000338fc0200000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004420000003efc0100000002fb0000000800540069006d00650100000000000004420000000000000000fb0000000800540069006d00650100000000000004500000000000000000000001d00000039100000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Views:
     collapsed: false
-  Width: 948
-  X: -31
+  Width: 832
+  X: 506
   Y: -32

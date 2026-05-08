@@ -53,8 +53,6 @@ BAYLANDS_NAV_SPAWN_Z="0.100975479"
 BAYLANDS_NAV_SPAWN_YAW="0.484129496"
 BAYLANDS_NAV_LIDAR_MODE="3d"
 NAV_LIDAR_MODE=""
-BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
-BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 HAS_GAZEBO_SPAWN_OVERRIDE="false"
 GAZEBO_SPAWN_STATE_NAME=""
 GAZEBO_WAYPOINT_NAME=""
@@ -74,11 +72,13 @@ RECORD_CMD=()
 OMNET="false"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
 source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
+BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 resolve_baylands_waypoint() {
   local waypoint_name="$1"
-  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import sys
 
@@ -106,7 +106,7 @@ for path in paths:
                 raise SystemExit(0)
     except FileNotFoundError:
         continue
-raise SystemExit(f"Waypoint '{name}' was not found in the Baylands waypoint CSVs")
+raise SystemExit(f"Waypoint '{name}' was not found in the Baylands waypoint CSV")
 PY
 }
 
@@ -309,7 +309,11 @@ for arg in "$@"; do
     goal_sequence_file:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       NAV2_GOALS_FOR_LIDAR="${arg#goal_sequence_file:=}"
-      FOLLOW_ARGS+=("nav2_goals:=$NAV2_GOALS_FOR_LIDAR")
+      if [[ "$WORLD" == baylands* ]]; then
+        FOLLOW_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "$NAV2_GOALS_FOR_LIDAR")")
+      else
+        FOLLOW_ARGS+=("nav2_goals:=$NAV2_GOALS_FOR_LIDAR")
+      fi
       ;;
     goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
@@ -318,9 +322,21 @@ for arg in "$@"; do
     nav2_goals:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       NAV2_GOALS_FOR_LIDAR="${arg#nav2_goals:=}"
-      FOLLOW_ARGS+=("$arg")
+      if [[ "$WORLD" == baylands* ]]; then
+        FOLLOW_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "$NAV2_GOALS_FOR_LIDAR")")
+      else
+        FOLLOW_ARGS+=("$arg")
+      fi
       ;;
-    ugv_goal_sequence_file:=*|ugv_goal_sequence_csv:=*)
+    ugv_goal_sequence_file:=*)
+      HAVE_UGV_GOAL_SEQUENCE="true"
+      if [[ "$WORLD" == baylands* ]]; then
+        FOLLOW_ARGS+=("ugv_goal_sequence_file:=$(baylands_route_yaml_path "${arg#ugv_goal_sequence_file:=}")")
+      else
+        FOLLOW_ARGS+=("$arg")
+      fi
+      ;;
+    ugv_goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       FOLLOW_ARGS+=("$arg")
       ;;
@@ -384,6 +400,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "$WORLD" == baylands* ]]; then
+  baylands_sync_waypoints "$DRY_RUN"
+fi
 
 case "$MODE" in
   follow|yolo)
@@ -784,7 +804,7 @@ else
 fi
 
 if [[ "$WORLD" == baylands* ]] && [ "$HAVE_UGV_GOAL_SEQUENCE" = "false" ]; then
-  FOLLOW_ARGS+=("nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS")
+  FOLLOW_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "$BAYLANDS_DEFAULT_NAV2_GOALS")")
   NAV2_GOALS_FOR_LIDAR="$BAYLANDS_DEFAULT_NAV2_GOALS"
   echo "[run_tmux_1to1] Baylands default Nav2 goals: nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS"
 fi

@@ -16,8 +16,6 @@ DEFAULT_BAYLANDS_INITIAL_POSE_COMPAT_MAPS=(
 DEFAULT_BAYLANDS_INITIAL_POSE_X="-17.8523709280687"
 DEFAULT_BAYLANDS_INITIAL_POSE_Y="6.112792742664274"
 DEFAULT_BAYLANDS_INITIAL_POSE_YAW="0.0064542265"
-DEFAULT_BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
-DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 LOCAL_BAYLANDS_LOCALIZATION_PARAMS="$WS_ROOT/src/lrs_halmstad/config/localization.yaml"
 WORLD="$DEFAULT_WORLD"
 MAP_PATH=""
@@ -25,6 +23,8 @@ PARAMS_FILE_OVERRIDE=""
 LOCAL_LOCALIZATION_LAUNCH="$WS_ROOT/src/lrs_halmstad/launch/localization_with_params.launch.py"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 resolve_localization_map_path() {
   local requested_path="$1"
@@ -54,7 +54,7 @@ resolve_localization_map_path() {
 
 resolve_baylands_amcl_waypoint_pose() {
   local waypoint_name="$1"
-  python3 - "$waypoint_name" "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" "$DEFAULT_BAYLANDS_WAYPOINT_CSV" <<'PY'
+  python3 - "$waypoint_name" "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import sys
 
@@ -230,7 +230,7 @@ for compat_map in "${DEFAULT_BAYLANDS_INITIAL_POSE_COMPAT_MAPS[@]}"; do
 done
 
 if [[ "$WORLD" == baylands* ]] && [ "$baylands_pose_compatible_map" = "true" ] && [ "$has_initial_pose_override" = "false" ]; then
-  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ] && { [ -f "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" ] || [ -f "$DEFAULT_BAYLANDS_WAYPOINT_CSV" ]; }; then
+  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ] && [ -f "$DEFAULT_BAYLANDS_GROUP_WAYPOINT_CSV" ]; then
     spawn_waypoint="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
     if [ -n "$spawn_waypoint" ]; then
       if waypoint_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint" 2>/dev/null)"; then

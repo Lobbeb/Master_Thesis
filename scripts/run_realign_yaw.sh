@@ -6,6 +6,7 @@ WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GZ_BIN="/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
 
 WORLD=""
 TARGET_X=""
@@ -21,8 +22,7 @@ UAV_BODY_Y_OFFSET="0.0"
 UAV_Z=""
 KEEP_PAUSED="false"
 DRY_RUN="false"
-BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
-BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
+BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 BRIDGE_PID=""
 STARTED_BRIDGE="false"
@@ -59,7 +59,7 @@ coerce_bool() {
 
 resolve_baylands_waypoint() {
   local waypoint_name="$1"
-  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import sys
 
@@ -240,8 +240,8 @@ if [ -n "$WAYPOINT_NAME" ]; then
     echo "[run_realign_yaw] waypoint:=... is currently supported for Baylands only." >&2
     exit 2
   fi
-  if [ ! -f "$BAYLANDS_GROUP_WAYPOINT_CSV" ] && [ ! -f "$BAYLANDS_WAYPOINT_CSV" ]; then
-    echo "[run_realign_yaw] Baylands waypoint CSVs not found: $BAYLANDS_GROUP_WAYPOINT_CSV or $BAYLANDS_WAYPOINT_CSV" >&2
+  if [ ! -f "$BAYLANDS_GROUP_WAYPOINT_CSV" ]; then
+    echo "[run_realign_yaw] Baylands waypoint CSV not found: $BAYLANDS_GROUP_WAYPOINT_CSV" >&2
     exit 1
   fi
   WAYPOINT_ENV="$(resolve_baylands_waypoint "$WAYPOINT_NAME")" || {

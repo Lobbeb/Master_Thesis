@@ -214,6 +214,7 @@ for group_name, selected_rows in grouped.items():
 if dry_run:
     print(f"# dry-run: would write route YAML to {route_output}")
     print(yaml.safe_dump(route_doc, sort_keys=False), end="")
+    print(f"# dry-run: would remove stale generated baylands_waypoints_*.yaml files from {rviz_dir}")
     print(f"# dry-run: would write {len(route_docs)} group route YAML file(s) to {rviz_dir}")
     for name in sorted(route_docs):
         print(f"#   {name}")
@@ -223,6 +224,8 @@ if dry_run:
     raise SystemExit(0)
 
 route_output.write_text(yaml.safe_dump(route_doc, sort_keys=False), encoding="utf-8")
+for stale_path in rviz_dir.glob("baylands_waypoints_*.yaml"):
+    stale_path.unlink()
 for name, doc in route_docs.items():
     (rviz_dir / name).write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
 for name, doc in rviz_docs.items():

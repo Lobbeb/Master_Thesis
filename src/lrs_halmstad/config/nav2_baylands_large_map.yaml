@@ -24,7 +24,7 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    failure_tolerance: 0.0
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
@@ -33,7 +33,7 @@ controller_server:
       plugin: "nav2_controller::PoseProgressChecker"
       required_movement_radius: 0.15
       required_movement_angle: 0.35
-      movement_time_allowance: 8.0
+      movement_time_allowance: 4.0
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -95,8 +95,8 @@ controller_server:
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 4.0
-        critical_cost: 400.0
+        cost_weight: 2.0
+        critical_cost: 500.0
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 1.0
@@ -140,6 +140,7 @@ local_costmap:
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
       always_send_full_costmap: true
       trinary_costmap: true
+      track_unknown_space: true
       use_maximum: false
       plugins: ["obstacle_layer", "denoise_layer", "inflation_layer"]
       obstacle_layer:
@@ -152,11 +153,11 @@ local_costmap:
           data_type: "LaserScan"
           marking: true
           clearing: true
-          max_obstacle_height: 0.25
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.60
-          obstacle_max_range: 3.0
-          obstacle_min_range: 0.60
+          max_obstacle_height: 0.10
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.6
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.6
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
         enabled: true
@@ -164,8 +165,8 @@ local_costmap:
         group_connectivity_type: 8
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.95
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.85
 
 global_costmap:
   global_costmap:
@@ -187,10 +188,10 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.95
+        inflation_radius: 0.85
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
+        enabled: false
         observation_sources: scan
         footprint_clearing_enabled: true
         max_obstacle_height: 2.0
@@ -216,7 +217,7 @@ planner_server:
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 1.0
-      use_astar: false
+      use_astar: true
       allow_unknown: true
       # plugin: "nav2_theta_star_planner::ThetaStarPlanner" # In Iron and older versions, "/" was used instead of "::"
       # how_many_corners: 4
@@ -260,16 +261,16 @@ behavior_server:
     robot_base_frame: base_link
     transform_tolerance: 0.1
     enable_stamped_cmd_vel: true
-    simulate_ahead_time: 2.0
+    simulate_ahead_time: 1.0
     max_rotational_vel: 1.0
-    min_rotational_vel: 0.2
-    rotational_acc_lim: 0.5
+    min_rotational_vel: 0.5
+    rotational_acc_lim: 1.0
 
 
 waypoint_follower:
   ros__parameters:
     enable_stamped_cmd_vel: true
-    loop_rate: 20
+    loop_rate: 10
     stop_on_failure: true
     action_server_result_timeout: 900.0
     waypoint_task_executor_plugin: "wait_at_waypoint"
@@ -282,11 +283,11 @@ velocity_smoother:
   ros__parameters:
     enable_stamped_cmd_vel: true
     smoothing_frequency: 20.0
-    scale_velocities: False
+    scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.6, 0.0, 1.0]
+    max_velocity: [0.8, 0.0, 2.0]
     min_velocity: [-1.0, 0.0, -1.0]
-    max_accel: [1.0, 0.0, 1.0]
+    max_accel: [1.0, 0.0, 2.0]
     max_decel: [-1.0, 0.0, -1.0]
     odom_topic: "platform/odom/filtered"
     odom_duration: 0.1
@@ -312,7 +313,7 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       points: "[[0.35, 0.30], [0.35, -0.30], [-0.20, -0.30], [-0.20, 0.30]]"
-      time_before_collision: 0.8
+      time_before_collision: 1.5
       simulation_time_step: 0.1
       min_points: 10
       trigger_consecutive_points: 2

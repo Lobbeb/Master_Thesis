@@ -6,8 +6,6 @@ WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 SIM_SPAWN_WAYPOINT_FILE="$STATE_DIR/gazebo_sim.spawn_waypoint"
-BAYLANDS_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
-BAYLANDS_GROUP_WAYPOINT_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
 BAYLANDS_DEFAULT_NAV2_GOALS="parkinglot_west"
 WORLD="baylands"
 EXTRA_ARGS=()
@@ -53,10 +51,12 @@ DEFAULT_UAV_Z="7.0"
 UAV_NAME="dji0"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+BAYLANDS_GROUP_WAYPOINT_CSV="$(baylands_group_waypoint_csv)"
 
 resolve_baylands_amcl_waypoint_pose() {
   local waypoint_name="$1"
-  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+  python3 - "$waypoint_name" "$BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import math
 import sys
@@ -110,6 +110,10 @@ fi
 if [ "$#" -gt 0 ] && [[ "$1" != *":="* ]] && [[ "$1" != *=* ]]; then
   WORLD="$1"
   shift
+fi
+
+if [[ "$WORLD" == baylands* ]]; then
+  baylands_sync_waypoints false
 fi
 
 for arg in "$@"; do
@@ -186,13 +190,33 @@ for arg in "$@"; do
       ;;
     goal_sequence_file:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
-      EXTRA_ARGS+=("nav2_goals:=${arg#goal_sequence_file:=}")
+      if [[ "$WORLD" == baylands* ]]; then
+        EXTRA_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "${arg#goal_sequence_file:=}")")
+      else
+        EXTRA_ARGS+=("nav2_goals:=${arg#goal_sequence_file:=}")
+      fi
       ;;
     goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       EXTRA_ARGS+=("ugv_goal_sequence_csv:=${arg#goal_sequence_csv:=}")
       ;;
-    nav2_goals:=*|ugv_goal_sequence_file:=*|ugv_goal_sequence_csv:=*)
+    nav2_goals:=*)
+      HAVE_UGV_GOAL_SEQUENCE="true"
+      if [[ "$WORLD" == baylands* ]]; then
+        EXTRA_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "${arg#nav2_goals:=}")")
+      else
+        EXTRA_ARGS+=("$arg")
+      fi
+      ;;
+    ugv_goal_sequence_file:=*)
+      HAVE_UGV_GOAL_SEQUENCE="true"
+      if [[ "$WORLD" == baylands* ]]; then
+        EXTRA_ARGS+=("ugv_goal_sequence_file:=$(baylands_route_yaml_path "${arg#ugv_goal_sequence_file:=}")")
+      else
+        EXTRA_ARGS+=("$arg")
+      fi
+      ;;
+    ugv_goal_sequence_csv:=*)
       HAVE_UGV_GOAL_SEQUENCE="true"
       EXTRA_ARGS+=("$arg")
       ;;
@@ -295,7 +319,7 @@ for arg in "$@"; do
 done
 
 if [[ "$WORLD" == baylands* ]] && [ "$HAVE_UGV_GOAL_SEQUENCE" = "false" ]; then
-  EXTRA_ARGS+=("nav2_goals:=$BAYLANDS_DEFAULT_NAV2_GOALS")
+  EXTRA_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "$BAYLANDS_DEFAULT_NAV2_GOALS")")
 fi
 
 if [ "$HAVE_RANGE_MODE" = "false" ]; then
@@ -526,7 +550,7 @@ add_ugv_initial_pose_from_baylands_waypoint_map() {
   ugv_pose_env="$(slam_state_capture_gazebo_pose_env "$WS_ROOT" "$WORLD" "$timeout_s")" || return 1
   eval "$ugv_pose_env"
   amcl_pose_env="$(
-    python3 - "$spawn_x" "$spawn_y" "$BAYLANDS_GROUP_WAYPOINT_CSV" "$BAYLANDS_WAYPOINT_CSV" <<'PY'
+    python3 - "$spawn_x" "$spawn_y" "$BAYLANDS_GROUP_WAYPOINT_CSV" <<'PY'
 import csv
 import math
 import sys

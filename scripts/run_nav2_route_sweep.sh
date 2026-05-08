@@ -32,13 +32,13 @@ UAV_CHECK_REQUIRE_COMMAND="false"
 SKIP_REMAINING_ON_COMPLETE="true"
 CHAIN_ROUTE_STARTS="false"
 FALLBACK_WAYPOINTS_ON_ROUTE_FAILURE="false"
-WAYPOINT_CONFIG_DIR="$WS_ROOT/src/lrs_halmstad/config/baylands_waypoints"
-GROUP_CSV="$WS_ROOT/maps/waypoints_baylands_groups.csv"
-PLAIN_CSV="$WS_ROOT/maps/waypoints_baylands.csv"
 EXTRA_TMUX_ARGS=()
 HAVE_UGV_START_DELAY_ARG="false"
 
 source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
+source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+WAYPOINT_CONFIG_DIR="$(baylands_waypoint_config_dir)"
+GROUP_CSV="$(baylands_group_waypoint_csv)"
 
 usage() {
   cat <<EOF
@@ -184,12 +184,12 @@ route_is_excluded() {
 
 first_waypoint_for_route() {
   local route="$1"
-  python3 - "$route" "$WAYPOINT_CONFIG_DIR" "$GROUP_CSV" "$PLAIN_CSV" <<'PY'
+  python3 - "$route" "$WAYPOINT_CONFIG_DIR" "$GROUP_CSV" <<'PY'
 import csv
 import os
 import sys
 
-route, waypoint_config_dir, group_csv, plain_csv = sys.argv[1:]
+route, waypoint_config_dir, group_csv = sys.argv[1:]
 
 def emit(value: str) -> None:
     value = str(value).strip()
@@ -211,12 +211,11 @@ if yaml is not None and os.path.exists(route_yaml):
             emit(waypoint.get("name", ""))
 
 rows = []
-for path in (group_csv, plain_csv):
-    try:
-        with open(path, "r", encoding="utf-8", newline="") as handle:
-            rows.extend(csv.DictReader(handle))
-    except FileNotFoundError:
-        pass
+try:
+    with open(group_csv, "r", encoding="utf-8", newline="") as handle:
+        rows.extend(csv.DictReader(handle))
+except FileNotFoundError:
+    pass
 
 for row in rows:
     if str(row.get("group", "")).strip() == route:
@@ -238,7 +237,7 @@ PY
 }
 
 route_yaml_path() {
-  printf '%s/baylands_waypoints_%s.yaml\n' "$WAYPOINT_CONFIG_DIR" "$1"
+  baylands_route_yaml_path "$1"
 }
 
 route_waypoint_names() {
@@ -660,7 +659,8 @@ for arg in "$@"; do
       GROUP_CSV="${arg#group_csv:=}"
       ;;
     waypoint_csv:=*)
-      PLAIN_CSV="${arg#waypoint_csv:=}"
+      echo "waypoint_csv:= is deprecated; use group_csv:= with waypoints_baylands_groups.csv as the single source." >&2
+      exit 2
       ;;
     session:=*)
       SESSION_PREFIX="${arg#session:=}"
@@ -674,6 +674,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "$WORLD" == baylands* ]]; then
+  baylands_sync_waypoints "$DRY_RUN"
+fi
 
 mapfile -t ROUTES < <(split_routes "$ROUTES_RAW")
 FILTERED_ROUTES=()
