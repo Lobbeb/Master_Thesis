@@ -34,11 +34,21 @@ baylands_sync_waypoints() {
 
 baylands_route_yaml_path() {
   local route="$1"
+  local ws_name
+  ws_name="$(basename "$WS_ROOT")"
+  if [[ "$route" == "$ws_name/"* ]]; then
+    route="${route#"$ws_name"/}"
+  fi
+
   local name
   name="$(basename "$route")"
   if [[ "$name" == *.yaml ]]; then
     if [[ "$route" = /* ]]; then
       printf '%s\n' "$route"
+    elif [ -f "$route" ]; then
+      readlink -f "$route"
+    elif [ -f "$WS_ROOT/$route" ]; then
+      printf '%s/%s\n' "$WS_ROOT" "$route"
     elif [[ "$route" == */* ]]; then
       printf '%s/%s\n' "$WS_ROOT" "$route"
     else

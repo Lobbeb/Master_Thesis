@@ -21,9 +21,9 @@ controller_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
     controller_frequency: 10.0
-    min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
-    min_theta_velocity_threshold: 0.001
+    min_x_velocity_threshold: 0.01
+    min_y_velocity_threshold: 1.0
+    min_theta_velocity_threshold: 0.01
     failure_tolerance: 0.2
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
@@ -38,7 +38,7 @@ controller_server:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 1.0
-      yaw_goal_tolerance: 2.4
+      yaw_goal_tolerance: 1.57
       path_length_tolerance: 2.0
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
@@ -191,7 +191,7 @@ global_costmap:
         inflation_radius: 1.1
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: false
+        enabled: true
         observation_sources: scan
         footprint_clearing_enabled: true
         max_obstacle_height: 2.0
@@ -207,7 +207,8 @@ global_costmap:
           raytrace_max_range: 3.0
           max_obstacle_height: 2.0
           min_obstacle_height: 0.0
-          inf_is_valid: false
+          inf_is_valid: true
+
 
 planner_server:
   ros__parameters:
@@ -223,9 +224,8 @@ planner_server:
       # how_many_corners: 4
       # w_euc_cost: 1.0
       # w_traversal_cost: 1.0
-      # allow_unknown: false
+      # allow_unknown: false   
 
-    
 
 smoother_server:
   ros__parameters:
@@ -236,6 +236,7 @@ smoother_server:
       tolerance: 1.0e-10
       max_its: 1000
       do_refinement: true
+
 
 behavior_server:
   ros__parameters:
@@ -285,10 +286,10 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [2.0, 0.0, 2.5]
-    min_velocity: [-1.0, 0.0, -2.5]
-    max_accel: [3.0, 0.0, 4.0]
-    max_decel: [-3.0, 0.0, -4.0]
+    max_velocity: [1.0, 0.0, 1.5]
+    min_velocity: [-1.0, 0.0, -1.5]
+    max_accel: [2.0, 0.0, 3.0]
+    max_decel: [-2.0, 0.0, -3.0]
     odom_topic: "platform/odom/filtered"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -296,35 +297,47 @@ velocity_smoother:
 
 collision_monitor:
   ros__parameters:
-    enable_stamped_cmd_vel: true
+    enabled: true
     base_frame_id: "base_link"
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.3
-    source_timeout: 3.0
-    base_shift_correction: true
+    transform_tolerance: 0.1
+    source_timeout: 2.0
     stop_pub_timeout: 2.0
-    # Polygons represent zone around the robot for "stop", "slowdown" and "limit" action types,
-    # and robot footprint for "approach" action type.
-    polygons: ["FootprintApproach"]
-    FootprintApproach:
+    enable_stamped_cmd_vel: true
+    base_shift_correction: true
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
       type: "polygon"
-      action_type: "approach"
-      points: "[[0.35, 0.30], [0.35, -0.30], [-0.20, -0.30], [-0.20, 0.30]]"
-      time_before_collision: 1.5
-      simulation_time_step: 0.1
-      min_points: 10
-      trigger_consecutive_points: 2
+      points: "[[0.55, 0.38], [0.55, -0.38], [0.05, -0.38], [0.05, 0.38]]"
+      action_type: "stop"
+      min_points: 4
       visualize: true
+      polygon_pub_topic: "polygon_stop"
+      enabled: true
+    PolygonSlow:
+      type: "polygon"
+      points: "[[1.25, 0.55], [1.25, -0.55], [0.10, -0.55], [0.10, 0.55]]"
+      action_type: "slowdown"
+      min_points: 4
+      slowdown_ratio: 0.25
+      visualize: true
+      polygon_pub_topic: "polygon_slowdown"
       enabled: true
     observation_sources: ["scan"]
     scan:
       type: "scan"
-      topic: "sensors/lidar2d_0/scan"
-      min_height: 0.15
-      max_height: 2.0
+      topic: "scan"
+      enabled: true
+    pointcloud:
+      type: "pointcloud"
+      topic: "/sensors/lidar_3d_0/points"
+      transport_type: "draco" # Options: raw, zlib, draco, zstd
+      min_height: -0.19
+      max_height: 0.5
+      use_global_height: false
       enabled: true
 
 docking_server:

@@ -62,10 +62,10 @@ ARGUMENTS = [
         choices=["true", "false"],
         description="Relay the latest scan at a slower, stable rate for Nav2 consumers.",
     ),
-    DeclareLaunchArgument("scan_relay_hz", default_value="8.0"),
-    DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.25"),
+    DeclareLaunchArgument("scan_relay_hz", default_value="10.0"),
+    DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.2"),
     DeclareLaunchArgument("scan_relay_restamp", default_value="true", choices=["true", "false"]),
-    DeclareLaunchArgument("scan_relay_start_delay_s", default_value="2.0"),
+    DeclareLaunchArgument("scan_relay_start_delay_s", default_value="0.0"),
     DeclareLaunchArgument(
         "params_file",
         default_value="",
@@ -76,6 +76,12 @@ ARGUMENTS = [
         default_value="true",
         choices=["true", "false"],
         description="Start Clearpath teleop_base so twist_mux forwards Nav2 cmd_vel to platform/cmd_vel.",
+    ),
+    DeclareLaunchArgument(
+        "start_collision_monitor",
+        default_value="false",
+        choices=["true", "false"],
+        description="Compatibility argument. Collision monitor is started by Nav2 navigation_launch.",
     ),
 ]
 
@@ -120,7 +126,10 @@ def launch_setup(context, *args, **kwargs):
     if len(eval_scan_topic) == 0:
         eval_scan_topic = f"/{namespace}/sensors/lidar2d_0/scan"
     eval_pointcloud_topic = pointcloud_topic.perform(context)
-    if len(eval_pointcloud_topic) == 0 and eval_scan_topic == f"/{namespace}/sensors/lidar3d_0/scan_from_points":
+    if len(eval_pointcloud_topic) == 0 and eval_scan_topic in (
+        f"/{namespace}/sensors/lidar3d_0/scan_from_points",
+        f"/{namespace}/sensors/lidar3d_0/scan_from_points_relay",
+    ):
         eval_pointcloud_topic = f"/{namespace}/sensors/lidar3d_0/points"
 
     eval_params_file = params_file.perform(context)
@@ -188,10 +197,10 @@ def launch_setup(context, *args, **kwargs):
         source_file=eval_params_file,
         param_rewrites={
             "topic": eval_scan_topic,
+            "pointcloud.topic": eval_pointcloud_topic,
         },
         convert_types=True,
     )
-
     group_actions = [
         PushRosNamespace(namespace),
         SetRemap("/" + namespace + "/odom", "/" + namespace + "/platform/odom"),

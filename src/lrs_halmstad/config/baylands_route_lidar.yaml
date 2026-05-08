@@ -55,10 +55,10 @@ waypoints:
     pc2ls_min_height: -0.34
     pc2ls_max_height: 0.4
   road_to_east_1:
-    pc2ls_min_height: -0.38
-    pc2ls_max_height: 0.5
+    pc2ls_min_height: -0.34
+    pc2ls_max_height: 0.4
   road_to_east_2:
-    pc2ls_min_height: -0.41
+    pc2ls_min_height: -0.36
     pc2ls_max_height: 0.0
   road_to_east_3:
     pc2ls_min_height: -0.33

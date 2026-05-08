@@ -16,23 +16,25 @@ PAUSE_AFTER_GOAL_S="0.0"
 GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="false"
+START_COLLISION_MONITOR="true"
+MUTE_UGV_CAMERA="false"
 MAP_PATH=""
 SESSION=""
 TMUX_ATTACH="false"
 SPAWN_UAV="false"
-UAV_CAMERA_UPDATE_RATE="20"
+UAV_CAMERA_UPDATE_RATE="10"
 WITH_FOLLOW="true"
 REBUILD="false"
 REBUILD_DONE="false"
 DRY_RUN="false"
 REALIGN="true"
-FOLLOW_START_DELAY_S="5.0"
-LOCALIZATION_READY_TIMEOUT_S="20"
+FOLLOW_START_DELAY_S="15.0"
+LOCALIZATION_READY_TIMEOUT_S="5"
+NAV2_INPUTS_READY_TIMEOUT_S="15"
 STACK_STOP_GRACE_S="2"
 GAZEBO_READY_TIMEOUT_S="20"
-GAZEBO_POST_READY_DELAY_S="10"
-SPAWN_POST_DELAY_S="0"
-
+GAZEBO_POST_READY_DELAY_S="30"
+SPAWN_POST_DELAY_S="5"
 SESSION_EXPLICIT="false"
 WAYPOINT_EXPLICIT="false"
 NAV2_GOALS_EXPLICIT="false"
@@ -40,12 +42,15 @@ LIDAR_EXPLICIT="false"
 GUI_EXPLICIT="false"
 PERSPECTIVE_EXPLICIT="false"
 START_RQT_EXPLICIT="false"
+START_COLLISION_MONITOR_EXPLICIT="false"
+MUTE_UGV_CAMERA_EXPLICIT="false"
 MAP_EXPLICIT="false"
 SPAWN_UAV_EXPLICIT="false"
 UAV_CAMERA_UPDATE_RATE_EXPLICIT="false"
 WITH_FOLLOW_EXPLICIT="false"
 PAUSE_AFTER_GOAL_EXPLICIT="false"
 FOLLOW_START_DELAY_EXPLICIT="false"
+NAV2_INPUTS_READY_TIMEOUT_EXPLICIT="false"
 GAZEBO_READY_TIMEOUT_EXPLICIT="false"
 GAZEBO_POST_READY_DELAY_EXPLICIT="false"
 SPAWN_POST_DELAY_EXPLICIT="false"
@@ -65,11 +70,14 @@ CLI_PAUSE_AFTER_GOAL_S=""
 CLI_GUI=""
 CLI_PERSPECTIVE=""
 CLI_START_RQT=""
+CLI_START_COLLISION_MONITOR=""
+CLI_MUTE_UGV_CAMERA=""
 CLI_MAP_PATH=""
 CLI_SPAWN_UAV=""
 CLI_UAV_CAMERA_UPDATE_RATE=""
 CLI_WITH_FOLLOW=""
 CLI_FOLLOW_START_DELAY_S=""
+CLI_NAV2_INPUTS_READY_TIMEOUT_S=""
 CLI_GAZEBO_READY_TIMEOUT_S=""
 CLI_GAZEBO_POST_READY_DELAY_S=""
 CLI_SPAWN_POST_DELAY_S=""
@@ -94,9 +102,11 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [world:=baylands]
   [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
   [pause_after_goal_s:=10.0]
-  [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [map:=maps/baylands.yaml]
+  [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_collision_monitor:=true|false] [map:=maps/baylands.yaml]
+  [mute_ugv_camera:=true|false]
   [spawn_uav:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
   [uav_camera_update_rate:=2]
+  [nav2_inputs_ready_timeout_s:=30]
   [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
   [spawn_post_delay_s:=5]
   [rebuild:=true|false]
@@ -157,11 +167,14 @@ write_state() {
     printf 'GUI=%q\n' "$GUI"
     printf 'PERSPECTIVE=%q\n' "$PERSPECTIVE"
     printf 'START_RQT=%q\n' "$START_RQT"
+    printf 'START_COLLISION_MONITOR=%q\n' "$START_COLLISION_MONITOR"
+    printf 'MUTE_UGV_CAMERA=%q\n' "$MUTE_UGV_CAMERA"
     printf 'MAP_PATH=%q\n' "$MAP_PATH"
     printf 'SPAWN_UAV=%q\n' "$SPAWN_UAV"
     printf 'UAV_CAMERA_UPDATE_RATE=%q\n' "$UAV_CAMERA_UPDATE_RATE"
     printf 'WITH_FOLLOW=%q\n' "$WITH_FOLLOW"
     printf 'FOLLOW_START_DELAY_S=%q\n' "$FOLLOW_START_DELAY_S"
+    printf 'NAV2_INPUTS_READY_TIMEOUT_S=%q\n' "$NAV2_INPUTS_READY_TIMEOUT_S"
     printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
     printf 'GAZEBO_POST_READY_DELAY_S=%q\n' "$GAZEBO_POST_READY_DELAY_S"
     printf 'SPAWN_POST_DELAY_S=%q\n' "$SPAWN_POST_DELAY_S"
@@ -368,7 +381,7 @@ localization_cmd() {
 }
 
 nav2_cmd() {
-  local cmd=(./run.sh nav2 "lidar:=$LIDAR")
+  local cmd=(./run.sh nav2 "lidar:=$LIDAR" "start_collision_monitor:=$START_COLLISION_MONITOR")
   echo "$(shell_join "${cmd[@]}")"
 }
 
@@ -467,8 +480,9 @@ create_session() {
 
   tmux new-window -d -t "$SESSION" -n stack
   LOCALIZATION_PANE_ID="$(tmux display-message -p -t "$SESSION:stack.0" '#{pane_id}')"
-  NAV2_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$LOCALIZATION_PANE_ID" -h -l 50%)"
+  NAV2_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$LOCALIZATION_PANE_ID" -v -l 66%)"
   FOLLOW_PANE_ID="$(tmux split-window -d -P -F '#{pane_id}' -t "$NAV2_PANE_ID" -v -l 50%)"
+  tmux select-layout -t "$SESSION:stack" even-vertical >/dev/null
 
   tmux select-pane -t "$GAZEBO_PANE_ID" -T gazebo
   tmux select-pane -t "$SPAWN_PANE_ID" -T spawn
@@ -550,7 +564,7 @@ wait_for_localization_ready() {
   local waited=0
   echo "[nav2_tuning] Waiting for localization readiness..."
   while [ "$waited" -lt "$LOCALIZATION_READY_TIMEOUT_S" ]; do
-    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; lifecycle_state_matches() { local node=\"\$1\"; local cli_regex=\"\$2\"; local service_regex=\"\$3\"; ros2 lifecycle get \"\$node\" 2>/dev/null | grep -Eq \"\$cli_regex\" && return 0; timeout 3s ros2 service call \"\${node}/get_state\" lifecycle_msgs/srv/GetState \"{}\" 2>/dev/null | grep -Eq \"\$service_regex\"; }; lifecycle_state_matches /a201_0000/map_server 'active \\[3\\]' \"id=3|label='active'\" && lifecycle_state_matches /a201_0000/amcl '(inactive \\[2\\]|active \\[3\\])' \"id=[23]|label='(inactive|active)'\""; then
+    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; lifecycle_state_matches() { local node=\"\$1\"; local cli_regex=\"\$2\"; local service_regex=\"\$3\"; ros2 lifecycle get \"\$node\" 2>/dev/null | grep -Eq \"\$cli_regex\" && return 0; timeout 3s ros2 service call \"\${node}/get_state\" lifecycle_msgs/srv/GetState \"{}\" 2>/dev/null | grep -Eq \"\$service_regex\"; }; lifecycle_state_matches /a201_0000/map_server 'active \\[3\\]' \"id=3|label='active'\" && lifecycle_state_matches /a201_0000/amcl 'active \\[3\\]' \"id=3|label='active'\""; then
       echo "[nav2_tuning] Localization ready"
       return 0
     fi
@@ -558,6 +572,31 @@ wait_for_localization_ready() {
     waited=$((waited + 1))
   done
   echo "[nav2_tuning] Timed out waiting for localization" >&2
+  return 1
+}
+
+nav2_scan_topic() {
+  if [ "$LIDAR" = "3d" ]; then
+    printf '/a201_0000/sensors/lidar3d_0/scan_from_points_relay\n'
+  else
+    printf '/a201_0000/sensors/lidar2d_0/scan\n'
+  fi
+}
+
+wait_for_nav2_inputs_ready() {
+  local waited=0
+  local scan_topic=""
+  scan_topic="$(nav2_scan_topic)"
+  echo "[nav2_tuning] Waiting for Nav2 inputs: /a201_0000/amcl_pose and $scan_topic"
+  while [ "$waited" -lt "$NAV2_INPUTS_READY_TIMEOUT_S" ]; do
+    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; set -u; timeout 3s ros2 topic echo --no-daemon --once /a201_0000/amcl_pose >/dev/null 2>&1 && timeout 3s ros2 topic echo --no-daemon --qos-reliability best_effort --once \"$scan_topic\" >/dev/null 2>&1"; then
+      echo "[nav2_tuning] Nav2 inputs ready"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "[nav2_tuning] Timed out waiting for Nav2 inputs" >&2
   return 1
 }
 
@@ -646,6 +685,7 @@ restart_stack() {
     echo "[nav2_tuning] Would restart localization/nav2$( [ "$WITH_FOLLOW" = "true" ] && printf '/route' )"
     echo "[localization] $(localization_cmd)"
     echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
+    echo "[nav2-inputs] wait for /a201_0000/amcl_pose and $(nav2_scan_topic)"
     echo "[nav2] $(nav2_cmd)"
     echo "[rviz] <not managed: $(rviz_cmd)>"
     if [ "$WITH_FOLLOW" = "true" ]; then
@@ -666,7 +706,8 @@ restart_stack() {
   fi
   wait_for_localization_ready
   realign_yaw
-  send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR"
+  wait_for_nav2_inputs_ready
+  send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR" "start_collision_monitor:=$START_COLLISION_MONITOR"
 
   if [ "$WITH_FOLLOW" = "true" ]; then
     sleep "$FOLLOW_START_DELAY_S"
@@ -730,11 +771,14 @@ Pause after goal: $PAUSE_AFTER_GOAL_S
 GUI: $GUI
 Perspective: $PERSPECTIVE
 Start rqt: $START_RQT
+Start collision monitor: $START_COLLISION_MONITOR
+Mute UGV camera: $MUTE_UGV_CAMERA
 Map: $map_status
 Spawn UAV: $SPAWN_UAV
 UAV camera update rate: $UAV_CAMERA_UPDATE_RATE
 With route driver: $WITH_FOLLOW
 Follow start delay: $FOLLOW_START_DELAY_S
+Nav2 inputs ready timeout: $NAV2_INPUTS_READY_TIMEOUT_S
 Gazebo ready timeout: $GAZEBO_READY_TIMEOUT_S
 Gazebo settle delay: $GAZEBO_POST_READY_DELAY_S
 Spawn settle delay: $SPAWN_POST_DELAY_S
@@ -795,6 +839,14 @@ for arg in "$@"; do
       START_RQT="${arg#start_rqt:=}"
       START_RQT_EXPLICIT="true"
       ;;
+    start_collision_monitor:=*)
+      START_COLLISION_MONITOR="${arg#start_collision_monitor:=}"
+      START_COLLISION_MONITOR_EXPLICIT="true"
+      ;;
+    mute_ugv_camera:=*)
+      MUTE_UGV_CAMERA="${arg#mute_ugv_camera:=}"
+      MUTE_UGV_CAMERA_EXPLICIT="true"
+      ;;
     map:=*)
       MAP_PATH="${arg#map:=}"
       MAP_EXPLICIT="true"
@@ -818,6 +870,10 @@ for arg in "$@"; do
     follow_start_delay_s:=*)
       FOLLOW_START_DELAY_S="${arg#follow_start_delay_s:=}"
       FOLLOW_START_DELAY_EXPLICIT="true"
+      ;;
+    nav2_inputs_ready_timeout_s:=*)
+      NAV2_INPUTS_READY_TIMEOUT_S="${arg#nav2_inputs_ready_timeout_s:=}"
+      NAV2_INPUTS_READY_TIMEOUT_EXPLICIT="true"
       ;;
     gazebo_ready_timeout_s:=*)
       GAZEBO_READY_TIMEOUT_S="${arg#gazebo_ready_timeout_s:=}"
@@ -874,11 +930,14 @@ CLI_PAUSE_AFTER_GOAL_S="$PAUSE_AFTER_GOAL_S"
 CLI_GUI="$GUI"
 CLI_PERSPECTIVE="$PERSPECTIVE"
 CLI_START_RQT="$START_RQT"
+CLI_START_COLLISION_MONITOR="$START_COLLISION_MONITOR"
+CLI_MUTE_UGV_CAMERA="$MUTE_UGV_CAMERA"
 CLI_MAP_PATH="$MAP_PATH"
 CLI_SPAWN_UAV="$SPAWN_UAV"
 CLI_UAV_CAMERA_UPDATE_RATE="$UAV_CAMERA_UPDATE_RATE"
 CLI_WITH_FOLLOW="$WITH_FOLLOW"
 CLI_FOLLOW_START_DELAY_S="$FOLLOW_START_DELAY_S"
+CLI_NAV2_INPUTS_READY_TIMEOUT_S="$NAV2_INPUTS_READY_TIMEOUT_S"
 CLI_GAZEBO_READY_TIMEOUT_S="$GAZEBO_READY_TIMEOUT_S"
 CLI_GAZEBO_POST_READY_DELAY_S="$GAZEBO_POST_READY_DELAY_S"
 CLI_SPAWN_POST_DELAY_S="$SPAWN_POST_DELAY_S"
@@ -911,6 +970,12 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   if [ "$START_RQT_EXPLICIT" = "true" ]; then
     START_RQT="$CLI_START_RQT"
   fi
+  if [ "$START_COLLISION_MONITOR_EXPLICIT" = "true" ]; then
+    START_COLLISION_MONITOR="$CLI_START_COLLISION_MONITOR"
+  fi
+  if [ "$MUTE_UGV_CAMERA_EXPLICIT" = "true" ]; then
+    MUTE_UGV_CAMERA="$CLI_MUTE_UGV_CAMERA"
+  fi
   if [ "$MAP_EXPLICIT" = "true" ]; then
     MAP_PATH="$CLI_MAP_PATH"
   fi
@@ -925,6 +990,9 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$FOLLOW_START_DELAY_EXPLICIT" = "true" ]; then
     FOLLOW_START_DELAY_S="$CLI_FOLLOW_START_DELAY_S"
+  fi
+  if [ "$NAV2_INPUTS_READY_TIMEOUT_EXPLICIT" = "true" ]; then
+    NAV2_INPUTS_READY_TIMEOUT_S="$CLI_NAV2_INPUTS_READY_TIMEOUT_S"
   fi
   if [ "$GAZEBO_READY_TIMEOUT_EXPLICIT" = "true" ]; then
     GAZEBO_READY_TIMEOUT_S="$CLI_GAZEBO_READY_TIMEOUT_S"

@@ -2,6 +2,7 @@ import hashlib
 import math
 import os
 import re
+import shutil
 from pathlib import Path
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
@@ -63,6 +64,12 @@ ARGUMENTS = [
         'rtf',
         default_value='',
         description='Alias for real_time_factor.',
+    ),
+    DeclareLaunchArgument(
+        'mute_ugv_camera',
+        default_value='false',
+        choices=['true', 'false'],
+        description='Do not launch the UGV camera ROS bridges. This keeps the robot model intact but mutes camera topics.',
     ),
 ]
 
@@ -274,11 +281,141 @@ def _default_clearpath_setup_path(pkg_lrs_halmstad: str) -> str:
     return str((share_path.parent / "clearpath").resolve())
 
 
+def _prepare_muted_camera_setup_path(setup_path: str) -> str:
+    source_path = Path(os.path.expanduser(setup_path)).resolve()
+    target_path = Path('/tmp/halmstad_ws/clearpath_muted_ugv_camera')
+    target_path.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+
+    camera_config = target_path / 'sensors' / 'config' / 'camera_0.yaml'
+    if camera_config.is_file():
+        camera_config.write_text(
+            """- ros_topic_name: camera_0/color/camera_info
+  gz_topic_name: /a201_0000/sensors/camera_0/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+""",
+            encoding='utf-8',
+        )
+
+    camera_launch = target_path / 'sensors' / 'launch' / 'camera_0.launch.py'
+    if camera_launch.is_file():
+        camera_launch.write_text(
+            f"""from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    launch_arg_prefix = DeclareLaunchArgument('prefix', default_value='', description='')
+    prefix = LaunchConfiguration('prefix')
+
+    node_camera_0_gz_bridge = Node(
+        name='camera_0_gz_bridge',
+        executable='parameter_bridge',
+        package='ros_gz_bridge',
+        namespace='a201_0000/sensors/',
+        output='screen',
+        parameters=[{{
+            'use_sim_time': True,
+            'config_file': {str(camera_config)!r},
+        }}],
+    )
+
+    node_camera_0_static_tf = Node(
+        name='camera_0_static_tf',
+        executable='static_transform_publisher',
+        package='tf2_ros',
+        namespace='a201_0000',
+        output='screen',
+        arguments=[
+            '--frame-id', 'camera_0_link',
+            '--child-frame-id', 'a201_0000/robot/base_link/camera_0',
+        ],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+        parameters=[{{'use_sim_time': True}}],
+    )
+
+    node_camera_0_gz_image_bridge = Node(
+        name='camera_0_gz_image_bridge',
+        executable='image_bridge',
+        package='ros_gz_image',
+        namespace='a201_0000/sensors/',
+        output='screen',
+        arguments=['/a201_0000/sensors/camera_0/image'],
+        remappings=[
+            ('/a201_0000/sensors/camera_0/image', '/a201_0000/sensors/camera_0/color/image'),
+            ('/a201_0000/sensors/camera_0/image/compressed', '/a201_0000/sensors/camera_0/color/compressed'),
+            ('/a201_0000/sensors/camera_0/image/compressedDepth', '/a201_0000/sensors/camera_0/color/compressedDepth'),
+            ('/a201_0000/sensors/camera_0/image/theora', '/a201_0000/sensors/camera_0/color/theora'),
+        ],
+        parameters=[{{'use_sim_time': True}}],
+    )
+
+    ld = LaunchDescription()
+    ld.add_action(launch_arg_prefix)
+    ld.add_action(node_camera_0_gz_bridge)
+    ld.add_action(node_camera_0_static_tf)
+    ld.add_action(node_camera_0_gz_image_bridge)
+    return ld
+""",
+            encoding='utf-8',
+        )
+
+    sensors_launch = target_path / 'sensors' / 'launch' / 'sensors-service.launch.py'
+    if sensors_launch.is_file():
+        sensors_launch.write_text(
+            f"""from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+
+def generate_launch_description():
+    launch_file_lidar2d_0 = {str(target_path / 'sensors' / 'launch' / 'lidar2d_0.launch.py')!r}
+    launch_file_lidar3d_0 = {str(target_path / 'sensors' / 'launch' / 'lidar3d_0.launch.py')!r}
+    launch_file_camera_0 = {str(camera_launch)!r}
+
+    ld = LaunchDescription()
+    ld.add_action(IncludeLaunchDescription(PythonLaunchDescriptionSource([launch_file_lidar2d_0])))
+    ld.add_action(IncludeLaunchDescription(PythonLaunchDescriptionSource([launch_file_lidar3d_0])))
+    ld.add_action(IncludeLaunchDescription(PythonLaunchDescriptionSource([launch_file_camera_0])))
+    return ld
+""",
+            encoding='utf-8',
+        )
+
+    return str(target_path)
+
+
+def _robot_spawn_launch(context, *args, **kwargs):
+    pkg_clearpath_gz = get_package_share_directory('clearpath_gz')
+    robot_spawn_launch = PathJoinSubstitution([pkg_clearpath_gz, 'launch', 'robot_spawn.launch.py'])
+    setup_path = LaunchConfiguration('setup_path').perform(context)
+    generate = 'true'
+
+    robot_spawn = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([robot_spawn_launch]),
+        launch_arguments=[
+            ('use_sim_time', LaunchConfiguration('use_sim_time')),
+            ('setup_path', setup_path),
+            ('generate', generate),
+            ('world', _gazebo_world_name(LaunchConfiguration('world'))),
+            ('rviz', LaunchConfiguration('rviz')),
+            ('x', LaunchConfiguration('x')),
+            ('y', LaunchConfiguration('y')),
+            ('z', LaunchConfiguration('z')),
+            ('yaw', LaunchConfiguration('yaw')),
+        ],
+    )
+    return [robot_spawn]
+
+
 def generate_launch_description():
     pkg_clearpath_gz = get_package_share_directory('clearpath_gz')
     pkg_lrs_halmstad = get_package_share_directory('lrs_halmstad')
     pkg_gui_plugins_prefix = get_package_prefix('lrs_halmstad_gui_plugins')
-    robot_spawn_launch = PathJoinSubstitution([pkg_clearpath_gz, 'launch', 'robot_spawn.launch.py'])
     pkg_share_root = os.path.dirname(pkg_lrs_halmstad)
     ament_prefix_path = os.getenv('AMENT_PREFIX_PATH', '')
     packages_paths = [
@@ -366,20 +503,6 @@ def generate_launch_description():
         }],
     )
 
-    robot_spawn = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([robot_spawn_launch]),
-        launch_arguments=[
-            ('use_sim_time', LaunchConfiguration('use_sim_time')),
-            ('setup_path', LaunchConfiguration('setup_path')),
-            ('world', _gazebo_world_name(LaunchConfiguration('world'))),
-            ('rviz', LaunchConfiguration('rviz')),
-            ('x', LaunchConfiguration('x')),
-            ('y', LaunchConfiguration('y')),
-            ('z', LaunchConfiguration('z')),
-            ('yaw', LaunchConfiguration('yaw')),
-        ],
-    )
-
     ld = LaunchDescription(arguments)
     ld.add_action(gz_sim_resource_path)
     ld.add_action(gz_gui_plugin_path)
@@ -391,5 +514,5 @@ def generate_launch_description():
     ld.add_action(OpaqueFunction(function=_gz_launch))
     ld.add_action(clock_bridge)
     ld.add_action(clock_guard)
-    ld.add_action(robot_spawn)
+    ld.add_action(OpaqueFunction(function=_robot_spawn_launch))
     return ld
