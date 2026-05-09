@@ -29,7 +29,7 @@ platform:
     - name: sensor_arch
       type: sensor_arch
       parent: default_mount
-      enabled: False
+      enabled: true
   extras:
     urdf:
       path: /home/ruben/halmstad_ws/src/lrs_halmstad/clearpath/lidar3d_0_override.urdf.xacro
@@ -61,8 +61,8 @@ sensors:
       urdf_enabled: true
       launch_enabled: true
       parent: base_link
-      xyz: [0.31, 0.0, 0.23]
-      rpy: [0.0, 0.0, 0.0]
+      xyz: [0.31, 0.0, 0.18]
+      rpy: [0.0, -0.1, 0.0]
       ros_parameters:
         camera:
           camera_name: camera_0
@@ -70,15 +70,16 @@ sensors:
           serial_no: 801212070256
           enable_color: true
           rgb_camera.profile: 640,480,30
-          enable_depth: true
+          enable_depth: false
           depth_module.profile: 640,480,30
-          pointcloud.enable: true  
+          pointcloud.enable: false
+          update_rate: 20
   gps: []
   imu: []
   lidar2d:
     - model: hokuyo_ust
-      urdf_enabled: true
-      launch_enabled: true
+      urdf_enabled: false
+      launch_enabled: false
       parent: base_link
       xyz: [0.21, 0.13, 0.200]
       rpy: [0.0, 0.0, 0.0]
@@ -89,11 +90,14 @@ sensors:
           ip_port: 10940
           angle_min: -3.141592653589793
           angle_max: 3.141592653589793
+          min_range: 0.25
+          max_range: 25.0
+          upate_rate: 10
   lidar3d:
     - model: velodyne_lidar
       urdf_enabled: false
       launch_enabled: true
-      parent: default_mount
+      parent: sensor_arch_mount
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
       ros_parameters:
@@ -106,3 +110,8 @@ sensors:
           model: VLP16
           fixed_frame: lidar3d_0_laser
           target_frame: lidar3d_0_laser
+          update_rate: 10
+          min_ang_v: -0.4
+          max_ang_v: 0.4
+          min_range: 0.5
+          max_range: 25.0

@@ -36,7 +36,7 @@ amcl:
     z_max: 0.05
     z_rand: 0.3
     z_short: 0.05
-    scan_topic: sensors/lidar2d_0/scan
+    scan_topic: scan
 
 map_saver:
   ros__parameters:

@@ -196,7 +196,7 @@ def launch_setup(context, *args, **kwargs):
     rewritten_parameters = RewrittenYaml(
         source_file=eval_params_file,
         param_rewrites={
-            "topic": eval_scan_topic,
+            "scan.topic": eval_scan_topic,
             "pointcloud.topic": eval_pointcloud_topic,
         },
         convert_types=True,

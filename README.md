@@ -18,7 +18,7 @@ Current Baylands follow baseline:
 2. For a grouped route: `./run.sh tmux_1to1 baylands waypoint:=parkinglot_east_0 mode:=follow nav2_goals:=parkinglot_east`
 
 Baylands Nav2 map quick notes:
-- Supported Baylands Nav2 maps are `maps/baylands_finished_v3_nav_20cm.yaml` and `maps/baylands_finished_v3_nav_20cm_merged.yaml`.
+- Supported Baylands Nav2 maps are `maps/baylands.yaml`.
 - These maps are intentionally pose-compatible and share the same `resolution: 0.200`, `origin: [-227, -444.5, 0.0]`, `mode: trinary`, `occupied_thresh: 0.65`, and `free_thresh: 0.196`.
 - The Nav2 map was made by taking a pose-compatible Baylands base map, editing the PGM in GIMP at the same canvas size, and exporting a full-resolution trinary image.
 - Keep the map to three tones only: white for free road, black for blocked/occupied space, and gray for unknown or non-committal areas.
@@ -27,8 +27,7 @@ Baylands Nav2 map quick notes:
 - Validate new Baylands maps in RViz by checking the map against AMCL and the live scan overlay before switching any defaults.
 
 Baylands waypoint files:
-- `maps/waypoints_baylands.csv` is the main flat waypoint list.
-- `maps/waypoints_baylands_groups.csv` is the grouped list used for named Baylands areas such as `parkinglot_east_*`, `strip_*`, and `art_*`.
+- `maps/waypoints_baylands_groups.csv` is the main flat waypoint list used for named Baylands areas such as `parkinglot_east_*`, `strip_*`, and `art_*`.
 - `./run.sh save_waypoint_csv ...` writes captured Gazebo and AMCL poses back to the CSV files.
 - `./run.sh save_waypoint_yaml ...` writes Nav2-ready YAML waypoint files, usually under `src/lrs_halmstad/config/baylands_waypoints/`.
 

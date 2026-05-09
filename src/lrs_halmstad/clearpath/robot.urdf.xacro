@@ -26,6 +26,11 @@
     <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
   </xacro:top_plate>
 
+  <xacro:include filename="$(find clearpath_platform_description)/urdf/a200/attachments/sensor_arch.urdf.xacro"/>
+  <xacro:sensor_arch name="sensor_arch" model="sensor_arch_300" parent_link="default_mount">
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+  </xacro:sensor_arch>
+
 
   <!-- Links -->
 
@@ -35,16 +40,10 @@
 
   <!-- Sensors -->
 
-  <!-- lidar2d_0 -->
-  <xacro:include filename="$(find clearpath_sensors_description)/urdf/hokuyo_ust.urdf.xacro"/>
-  <xacro:hokuyo_ust name="lidar2d_0" parent_link="base_link" ang_res="0.5" min_ang="-3.141592653589793" max_ang="3.141592653589793" min_range="0.05" max_range="25.0" update_rate="40">
-    <origin xyz="0.21 0.13 0.2" rpy="0.0 0.0 0.0"/>
-  </xacro:hokuyo_ust>
-
   <!-- camera_0 -->
   <xacro:include filename="$(find clearpath_sensors_description)/urdf/intel_realsense.urdf.xacro"/>
   <xacro:intel_realsense name="camera_0" parent_link="base_link" update_rate="30" image_height="480" image_width="640" model="d435">
-    <origin xyz="0.31 0.0 0.23" rpy="0.0 0.0 0.0"/>
+    <origin xyz="0.31 0.0 0.18" rpy="0.0 -0.1 0.0"/>
   </xacro:intel_realsense>
 
 

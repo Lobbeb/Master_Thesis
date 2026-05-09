@@ -20,7 +20,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
-    controller_frequency: 10.0
+    controller_frequency: 20.0
     min_x_velocity_threshold: 0.01
     min_y_velocity_threshold: 1.0
     min_theta_velocity_threshold: 0.01
@@ -149,7 +149,7 @@ local_costmap:
         footprint_clearing_enabled: true
         observation_sources: scan
         scan:
-          topic: sensors/lidar2d_0/scan
+          topic: "scan"
           data_type: "LaserScan"
           marking: true
           clearing: true
@@ -191,13 +191,13 @@ global_costmap:
         inflation_radius: 1.1
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
+        enabled: false
         observation_sources: scan
         footprint_clearing_enabled: true
         max_obstacle_height: 2.0
         combination_method: 1
         scan:
-          topic: /sensors/lidar2d_0/scan
+          topic: scan
           data_type: "LaserScan"
           marking: true
           clearing: true
@@ -330,11 +330,10 @@ collision_monitor:
     scan:
       type: "scan"
       topic: "scan"
-      enabled: true
+      enabled: false
     pointcloud:
       type: "pointcloud"
-      topic: "/sensors/lidar_3d_0/points"
-      transport_type: "draco" # Options: raw, zlib, draco, zstd
+      topic: "sensors/lidar3d_0/points"
       min_height: -0.19
       max_height: 0.5
       use_global_height: false
