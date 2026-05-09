@@ -4,6 +4,10 @@ route_lidar_config_path() {
   printf '%s/src/lrs_halmstad/config/baylands_route_lidar.yaml\n' "$WS_ROOT"
 }
 
+route_lidar_overrides_enabled() {
+  [ "${BAYLANDS_ROUTE_LIDAR_OVERRIDES:-false}" = "true" ]
+}
+
 route_lidar_arg_present() {
   local prefix="$1"
   shift
@@ -19,6 +23,7 @@ route_lidar_preset_args() {
   local lidar="${2:-3d}"
   shift 2 || true
 
+  route_lidar_overrides_enabled || return 0
   [ "$lidar" = "3d" ] || return 0
 
   python3 - "$(route_lidar_config_path)" "$route" "$@" <<'PY'
@@ -59,6 +64,7 @@ route_lidar_waypoint_route() {
 route_lidar_waypoint_args() {
   local waypoint="$1"
 
+  route_lidar_overrides_enabled || return 0
   [ -n "$waypoint" ] || return 0
 
   python3 - "$(route_lidar_config_path)" "$waypoint" <<'PY'
@@ -101,8 +107,8 @@ route_lidar_pc2ls_node_name() {
   printf '%s\n' "/a201_0000/pointcloud_to_laserscan"
 }
 
-route_lidar_pc2ls_scan_relay_topic() {
-  printf '%s\n' "/a201_0000/sensors/lidar3d_0/scan_from_points_relay"
+route_lidar_pc2ls_scan_topic() {
+  printf '%s\n' "/a201_0000/sensors/lidar3d_0/scan_from_points"
 }
 
 route_lidar_wait_for_pc2ls_service() {
@@ -158,7 +164,7 @@ route_lidar_apply_pc2ls_args() {
 }
 
 route_lidar_wait_for_scan_once() {
-  local topic="${1:-$(route_lidar_pc2ls_scan_relay_topic)}"
+  local topic="${1:-$(route_lidar_pc2ls_scan_topic)}"
   local timeout_s="${2:-3}"
 
   timeout "${timeout_s}s" ros2 topic echo --no-daemon --once "$topic" >/dev/null 2>&1

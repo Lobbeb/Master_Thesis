@@ -11,7 +11,6 @@ LOCAL_NAV2_LAUNCH="$WS_ROOT/src/lrs_halmstad/launch/nav2_with_updates.launch.py"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
 BASE_NAV2_PARAMS="$DEFAULT_NAV2_PARAMS"
 BAYLANDS_2D_SCAN_RELAY_TOPIC="/a201_0000/sensors/lidar2d_0/scan_relay"
-NAV2_3D_SCAN_RELAY_TOPIC="/a201_0000/sensors/lidar3d_0/scan_from_points_relay"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 
@@ -51,11 +50,10 @@ LIDAR_REMAINING_ARGS=("${NAV2_PASSTHROUGH_ARGS[@]}")
 if [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
   if [ "$USE_SCAN_RELAY_OVERRIDE" = "true" ]; then
     USE_SCAN_RELAY="true"
-    echo "[run_nav2] 3D lidar mode: starting Nav2-owned scan relay for $LIDAR_SCAN_TOPIC" >&2
+    echo "[run_nav2] 3D lidar mode: starting Nav2-owned scan relay for converted scan $LIDAR_SCAN_TOPIC" >&2
   else
-    LIDAR_SCAN_TOPIC="$NAV2_3D_SCAN_RELAY_TOPIC"
     USE_SCAN_RELAY="false"
-    echo "[run_nav2] 3D lidar mode: reusing localization-owned scan relay $LIDAR_SCAN_TOPIC" >&2
+    echo "[run_nav2] 3D lidar mode: using direct pc2ls scan $LIDAR_SCAN_TOPIC" >&2
     if [ "${#PC2LS_ARGS_IGNORED[@]}" -gt 0 ]; then
       echo "[run_nav2] 3D lidar mode: ignoring pc2ls args in Nav2; pass them to localization instead." >&2
     fi

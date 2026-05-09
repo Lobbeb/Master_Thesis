@@ -25,11 +25,24 @@ lidar_mode_scan_topic() {
       lidar_mode_raw_scan_topic 2d
       ;;
     3d)
-      printf '%s\n' "/a201_0000/sensors/lidar3d_0/scan_from_points"
+      lidar_mode_converted_scan_topic 3d
       ;;
     *)
       echo "[lidar_mode] Unsupported lidar mode '$lidar_mode'. Use 2d or 3d." >&2
       return 1
+      ;;
+  esac
+}
+
+lidar_mode_converted_scan_topic() {
+  local lidar_mode="${1:-3d}"
+
+  case "$lidar_mode" in
+    3d)
+      printf '%s\n' "/a201_0000/sensors/lidar3d_0/scan_from_points"
+      ;;
+    *)
+      printf '%s\n' ""
       ;;
   esac
 }
@@ -60,7 +73,7 @@ lidar_mode_is_3d_raw_scan_topic() {
 }
 
 lidar_mode_is_3d_converted_scan_topic() {
-  [ "${1:-}" = "$(lidar_mode_scan_topic 3d)" ]
+  [ "${1:-}" = "$(lidar_mode_converted_scan_topic 3d)" ]
 }
 
 lidar_mode_is_3d_scan_topic() {

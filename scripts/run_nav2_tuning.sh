@@ -17,7 +17,7 @@ GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="false"
 START_COLLISION_MONITOR="true"
-MUTE_UGV_CAMERA="true"
+MUTE_UGV_CAMERA="false"
 MAP_PATH="maps/baylands.yaml"
 SESSION=""
 TMUX_ATTACH="false"
@@ -261,7 +261,12 @@ run_ros_probe() {
 }
 
 gazebo_cmd() {
-  local cmd=(./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT")
+  local cmd=(
+    ./run.sh gazebo_sim "$WORLD"
+    "gui:=$GUI"
+    "waypoint:=$WAYPOINT"
+    "mute_ugv_camera:=$MUTE_UGV_CAMERA"
+  )
   echo "$(shell_join "${cmd[@]}")"
 }
 
@@ -423,7 +428,7 @@ write_follow_params_file() {
   local output_file
   output_file="$(follow_params_file)"
   mkdir -p "$STATE_DIR"
-  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" "$WS_ROOT/src/lrs_halmstad/config/baylands_route_lidar.yaml" <<'PY'
+  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -431,12 +436,11 @@ import yaml
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
 pause_after_goal_s = float(sys.argv[3])
-lidar_settings_file = sys.argv[4]
 
 data = yaml.safe_load(src.read_text(encoding="utf-8"))
 params = data.setdefault("ugv_nav2_driver", {}).setdefault("ros__parameters", {})
 params["pause_after_goal_s"] = pause_after_goal_s
-params["lidar_settings_file"] = lidar_settings_file
+params["lidar_settings_file"] = "disabled"
 
 dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 PY
@@ -598,6 +602,23 @@ realign_yaw() {
   bash "$SCRIPT_DIR/run_realign_yaw.sh" "$WORLD" "waypoint:=$WAYPOINT"
 }
 
+apply_startup_waypoint_lidar_settings() {
+  if [ "$LIDAR" != "3d" ]; then
+    return 0
+  fi
+  if [ -z "$WAYPOINT" ]; then
+    return 0
+  fi
+
+  local -a lidar_args=()
+  mapfile -t lidar_args < <(route_lidar_waypoint_args "$WAYPOINT")
+  if [ "${#lidar_args[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  route_lidar_apply_pc2ls_args "startup waypoint '$WAYPOINT'" "8" "${lidar_args[@]}"
+}
+
 stop_stack_processes() {
   if [ "$DRY_RUN" = "true" ]; then
     echo "[nav2_tuning] Would stop tuning stack for session $SESSION"
@@ -658,6 +679,7 @@ restart_stack() {
     echo "[localization] $(localization_cmd)"
     echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
     echo "[nav2] $(nav2_cmd)"
+    echo "[lidar] apply waypoint-specific pc2ls settings for $WAYPOINT after Nav2 start"
     echo "[rviz] <not managed: $(rviz_cmd)>"
     if [ "$WITH_FOLLOW" = "true" ]; then
       echo "[route] $(follow_cmd)"
@@ -678,6 +700,7 @@ restart_stack() {
   wait_for_localization_ready
   realign_yaw
   send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR" "start_collision_monitor:=$START_COLLISION_MONITOR"
+  apply_startup_waypoint_lidar_settings
 
   if [ "$WITH_FOLLOW" = "true" ]; then
     sleep "$FOLLOW_START_DELAY_S"
@@ -954,9 +977,6 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$FOLLOW_START_DELAY_EXPLICIT" = "true" ]; then
     FOLLOW_START_DELAY_S="$CLI_FOLLOW_START_DELAY_S"
-  fi
-  if [ "$NAV2_INPUTS_READY_TIMEOUT_EXPLICIT" = "true" ]; then
-    NAV2_INPUTS_READY_TIMEOUT_S="$CLI_NAV2_INPUTS_READY_TIMEOUT_S"
   fi
   if [ "$GAZEBO_READY_TIMEOUT_EXPLICIT" = "true" ]; then
     GAZEBO_READY_TIMEOUT_S="$CLI_GAZEBO_READY_TIMEOUT_S"

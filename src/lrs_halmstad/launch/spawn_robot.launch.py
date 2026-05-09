@@ -66,7 +66,7 @@ def generate_launch_description():
     )
     camera_update_rate_arg = DeclareLaunchArgument(
         name='camera_update_rate',
-        default_value="30",
+        default_value="20",
         description='Camera sensor update rate in Hz',
     )
     camera_name_arg = DeclareLaunchArgument(name='camera_name', default_value="camera0",

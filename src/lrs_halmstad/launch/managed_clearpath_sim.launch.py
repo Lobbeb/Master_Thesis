@@ -393,6 +393,8 @@ def _robot_spawn_launch(context, *args, **kwargs):
     pkg_clearpath_gz = get_package_share_directory('clearpath_gz')
     robot_spawn_launch = PathJoinSubstitution([pkg_clearpath_gz, 'launch', 'robot_spawn.launch.py'])
     setup_path = LaunchConfiguration('setup_path').perform(context)
+    if LaunchConfiguration('mute_ugv_camera').perform(context) == 'true':
+        setup_path = _prepare_muted_camera_setup_path(setup_path)
     generate = 'true'
 
     robot_spawn = IncludeLaunchDescription(

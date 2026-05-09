@@ -145,19 +145,19 @@ local_costmap:
       plugins: ["obstacle_layer", "denoise_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
+        enabled: false
         footprint_clearing_enabled: true
         observation_sources: scan
         scan:
-          topic: "scan"
+          topic: "/a201_0000/sensors/lidar3d_0/scan_from_points"
           data_type: "LaserScan"
           marking: true
           clearing: true
-          max_obstacle_height: 0.2
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.8
+          max_obstacle_height: 1.0
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.4
           obstacle_max_range: 4.0
-          obstacle_min_range: 1.0
+          obstacle_min_range: 0.4
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
         enabled: true
@@ -165,8 +165,9 @@ local_costmap:
         group_connectivity_type: 8
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
         cost_scaling_factor: 4.0
-        inflation_radius: 0.85
+        inflation_radius: 0.8
 
 global_costmap:
   global_costmap:
@@ -192,12 +193,12 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: false
-        observation_sources: scan
+        observation_sources: "scan"
         footprint_clearing_enabled: true
         max_obstacle_height: 2.0
         combination_method: 1
         scan:
-          topic: scan
+          topic: "/a201_0000/sensors/lidar3d_0/scan_from_points"
           data_type: "LaserScan"
           marking: true
           clearing: true
@@ -329,13 +330,13 @@ collision_monitor:
     observation_sources: ["scan"]
     scan:
       type: "scan"
-      topic: "scan"
+      topic: "/a201_0000/sensors/lidar3d_0/scan_from_points"
       enabled: false
     pointcloud:
       type: "pointcloud"
-      topic: "sensors/lidar3d_0/points"
-      min_height: -0.19
-      max_height: 0.5
+      topic: "/a201_0000/sensors/lidar3d_0/points"
+      min_height: -0.3
+      max_height: 0.2
       use_global_height: false
       enabled: true
 

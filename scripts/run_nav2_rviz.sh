@@ -15,8 +15,7 @@ source "$SCRIPT_DIR/lidar_mode_common.sh"
 lidar_mode_parse_args 3d "$@"
 
 if [ "$LIDAR_MODE" = "3d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
-  LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
-  echo "[run_nav2_rviz] 3D lidar mode: using localization-owned relay topic $LIDAR_SCAN_TOPIC" >&2
+  echo "[run_nav2_rviz] 3D lidar mode: using direct pc2ls topic $LIDAR_SCAN_TOPIC" >&2
 elif [ -f "$SIM_WORLD_FILE" ] && [[ "$(cat "$SIM_WORLD_FILE" 2>/dev/null || true)" == baylands* ]] && [ "$LIDAR_MODE" = "2d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 2d)" ]; then
   LIDAR_SCAN_TOPIC="${LIDAR_SCAN_TOPIC}_relay"
   echo "[run_nav2_rviz] Baylands 2D lidar mode: using localization-owned relay topic $LIDAR_SCAN_TOPIC" >&2

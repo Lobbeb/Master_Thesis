@@ -45,8 +45,8 @@ ARGUMENTS = [
         default_value="true",
         choices=["true", "false"],
     ),
-    DeclareLaunchArgument("pc2ls_min_height", default_value="-0.35"),
-    DeclareLaunchArgument("pc2ls_max_height", default_value="0.05"),
+    DeclareLaunchArgument("pc2ls_min_height", default_value="-0.4"),
+    DeclareLaunchArgument("pc2ls_max_height", default_value="0.4"),
     DeclareLaunchArgument("pc2ls_angle_min", default_value="-3.141592653589793"),
     DeclareLaunchArgument("pc2ls_angle_max", default_value="3.141592653589793"),
     DeclareLaunchArgument("pc2ls_angle_increment", default_value="0.006981317007977318"),
@@ -59,13 +59,13 @@ ARGUMENTS = [
     DeclareLaunchArgument("pc2ls_use_inf", default_value="true", choices=["true", "false"]),
     DeclareLaunchArgument(
         "use_scan_relay",
-        default_value="true",
+        default_value="false",
         choices=["true", "false"],
     ),
-    DeclareLaunchArgument("scan_relay_hz", default_value="8.0"),
-    DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.25"),
+    DeclareLaunchArgument("scan_relay_hz", default_value="10.0"),
+    DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.2"),
     DeclareLaunchArgument("scan_relay_restamp", default_value="true", choices=["true", "false"]),
-    DeclareLaunchArgument("scan_relay_start_delay_s", default_value="2.0"),
+    DeclareLaunchArgument("scan_relay_start_delay_s", default_value="0.0"),
 ]
 
 

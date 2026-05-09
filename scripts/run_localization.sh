@@ -116,7 +116,7 @@ fi
 
 lidar_mode_parse_args 3d "$@"
 USE_POINTCLOUD_TO_LASERSCAN="false"
-USE_SCAN_RELAY="true"
+USE_SCAN_RELAY="false"
 SCAN_RELAY_HZ=""
 SCAN_RELAY_MAX_AGE_S=""
 SCAN_RELAY_START_DELAY_S=""
@@ -161,25 +161,19 @@ elif [[ "$WORLD" == baylands* ]] && [ -f "$LOCAL_BAYLANDS_LOCALIZATION_PARAMS" ]
   PARAMS_FILE_OVERRIDE="$LOCAL_BAYLANDS_LOCALIZATION_PARAMS"
 fi
 
-if lidar_mode_is_3d_topic "$LIDAR_SCAN_TOPIC"; then
-  if [ -z "$USE_SCAN_RELAY" ]; then
-    USE_SCAN_RELAY="true"
-  fi
-  if [ -z "$SCAN_RELAY_HZ" ]; then
-    SCAN_RELAY_HZ="4.0"
-  fi
-  if [ -z "$SCAN_RELAY_MAX_AGE_S" ]; then
-    SCAN_RELAY_MAX_AGE_S="0.25"
-  fi
-  if [ -z "$SCAN_RELAY_START_DELAY_S" ]; then
-    SCAN_RELAY_START_DELAY_S="2.0"
-  fi
-elif [[ "$WORLD" == baylands* ]]; then
+if [[ "$WORLD" == baylands* ]] && [ "$LIDAR_MODE" = "2d" ]; then
   if [ -z "$USE_SCAN_RELAY" ]; then
     USE_SCAN_RELAY="true"
   fi
   if [ -z "$SCAN_RELAY_HZ" ]; then
     SCAN_RELAY_HZ="8.0"
+  fi
+elif [ "$LIDAR_MODE" = "3d" ] && [ "$USE_POINTCLOUD_TO_LASERSCAN" = "true" ]; then
+  if [ -z "$USE_SCAN_RELAY" ]; then
+    USE_SCAN_RELAY="true"
+  fi
+  if [ -z "$SCAN_RELAY_HZ" ]; then
+    SCAN_RELAY_HZ="10.0"
   fi
 elif [ -z "$USE_SCAN_RELAY" ]; then
   USE_SCAN_RELAY="false"
@@ -225,6 +219,14 @@ LAUNCH_ARGS=(
   use_scan_relay:="$USE_SCAN_RELAY"
   map:="$MAP_PATH"
 )
+
+if [ "$LIDAR_MODE" = "3d" ] && [ "$USE_POINTCLOUD_TO_LASERSCAN" = "true" ]; then
+  if [ "$USE_SCAN_RELAY" = "true" ]; then
+    echo "[run_localization] 3D lidar mode: using restamped scan relay for AMCL timing stability" >&2
+  else
+    echo "[run_localization] 3D lidar mode: using direct pc2ls scan; AMCL may drop scans if TF lags behind timestamps" >&2
+  fi
+fi
 
 resolved_map_path="$(readlink -f "$MAP_PATH" 2>/dev/null || printf '%s' "$MAP_PATH")"
 baylands_pose_compatible_map="false"
@@ -277,15 +279,15 @@ if [ -n "$LIDAR_POINTCLOUD_TOPIC" ]; then
   LAUNCH_ARGS+=("pointcloud_topic:=$LIDAR_POINTCLOUD_TOPIC")
 fi
 
-if [ -n "$SCAN_RELAY_HZ" ]; then
+if [ "$USE_SCAN_RELAY" = "true" ] && [ -n "$SCAN_RELAY_HZ" ]; then
   LAUNCH_ARGS+=("scan_relay_hz:=$SCAN_RELAY_HZ")
 fi
 
-if [ -n "$SCAN_RELAY_MAX_AGE_S" ]; then
+if [ "$USE_SCAN_RELAY" = "true" ] && [ -n "$SCAN_RELAY_MAX_AGE_S" ]; then
   LAUNCH_ARGS+=("scan_relay_max_age_s:=$SCAN_RELAY_MAX_AGE_S")
 fi
 
-if [ -n "$SCAN_RELAY_START_DELAY_S" ]; then
+if [ "$USE_SCAN_RELAY" = "true" ] && [ -n "$SCAN_RELAY_START_DELAY_S" ]; then
   LAUNCH_ARGS+=("scan_relay_start_delay_s:=$SCAN_RELAY_START_DELAY_S")
 fi
 

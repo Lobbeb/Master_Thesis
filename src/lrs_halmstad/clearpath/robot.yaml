@@ -68,6 +68,8 @@ sensors:
           camera_name: camera_0
           device_type: d435
           serial_no: 801212070256
+          image_height: 480
+          image_width: 640
           enable_color: true
           rgb_camera.profile: 640,480,30
           enable_depth: false
@@ -92,7 +94,7 @@ sensors:
           angle_max: 3.141592653589793
           min_range: 0.25
           max_range: 25.0
-          upate_rate: 10
+          update_rate: 10
   lidar3d:
     - model: velodyne_lidar
       urdf_enabled: false
@@ -110,8 +112,8 @@ sensors:
           model: VLP16
           fixed_frame: lidar3d_0_laser
           target_frame: lidar3d_0_laser
-          update_rate: 10
+          update_rate: 20
           min_ang_v: -0.4
           max_ang_v: 0.4
-          min_range: 0.5
-          max_range: 25.0
+          min_range: 0.4
+          max_range: 30.0

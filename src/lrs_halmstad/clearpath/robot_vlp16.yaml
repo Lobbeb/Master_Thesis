@@ -61,7 +61,7 @@ sensors:
   camera:
     - model: intel_realsense
       urdf_enabled: true
-      launch_enabled: true
+      launch_enabled: false
       parent: base_link
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
@@ -80,7 +80,7 @@ sensors:
   lidar2d:
     - model: hokuyo_ust
       urdf_enabled: true
-      launch_enabled: true
+      launch_enabled: false
       parent: base_link
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
