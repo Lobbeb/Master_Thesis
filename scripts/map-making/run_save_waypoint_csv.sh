@@ -324,6 +324,7 @@ entry = {
     "amcl_x": amcl_x,
     "amcl_y": amcl_y,
     "amcl_yaw": amcl_yaw,
+    "group": group,
 }
 if "group" in headers:
     entry["group"] = group
