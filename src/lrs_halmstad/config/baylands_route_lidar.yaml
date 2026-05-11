@@ -157,10 +157,11 @@ waypoints:
     pc2ls_min_height: -0.67
     pc2ls_max_height: 1.0
   road_to_spawn_1:
-    pc2ls_min_height: -0.67
-    pc2ls_max_height: 1.0
+    pc2ls_min_height: -0.55
+    pc2ls_max_height: 0.3
   road_to_spawn_2:
-    pc2ls_min_height: -0.425
+    pc2ls_min_height: -0.54
+    pc2ls_max_height: 0.5
   road_to_spawn_6:
     pc2ls_min_height: -0.3
     pc2ls_max_height: 0.15

@@ -181,6 +181,10 @@ Jag la till images för kamerorna i där, men vill du köra med rqt så kan du g
 
 ## Dataset Collection
 
+**OBS!!!** 
+
+Du måste göra en mapp i ~/halmstad_ws som heter **_datasets_**
+
 ```bash
-./run.sh capture_dataset
+./run.sh capture_dataset output:= NAMN PÅ MAPP I /datasets
 ```
