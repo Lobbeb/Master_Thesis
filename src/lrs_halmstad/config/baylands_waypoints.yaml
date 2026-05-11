@@ -221,10 +221,9 @@ waypoints:
   yaw_deg: -83.58260432133228
   group: road_to_spawn
 - name: road_to_spawn_4
-  x: 19.369091681764488
-  y: 112.38846085138503
-  yaw_deg: -95.34959438982297
-  group: road_to_spawn
+  x: 19.6843904780082
+  y: 111.82503689121982
+  yaw_deg: -31.391859431712085
 - name: road_to_spawn_5
   x: 19.964473673135636
   y: 98.07852764356367

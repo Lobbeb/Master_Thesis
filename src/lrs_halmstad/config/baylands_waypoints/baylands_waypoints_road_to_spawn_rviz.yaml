@@ -48,18 +48,6 @@ waypoints:
     - -0.6664192948892084
     group: road_to_spawn
   waypoint4:
-    name: road_to_spawn_4
-    pose:
-    - 19.369091681764488
-    - 112.38846085138503
-    - 0.0
-    orientation:
-    - 0.6733377913464816
-    - 0.0
-    - 0.0
-    - -0.739334984120623
-    group: road_to_spawn
-  waypoint5:
     name: road_to_spawn_5
     pose:
     - 19.964473673135636
@@ -71,7 +59,7 @@ waypoints:
     - 0.0
     - -0.68271468741152
     group: road_to_spawn
-  waypoint6:
+  waypoint5:
     name: road_to_spawn_6
     pose:
     - 18.811511429354724
@@ -83,7 +71,7 @@ waypoints:
     - 0.0
     - -0.7486671845094617
     group: road_to_spawn
-  waypoint7:
+  waypoint6:
     name: road_to_spawn_7
     pose:
     - 15.071296275267745
@@ -95,7 +83,7 @@ waypoints:
     - 0.0
     - -0.7747934565790268
     group: road_to_spawn
-  waypoint8:
+  waypoint7:
     name: road_to_spawn_8
     pose:
     - 9.297341155524437
@@ -107,7 +95,7 @@ waypoints:
     - 0.0
     - 0.9836736312217842
     group: road_to_spawn
-  waypoint9:
+  waypoint8:
     name: road_to_spawn_9
     pose:
     - 8.927894663711546
@@ -119,7 +107,7 @@ waypoints:
     - 0.0
     - 0.6875197668439191
     group: road_to_spawn
-  waypoint10:
+  waypoint9:
     name: road_to_spawn_10
     pose:
     - 5.004776362241933

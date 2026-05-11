@@ -296,7 +296,7 @@ from pathlib import Path
 
 path = Path(output_path)
 
-base_headers = ["place", "x", "y", "z", "yaw", "amcl_x", "amcl_y", "amcl_yaw"]
+base_headers = ["place", "x", "y", "z", "yaw", "amcl_x", "amcl_y", "amcl_yaw", "group", "loop"]
 rows = []
 headers = list(base_headers)
 
