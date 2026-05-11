@@ -1,17 +1,5 @@
 waypoints:
   waypoint0:
-    name: road_to_east_0
-    pose:
-    - -30.51427501394765
-    - 79.80607177877843
-    - 0.0
-    orientation:
-    - 0.762987092534962
-    - 0.0
-    - 0.0
-    - -0.6464137193972954
-    group: road_to_east
-  waypoint1:
     name: road_to_east_1
     pose:
     - -20.83630500090324
@@ -23,7 +11,7 @@ waypoints:
     - 0.0
     - -0.3746820121841317
     group: road_to_east
-  waypoint2:
+  waypoint1:
     name: road_to_east_2
     pose:
     - -12.443704715099644
@@ -35,7 +23,7 @@ waypoints:
     - 0.0
     - -0.4129034789714155
     group: road_to_east
-  waypoint3:
+  waypoint2:
     name: road_to_east_3
     pose:
     - 5.239470517956514
@@ -47,7 +35,7 @@ waypoints:
     - 0.0
     - -0.3300596561482295
     group: road_to_east
-  waypoint4:
+  waypoint3:
     name: road_to_east_4
     pose:
     - 9.087596351866418
@@ -59,7 +47,7 @@ waypoints:
     - 0.0
     - -0.8552203318647376
     group: road_to_east
-  waypoint5:
+  waypoint4:
     name: road_to_east_5
     pose:
     - 4.202450817375535

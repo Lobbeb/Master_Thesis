@@ -10,8 +10,12 @@ baylands_waypoint_config_dir() {
   printf '%s/src/lrs_halmstad/config/baylands_waypoints\n' "$WS_ROOT"
 }
 
+baylands_config_dir() {
+  printf '%s/src/lrs_halmstad/config\n' "$WS_ROOT"
+}
+
 baylands_all_waypoints_yaml() {
-  printf '%s/src/lrs_halmstad/config/baylands_waypoints.yaml\n' "$WS_ROOT"
+  printf '%s/baylands_waypoints.yaml\n' "$(baylands_config_dir)"
 }
 
 baylands_sync_waypoints() {
@@ -49,11 +53,21 @@ baylands_route_yaml_path() {
       readlink -f "$route"
     elif [ -f "$WS_ROOT/$route" ]; then
       printf '%s/%s\n' "$WS_ROOT" "$route"
+    elif [ -f "$(baylands_config_dir)/$route" ]; then
+      printf '%s/%s\n' "$(baylands_config_dir)" "$route"
     elif [[ "$route" == */* ]]; then
       printf '%s/%s\n' "$WS_ROOT" "$route"
     else
       printf '%s/%s\n' "$(baylands_waypoint_config_dir)" "$route"
     fi
+    return 0
+  fi
+  if [ "$name" = "baylands_waypoints" ]; then
+    baylands_all_waypoints_yaml
+    return 0
+  fi
+  if [ -f "$(baylands_config_dir)/$name.yaml" ]; then
+    printf '%s/%s.yaml\n' "$(baylands_config_dir)" "$name"
     return 0
   fi
   printf '%s/baylands_waypoints_%s.yaml\n' "$(baylands_waypoint_config_dir)" "$name"

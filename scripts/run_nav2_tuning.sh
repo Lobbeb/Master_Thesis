@@ -8,6 +8,7 @@ TMUX_STATE_DIR="$STATE_DIR/tmux_sessions"
 DEFAULT_BAYLANDS_TUNING_MAP="$WS_ROOT/maps/baylands.yaml"
 
 ACTION="start"
+PROFILE="standard"
 WORLD="baylands"
 WAYPOINT="rotundan_0"
 NAV2_GOALS="rotundan"
@@ -17,12 +18,15 @@ GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="false"
 START_COLLISION_MONITOR="true"
-MUTE_UGV_CAMERA="false"
+MUTE_UGV_CAMERA="true"
+SENSOR_PROFILE="nav"
+CLOCK_MODE="guarded"
+START_OPTIONAL_TELEOP="true"
 MAP_PATH="maps/baylands.yaml"
 SESSION=""
 TMUX_ATTACH="false"
 SPAWN_UAV="false"
-UAV_CAMERA_UPDATE_RATE="2"
+UAV_CAMERA_UPDATE_RATE="2.0"
 WITH_FOLLOW="true"
 REBUILD="false"
 REBUILD_DONE="false"
@@ -37,6 +41,7 @@ GAZEBO_POST_READY_DELAY_S="20"
 SPAWN_POST_DELAY_S="5"
 
 SESSION_EXPLICIT="false"
+PROFILE_EXPLICIT="false"
 WAYPOINT_EXPLICIT="false"
 NAV2_GOALS_EXPLICIT="false"
 LIDAR_EXPLICIT="false"
@@ -45,6 +50,9 @@ PERSPECTIVE_EXPLICIT="false"
 START_RQT_EXPLICIT="false"
 START_COLLISION_MONITOR_EXPLICIT="false"
 MUTE_UGV_CAMERA_EXPLICIT="false"
+SENSOR_PROFILE_EXPLICIT="false"
+CLOCK_MODE_EXPLICIT="false"
+START_OPTIONAL_TELEOP_EXPLICIT="false"
 MAP_EXPLICIT="false"
 SPAWN_UAV_EXPLICIT="false"
 UAV_CAMERA_UPDATE_RATE_EXPLICIT="false"
@@ -63,6 +71,7 @@ NAV2_PANE_ID=""
 FOLLOW_PANE_ID=""
 
 CLI_WORLD=""
+CLI_PROFILE=""
 CLI_WAYPOINT=""
 CLI_NAV2_GOALS=""
 CLI_LIDAR=""
@@ -72,6 +81,9 @@ CLI_PERSPECTIVE=""
 CLI_START_RQT=""
 CLI_START_COLLISION_MONITOR=""
 CLI_MUTE_UGV_CAMERA=""
+CLI_SENSOR_PROFILE=""
+CLI_CLOCK_MODE=""
+CLI_START_OPTIONAL_TELEOP=""
 CLI_MAP_PATH=""
 CLI_SPAWN_UAV=""
 CLI_UAV_CAMERA_UPDATE_RATE=""
@@ -86,6 +98,12 @@ TUNING_LIDAR_ARGS=()
 source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
 
+# Nav2 tuning is the workflow where we actively test per-route/per-waypoint pc2ls
+# settings. Keep this on by default, but allow callers to disable it with:
+# BAYLANDS_ROUTE_LIDAR_OVERRIDES=false ./run.sh nav2_tuning ...
+: "${BAYLANDS_ROUTE_LIDAR_OVERRIDES:=true}"
+export BAYLANDS_ROUTE_LIDAR_OVERRIDES
+
 shell_join() {
   local out=""
   local part=""
@@ -99,10 +117,13 @@ usage() {
   cat <<EOF
 Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|attach|status]
   [world:=baylands]
+  [profile:=standard|minimal]
   [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
   [pause_after_goal_s:=10.0]
   [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_collision_monitor:=true|false] [map:=maps/baylands.yaml]
-  [mute_ugv_camera:=true|false]
+  [sensor_profile:=full|nav|minimal] [clock_mode:=guarded|direct]
+  [mute_ugv_camera:=true|false]  # compatibility alias; true maps full camera down to RGB-only
+  [start_optional_teleop:=true|false]
   [spawn_uav:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
   [uav_camera_update_rate:=2]
   [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
@@ -112,6 +133,7 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
 
 Examples:
   ./run.sh nav2_tuning start
+  ./run.sh nav2_tuning start profile:=minimal
   ./run.sh nav2_tuning start waypoint:=rotundan_0
   ./run.sh nav2_tuning restart
   ./run.sh nav2_tuning stack_stop
@@ -157,6 +179,7 @@ write_state() {
   mkdir -p "$TMUX_STATE_DIR"
   {
     printf 'SESSION=%q\n' "$SESSION"
+    printf 'PROFILE=%q\n' "$PROFILE"
     printf 'WORLD=%q\n' "$WORLD"
     printf 'WAYPOINT=%q\n' "$WAYPOINT"
     printf 'NAV2_GOALS=%q\n' "$NAV2_GOALS"
@@ -167,6 +190,9 @@ write_state() {
     printf 'START_RQT=%q\n' "$START_RQT"
     printf 'START_COLLISION_MONITOR=%q\n' "$START_COLLISION_MONITOR"
     printf 'MUTE_UGV_CAMERA=%q\n' "$MUTE_UGV_CAMERA"
+    printf 'SENSOR_PROFILE=%q\n' "$SENSOR_PROFILE"
+    printf 'CLOCK_MODE=%q\n' "$CLOCK_MODE"
+    printf 'START_OPTIONAL_TELEOP=%q\n' "$START_OPTIONAL_TELEOP"
     printf 'MAP_PATH=%q\n' "$MAP_PATH"
     printf 'SPAWN_UAV=%q\n' "$SPAWN_UAV"
     printf 'UAV_CAMERA_UPDATE_RATE=%q\n' "$UAV_CAMERA_UPDATE_RATE"
@@ -266,6 +292,8 @@ gazebo_cmd() {
     "gui:=$GUI"
     "waypoint:=$WAYPOINT"
     "mute_ugv_camera:=$MUTE_UGV_CAMERA"
+    "sensor_profile:=$SENSOR_PROFILE"
+    "clock_mode:=$CLOCK_MODE"
   )
   echo "$(shell_join "${cmd[@]}")"
 }
@@ -404,7 +432,8 @@ follow_cmd() {
   if [ "$SPAWN_UAV" != "true" ]; then
     cmd+=(
       "start_uav_simulator:=false"
-      "publish_pose_cmd_topics:=false"
+      "start_uav_follow:=false"
+      "start_camera_tracker:=false"
       "require_uav_actual_before_motion:=false"
     )
   fi
@@ -415,7 +444,8 @@ follow_extra_args() {
   if [ "$SPAWN_UAV" != "true" ]; then
     printf '%s\n' \
       "start_uav_simulator:=false" \
-      "publish_pose_cmd_topics:=false" \
+      "start_uav_follow:=false" \
+      "start_camera_tracker:=false" \
       "require_uav_actual_before_motion:=false"
   fi
 }
@@ -428,7 +458,7 @@ write_follow_params_file() {
   local output_file
   output_file="$(follow_params_file)"
   mkdir -p "$STATE_DIR"
-  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" <<'PY'
+  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" "$(route_lidar_config_path)" "$(route_lidar_pc2ls_node_name)" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -436,11 +466,14 @@ import yaml
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
 pause_after_goal_s = float(sys.argv[3])
+lidar_settings_file = Path(sys.argv[4])
+pc2ls_node_name = sys.argv[5]
 
 data = yaml.safe_load(src.read_text(encoding="utf-8"))
 params = data.setdefault("ugv_nav2_driver", {}).setdefault("ros__parameters", {})
 params["pause_after_goal_s"] = pause_after_goal_s
-params["lidar_settings_file"] = "disabled"
+params["lidar_settings_file"] = str(lidar_settings_file) if lidar_settings_file.is_file() else "disabled"
+params["pc2ls_node_name"] = pc2ls_node_name
 
 dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 PY
@@ -543,8 +576,9 @@ start_base_processes() {
   fi
 
   maybe_rebuild
-  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "rebuild:=false"
+  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "sensor_profile:=$SENSOR_PROFILE" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
   wait_for_gazebo_helper_ready
+  cleanup_optional_teleop_nodes
   if [ "$SPAWN_UAV" = "true" ]; then
     send_pane_command "$SPAWN_PANE_ID" ./run.sh spawn_uav "$WORLD" "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
     if [ "$SPAWN_POST_DELAY_S" != "0" ] && [ "$SPAWN_POST_DELAY_S" != "0.0" ]; then
@@ -756,6 +790,7 @@ print_status() {
   fi
   cat <<EOF
 Session: $SESSION
+Profile: $PROFILE
 World: $WORLD
 Waypoint: $WAYPOINT
 Nav2 goals: $NAV2_GOALS
@@ -766,6 +801,9 @@ Perspective: $PERSPECTIVE
 Start rqt: $START_RQT
 Start collision monitor: $START_COLLISION_MONITOR
 Mute UGV camera: $MUTE_UGV_CAMERA
+Sensor profile: $SENSOR_PROFILE
+Clock mode: $CLOCK_MODE
+Start optional teleop: $START_OPTIONAL_TELEOP
 Map: $map_status
 Spawn UAV: $SPAWN_UAV
 UAV camera update rate: $UAV_CAMERA_UPDATE_RATE
@@ -775,6 +813,53 @@ Gazebo ready timeout: $GAZEBO_READY_TIMEOUT_S
 Gazebo settle delay: $GAZEBO_POST_READY_DELAY_S
 Spawn settle delay: $SPAWN_POST_DELAY_S
 EOF
+}
+
+apply_profile_defaults() {
+  case "$PROFILE" in
+    standard|"")
+      PROFILE="standard"
+      ;;
+    minimal)
+      if [ "$SPAWN_UAV_EXPLICIT" != "true" ]; then
+        SPAWN_UAV="false"
+      fi
+      if [ "$LIDAR_EXPLICIT" != "true" ]; then
+        LIDAR="3d"
+      fi
+      if [ "$SENSOR_PROFILE_EXPLICIT" != "true" ]; then
+        SENSOR_PROFILE="minimal"
+      fi
+      if [ "$CLOCK_MODE_EXPLICIT" != "true" ]; then
+        CLOCK_MODE="direct"
+      fi
+      if [ "$GUI_EXPLICIT" != "true" ]; then
+        GUI="false"
+      fi
+      if [ "$START_RQT_EXPLICIT" != "true" ]; then
+        START_RQT="false"
+      fi
+      if [ "$MUTE_UGV_CAMERA_EXPLICIT" != "true" ]; then
+        MUTE_UGV_CAMERA="false"
+      fi
+      if [ "$START_OPTIONAL_TELEOP_EXPLICIT" != "true" ]; then
+        START_OPTIONAL_TELEOP="false"
+      fi
+      ;;
+    *)
+      echo "Unknown profile: $PROFILE" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+cleanup_optional_teleop_nodes() {
+  if [ "$START_OPTIONAL_TELEOP" = "true" ]; then
+    return 0
+  fi
+  echo "[nav2_tuning] Stopping optional teleop nodes"
+  signal_named_nodes "optional teleop nodes" 'joy_node|teleop_twist_joy_node|twist_server_node' || true
 }
 
 if [ "$#" -gt 0 ]; then
@@ -802,6 +887,10 @@ for arg in "$@"; do
   case "$arg" in
     world:=*)
       WORLD="${arg#world:=}"
+      ;;
+    profile:=*)
+      PROFILE="${arg#profile:=}"
+      PROFILE_EXPLICIT="true"
       ;;
     waypoint:=*)
       WAYPOINT="${arg#waypoint:=}"
@@ -838,6 +927,18 @@ for arg in "$@"; do
     mute_ugv_camera:=*)
       MUTE_UGV_CAMERA="${arg#mute_ugv_camera:=}"
       MUTE_UGV_CAMERA_EXPLICIT="true"
+      ;;
+    sensor_profile:=*)
+      SENSOR_PROFILE="${arg#sensor_profile:=}"
+      SENSOR_PROFILE_EXPLICIT="true"
+      ;;
+    clock_mode:=*)
+      CLOCK_MODE="${arg#clock_mode:=}"
+      CLOCK_MODE_EXPLICIT="true"
+      ;;
+    start_optional_teleop:=*)
+      START_OPTIONAL_TELEOP="${arg#start_optional_teleop:=}"
+      START_OPTIONAL_TELEOP_EXPLICIT="true"
       ;;
     map:=*)
       MAP_PATH="${arg#map:=}"
@@ -902,6 +1003,8 @@ for arg in "$@"; do
   esac
 done
 
+apply_profile_defaults
+
 if [[ "$WORLD" == baylands* ]]; then
   baylands_sync_waypoints "$DRY_RUN"
 fi
@@ -911,6 +1014,7 @@ mapfile -t route_default_lidar_args < <(route_lidar_preset_args "$NAV2_GOALS" "$
 TUNING_LIDAR_ARGS+=("${route_default_lidar_args[@]}")
 
 CLI_WORLD="$WORLD"
+CLI_PROFILE="$PROFILE"
 CLI_WAYPOINT="$WAYPOINT"
 CLI_NAV2_GOALS="$NAV2_GOALS"
 CLI_LIDAR="$LIDAR"
@@ -920,6 +1024,9 @@ CLI_PERSPECTIVE="$PERSPECTIVE"
 CLI_START_RQT="$START_RQT"
 CLI_START_COLLISION_MONITOR="$START_COLLISION_MONITOR"
 CLI_MUTE_UGV_CAMERA="$MUTE_UGV_CAMERA"
+CLI_SENSOR_PROFILE="$SENSOR_PROFILE"
+CLI_CLOCK_MODE="$CLOCK_MODE"
+CLI_START_OPTIONAL_TELEOP="$START_OPTIONAL_TELEOP"
 CLI_MAP_PATH="$MAP_PATH"
 CLI_SPAWN_UAV="$SPAWN_UAV"
 CLI_UAV_CAMERA_UPDATE_RATE="$UAV_CAMERA_UPDATE_RATE"
@@ -936,6 +1043,10 @@ fi
 
 if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   load_state
+  if [ "$PROFILE_EXPLICIT" = "true" ]; then
+    PROFILE="$CLI_PROFILE"
+    apply_profile_defaults
+  fi
   if [ "$WAYPOINT_EXPLICIT" = "true" ]; then
     WAYPOINT="$CLI_WAYPOINT"
   fi
@@ -962,6 +1073,15 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$MUTE_UGV_CAMERA_EXPLICIT" = "true" ]; then
     MUTE_UGV_CAMERA="$CLI_MUTE_UGV_CAMERA"
+  fi
+  if [ "$SENSOR_PROFILE_EXPLICIT" = "true" ]; then
+    SENSOR_PROFILE="$CLI_SENSOR_PROFILE"
+  fi
+  if [ "$CLOCK_MODE_EXPLICIT" = "true" ]; then
+    CLOCK_MODE="$CLI_CLOCK_MODE"
+  fi
+  if [ "$START_OPTIONAL_TELEOP_EXPLICIT" = "true" ]; then
+    START_OPTIONAL_TELEOP="$CLI_START_OPTIONAL_TELEOP"
   fi
   if [ "$MAP_EXPLICIT" = "true" ]; then
     MAP_PATH="$CLI_MAP_PATH"

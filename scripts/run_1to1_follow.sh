@@ -86,8 +86,23 @@ HAVE_UGV_INITIAL_POSE_Y="false"
 HAVE_UGV_INITIAL_POSE_YAW="false"
 HAVE_UGV_GOAL_SEQUENCE="false"
 HAVE_UGV_SET_INITIAL_POSE="false"
+START_UAV_SIMULATOR_VALUE="true"
+HAVE_START_UAV_FOLLOW="false"
+HAVE_START_CAMERA_TRACKER="false"
 for arg in "$@"; do
   case "$arg" in
+    start_uav_simulator:=*)
+      START_UAV_SIMULATOR_VALUE="${arg#start_uav_simulator:=}"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    start_uav_follow:=*)
+      HAVE_START_UAV_FOLLOW="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
+    start_camera_tracker:=*)
+      HAVE_START_CAMERA_TRACKER="true"
+      EXTRA_ARGS+=("$arg")
+      ;;
     camera:=*|camera_mode:=*)
       camera_mode="${arg#camera:=}"
       if [[ "$arg" == camera_mode:=* ]]; then
@@ -223,6 +238,15 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [ "$START_UAV_SIMULATOR_VALUE" = "false" ]; then
+  if [ "$HAVE_START_UAV_FOLLOW" = "false" ]; then
+    EXTRA_ARGS+=("start_uav_follow:=false")
+  fi
+  if [ "$HAVE_START_CAMERA_TRACKER" = "false" ]; then
+    EXTRA_ARGS+=("start_camera_tracker:=false")
+  fi
+fi
 
 if [[ "$WORLD" == baylands* ]] && [ "$HAVE_UGV_GOAL_SEQUENCE" = "false" ]; then
   EXTRA_ARGS+=("nav2_goals:=$(baylands_route_yaml_path "$BAYLANDS_DEFAULT_NAV2_GOALS")")

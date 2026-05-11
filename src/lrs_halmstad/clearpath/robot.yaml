@@ -36,10 +36,10 @@ platform:
     ros_parameters:
       platform_velocity_controller:
         cmd_vel_timeout: 5.0
-        linear.x.max_velocity: 1.0
-        linear.x.min_velocity: -1.0
-        linear.x.max_acceleration: 0.5
-        angular.z.max_velocity: 0.8
+        linear.x.max_velocity: 2.0
+        linear.x.min_velocity: -1.5
+        linear.x.max_acceleration: 1.2
+        angular.z.max_velocity: 1.0
         angular.z.min_velocity: -1.0
         angular.z.max_acceleration: 0.6
         angular.z.max_deceleration: -0.8
@@ -61,8 +61,8 @@ sensors:
       urdf_enabled: true
       launch_enabled: true
       parent: base_link
-      xyz: [0.31, 0.0, 0.18]
-      rpy: [0.0, -0.1, 0.0]
+      xyz: [0.36, 0.0, 0.15]
+      rpy: [0.0, -0.2, 0.0]
       ros_parameters:
         camera:
           camera_name: camera_0
@@ -72,7 +72,7 @@ sensors:
           image_width: 640
           enable_color: true
           rgb_camera.profile: 640,480,30
-          enable_depth: false
+          enable_depth: true
           depth_module.profile: 640,480,30
           pointcloud.enable: false
           update_rate: 20
@@ -112,8 +112,10 @@ sensors:
           model: VLP16
           fixed_frame: lidar3d_0_laser
           target_frame: lidar3d_0_laser
-          update_rate: 20
-          min_ang_v: -0.4
-          max_ang_v: 0.4
-          min_range: 0.4
+          update_rate: 10
+          min_ang_v: -0.80
+          max_ang_v: 0.80
+          min_range: -1.0
           max_range: 30.0
+          min_ang_h: -3.141592
+          max_ang_h: 3.141592

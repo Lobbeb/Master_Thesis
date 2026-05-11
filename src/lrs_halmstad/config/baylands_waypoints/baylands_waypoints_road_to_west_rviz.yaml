@@ -95,16 +95,4 @@ waypoints:
     - 0.0
     - -0.7823383063321628
     group: road_to_west
-  waypoint8:
-    name: road_to_west_8
-    pose:
-    - 8.940350038318554
-    - 200.927074135273
-    - 0.0
-    orientation:
-    - 0.16325653479680755
-    - 0.0
-    - 0.0
-    - 0.9865836527361168
-    group: road_to_west
 group: road_to_west

@@ -23,9 +23,6 @@ HAVE_UAV_START_Y="false"
 HAVE_UAV_START_YAW="false"
 HAVE_UAV_START_Z="false"
 HAVE_UGV_USE_AMCL_ODOM_FALLBACK="false"
-HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="false"
-HAVE_PUBLISH_POSE_CMD_TOPICS="false"
-HAVE_PUBLISH_CAMERA_DEBUG_TOPICS="false"
 HAVE_YOLO_DEVICE="false"
 HAVE_UGV_START_DELAY="false"
 HAVE_DETECTOR_BACKEND="false"
@@ -221,18 +218,6 @@ for arg in "$@"; do
       EXTRA_ARGS+=("$arg")
       ;;
     params_file:=*)
-      EXTRA_ARGS+=("$arg")
-      ;;
-    publish_follow_debug_topics:=*)
-      HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    publish_pose_cmd_topics:=*)
-      HAVE_PUBLISH_POSE_CMD_TOPICS="true"
-      EXTRA_ARGS+=("$arg")
-      ;;
-    publish_camera_debug_topics:=*)
-      HAVE_PUBLISH_CAMERA_DEBUG_TOPICS="true"
       EXTRA_ARGS+=("$arg")
       ;;
     folder:=*|dir:=*|subdir:=*)
@@ -610,15 +595,6 @@ if [[ "$WORLD" == baylands* ]]; then
   if [ "$HAVE_UGV_USE_AMCL_ODOM_FALLBACK" != "true" ]; then
     EXTRA_ARGS+=("ugv_use_amcl_odom_fallback:=false")
   fi
-fi
-if [ "$HAVE_PUBLISH_FOLLOW_DEBUG_TOPICS" != true ]; then
-  EXTRA_ARGS+=("publish_follow_debug_topics:=false")
-fi
-if [ "$HAVE_PUBLISH_POSE_CMD_TOPICS" != true ]; then
-  EXTRA_ARGS+=("publish_pose_cmd_topics:=false")
-fi
-if [ "$HAVE_PUBLISH_CAMERA_DEBUG_TOPICS" != true ]; then
-  EXTRA_ARGS+=("publish_camera_debug_topics:=false")
 fi
 if [ "$HAVE_YOLO_DEVICE" != true ]; then
   EXTRA_ARGS+=("yolo_device:=auto")
