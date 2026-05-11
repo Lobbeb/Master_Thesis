@@ -1,5 +1,10 @@
 frame_id: map
 waypoints:
+- name: road_to_east_0
+  x: -22.568740393783916
+  y: 77.73623030332212
+  yaw_deg: -79.32161934867283
+  group: road_to_east
 - name: road_to_east_1
   x: -20.83630500090324
   y: 70.20627474095532

@@ -5,7 +5,7 @@ bt_navigator:
     robot_base_frame: base_link
     odom_topic: platform/odom/filtered
     bt_loop_duration: 10
-    default_server_timeout: 20
+    default_server_timeout: 50
     wait_for_service_timeout: 1000
     action_server_result_timeout: 900.0
     navigators: ["navigate_to_pose", "navigate_through_poses"]
@@ -53,8 +53,8 @@ controller_server:
       vy_std: 0.25
       wz_std: 0.6
       vx_max: 2.0
-      vx_min: -0.2
-      vy_max: 0.5
+      vx_min: -0.6
+      vy_max: 1.5
       wz_max: 2.5
       iteration_count: 1
       prune_distance: 1.7
@@ -134,8 +134,8 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_link
       rolling_window: true
-      width: 8
-      height: 8
+      width: 6
+      height: 6
       resolution: 0.05
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
       always_send_full_costmap: true
@@ -145,7 +145,7 @@ local_costmap:
       plugins: ["obstacle_layer", "denoise_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: false
+        enabled: true
         footprint_clearing_enabled: true
         observation_sources: scan
         scan:
@@ -153,11 +153,11 @@ local_costmap:
           data_type: "LaserScan"
           marking: true
           clearing: true
-          max_obstacle_height: 1.0
-          raytrace_max_range: 4.0
-          raytrace_min_range: 0.4
-          obstacle_max_range: 4.0
-          obstacle_min_range: 0.4
+          max_obstacle_height: 0.2
+          raytrace_max_range: 3.0
+          raytrace_min_range: -0.4
+          obstacle_max_range: 3.0
+          obstacle_min_range: -0.4
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
         enabled: true
@@ -215,17 +215,12 @@ planner_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
     # expected_planner_frequency: 20.0
-    # planner_plugins: ["GridBased"]
+    planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.8
-      use_astar: false
-      allow_unknown: false
-      # plugin: "nav2_theta_star_planner::ThetaStarPlanner" # In Iron and older versions, "/" was used instead of "::"
-      # how_many_corners: 4
-      # w_euc_cost: 1.0
-      # w_traversal_cost: 1.0
-      # allow_unknown: false   
+      tolerance: 1.0
+      use_astar: true
+      allow_unknown: true
 
 
 smoother_server:
@@ -272,8 +267,8 @@ behavior_server:
 waypoint_follower:
   ros__parameters:
     enable_stamped_cmd_vel: true
-    loop_rate: 10
-    stop_on_failure: true
+    loop_rate: 5
+    stop_on_failure: false
     action_server_result_timeout: 900.0
     waypoint_task_executor_plugin: "wait_at_waypoint"
     wait_at_waypoint:
@@ -289,12 +284,13 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [1.0, 0.0, 1.5]
     min_velocity: [-1.0, 0.0, -1.5]
-    max_accel: [2.0, 0.0, 3.0]
-    max_decel: [-2.0, 0.0, -3.0]
+    max_accel: [2.5, 0.0, 3.2]
+    max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "platform/odom/filtered"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
+    stamp_smoothed_velocity_with_smoothing_time: true
 
 collision_monitor:
   ros__parameters:

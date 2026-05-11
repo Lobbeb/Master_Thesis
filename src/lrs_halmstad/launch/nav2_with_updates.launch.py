@@ -40,7 +40,7 @@ ARGUMENTS = [
     ),
     DeclareLaunchArgument(
         "use_pointcloud_to_laserscan",
-        default_value="false",
+        default_value="true",
         choices=["true", "false"],
         description="Convert an incoming point cloud into a 2D LaserScan before Nav2",
     ),

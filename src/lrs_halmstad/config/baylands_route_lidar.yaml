@@ -17,6 +17,9 @@ routes:
   road_to_strip:
     pc2ls_min_height: -0.4
     pc2ls_max_height: 0.4
+  spawn:
+    pc2ls_min_height: -0.64
+    pc2ls_max_height: 0.0
   strip:
     pc2ls_min_height: -0.36
     pc2ls_max_height: 0.12
@@ -73,50 +76,50 @@ waypoints:
     pc2ls_min_height: -0.4
     pc2ls_max_height: 0.4
   road_to_west_8:
-    pc2ls_min_height: -0.675
+    pc2ls_min_height: -0.66
     pc2ls_max_height: -0.24
   parkinglot_west_0:
-    pc2ls_min_height: -0.675
-    pc2ls_max_height: -0.15
+    pc2ls_min_height: -0.64
+    pc2ls_max_height: 0.0
   parkinglot_west_1:
-    pc2ls_min_height: -0.675
-    pc2ls_max_height: -0.15
+    pc2ls_min_height: -0.64
+    pc2ls_max_height: 0.0
   parkinglot_west_2:
-    pc2ls_min_height: -0.675
+    pc2ls_min_height: -0.65
     pc2ls_max_height: 0.26
   parkinglot_west_3:
-    pc2ls_min_height: -0.68
-    pc2ls_max_height: 0.2
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_4:
-    pc2ls_min_height: -0.675
+    pc2ls_min_height: -0.65
     pc2ls_max_height: 0.26
   parkinglot_west_5:
-    pc2ls_min_height: -0.68
+    pc2ls_min_height: -0.65
     pc2ls_max_height: 0.26
   parkinglot_west_7:
-    pc2ls_min_height: -0.68
+    pc2ls_min_height: -0.67
     pc2ls_max_height: 0.2
   parkinglot_west_10:
-    pc2ls_min_height: -0.675
+    pc2ls_min_height: -0.66
     pc2ls_max_height: 0.25
   parkinglot_west_12:
-    pc2ls_min_height: -0.68
-    pc2ls_max_height: 0.2
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_14:
-    pc2ls_min_height: -0.685
-    pc2ls_max_height: 0.25
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_15:
-    pc2ls_min_height: -0.685
-    pc2ls_max_height: 0.25
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_16:
-    pc2ls_min_height: -0.68
-    pc2ls_max_height: 0.25
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_20:
-    pc2ls_min_height: -0.68
-    pc2ls_max_height: 0.25
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   parkinglot_west_21:
-    pc2ls_min_height: -0.68
-    pc2ls_max_height: 0.25
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.26
   road_to_spawn_3:
     pc2ls_min_height: -0.1
     pc2ls_max_height: 1.2
@@ -167,9 +170,15 @@ waypoints:
   road_to_spawn_10:
     pc2ls_min_height: -0.68
     pc2ls_max_height: 0.0
+  spawn_0:
+    pc2ls_min_height: -0.68
+    pc2ls_max_height: 0.0
+  spawn_1:
+    pc2ls_min_height: -0.64
+    pc2ls_max_height: 0.0
   spawn_2:
-    pc2ls_min_height: -0.6
-    pc2ls_max_height: -0.1
+    pc2ls_min_height: -0.64
+    pc2ls_max_height: 0.0
   spawn_3:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 1.0
