@@ -40,4 +40,9 @@ waypoints:
   y: 201.69912372961946
   yaw_deg: -102.95033984794381
   group: road_to_west
+- name: road_to_west_8
+  x: 9.075881521856946
+  y: 200.61431382486512
+  yaw_deg: 179.91661718694868
+  group: road_to_west
 group: road_to_west

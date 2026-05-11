@@ -214,6 +214,7 @@ waypoints:
     - 0.0
     - 0.0
     - 0.9999997352610669
+    group: road_to_west
   waypoint18:
     name: parkinglot_west_0
     pose:
@@ -645,6 +646,7 @@ waypoints:
     - 0.0
     - 0.0
     - -0.7322494225772952
+    group: spawn
   waypoint54:
     name: spawn_3
     pose:
@@ -656,6 +658,7 @@ waypoints:
     - 0.0
     - 0.0
     - -0.28313507197819476
+    group: spawn
   waypoint55:
     name: spawn_4
     pose:
@@ -667,6 +670,7 @@ waypoints:
     - 0.0
     - 0.0
     - 0.0011883324041021492
+    group: spawn
   waypoint56:
     name: spawn_5
     pose:
@@ -678,6 +682,7 @@ waypoints:
     - 0.0
     - 0.0
     - 0.20944240392702076
+    group: spawn
   waypoint57:
     name: spawn_6
     pose:
@@ -689,6 +694,7 @@ waypoints:
     - 0.0
     - 0.0
     - 0.01676884745030104
+    group: spawn
   waypoint58:
     name: spawn_7
     pose:
@@ -700,6 +706,7 @@ waypoints:
     - 0.0
     - 0.0
     - 0.1660202830769796
+    group: spawn
   waypoint59:
     name: spawn_8
     pose:
@@ -711,6 +718,7 @@ waypoints:
     - 0.0
     - 0.0
     - -0.6042239787246734
+    group: spawn
   waypoint60:
     name: road_to_east_0
     pose:
