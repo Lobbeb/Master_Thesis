@@ -57,6 +57,7 @@ opt/omnetpp-*/
 /datasets
 /descriptions/
 *_MATH.md
+!/models/obb/mymodels/baylands-v1-yolo26n-obb.pt
 
 # --- Local debug helpers ---
 /run_follow_yaw_debug.py
