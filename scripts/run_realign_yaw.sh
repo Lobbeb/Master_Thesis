@@ -354,7 +354,7 @@ if [ "$DRY_RUN" = "true" ]; then
   cat <<EOF
 
 [dry-run] Would pause:
-$GZ_BIN service -s /world/${GZ_WORLD}/control --reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean --timeout 3000 --req 'pause: true'
+$GZ_BIN service -s /world/${GZ_WORLD}/control --reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean --timeout 1000 --req 'pause: true'
 
 [dry-run] Would ensure bridge:
 ros2 run ros_gz_bridge parameter_bridge /world/${GZ_WORLD}/set_pose@ros_gz_interfaces/srv/SetEntityPose
@@ -373,7 +373,7 @@ EOF
     cat <<EOF
 
 [dry-run] Would unpause:
-$GZ_BIN service -s /world/${GZ_WORLD}/control --reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean --timeout 3000 --req 'pause: false'
+$GZ_BIN service -s /world/${GZ_WORLD}/control --reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean --timeout 1000 --req 'pause: false'
 EOF
   fi
   exit 0
