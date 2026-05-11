@@ -53,11 +53,13 @@ opt/omnetpp-*/
 *.zip
 
 # --- Local ML weights and datasets ---
-/models
+/models/obb/yolo*
+/models/detection
+/models/detection
+/models/obb/mymodels/warehouse*.pt
 /datasets
 /descriptions/
 *_MATH.md
-!/models/obb/mymodels/baylands-v1-yolo26n-obb.pt
 
 # --- Local debug helpers ---
 /run_follow_yaw_debug.py
@@ -66,7 +68,10 @@ opt/omnetpp-*/
 /run_record_pose_alignment.sh
 
 # --- Local Baylands map experiments ---
-/maps/baylands_finished*
+/maps/backups
+/maps/baylands_merged.pgm
+/maps/baylands_merged.yaml
+
 !/maps/baylands_finished_v3_nav_20cm.pgm
 !/maps/baylands_finished_v3_nav_20cm.yaml
 !/maps/baylands_finished_v3_nav_20cm_merged.pgm
