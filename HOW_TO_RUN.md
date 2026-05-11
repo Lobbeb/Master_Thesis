@@ -78,16 +78,21 @@ Examples:
  - ./run.sh.sh nav2_tuning stop
  - ./run.sh.sh nav2_tuning attach
 
+ Sen attacha med tmux för att kika på vad som händer:
+ ```bash
+ tmux attach
+ ```
+
 *Nav2 Goals/routes du kan välja på: (I ordern dem är i den stora rutten):*
-- rotundan
-- road_to_west
-- parkinglot_west
-- road_to_spawn
-- spawn
-- road_to_east
-- parkinglot_east
-- road_to_strip
-- strip
+- rotundan          (finished)
+- road_to_west      (finished)
+- parkinglot_west   (finished)
+- road_to_spawn     (needs tuning)
+- spawn             (finished)
+- road_to_east      (needs tuning)
+- parkinglot_east   (needs tuning)
+- road_to_strip     (needs tuning)
+- strip             (needs tuning)
 
 *Enstaka rutter inte kopplade till baylands_waypoints rutten:*
 - art

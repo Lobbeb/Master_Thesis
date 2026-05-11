@@ -82,8 +82,8 @@ class SimDatasetCapture(Node):
         self.declare_parameter("camera_info_topic", "")
         self.declare_parameter("camera_pose_topic", "")
         self.declare_parameter("target_pose_topic", "/a201_0000/amcl_pose_odom")
-        self.declare_parameter("output_dir", "datasets/warehouse_auto")
-        self.declare_parameter("dataset_name", "warehouse_auto")
+        self.declare_parameter("output_dir", "datasets/baylands_auto")
+        self.declare_parameter("dataset_name", "baylands_auto")
         self.declare_parameter("class_id", 0)
         self.declare_parameter("class_name", "ugv")
         self.declare_parameter("camera_pose_timeout_s", 10.0)
@@ -109,7 +109,7 @@ class SimDatasetCapture(Node):
         )
         self.target_pose_topic = str(self.get_parameter("target_pose_topic").value)
         self.output_dir = os.path.abspath(os.path.expanduser(str(self.get_parameter("output_dir").value)))
-        self.dataset_name = str(self.get_parameter("dataset_name").value).strip() or "warehouse_auto"
+        self.dataset_name = str(self.get_parameter("dataset_name").value).strip() or "baylands_auto"
         self.class_id = int(self.get_parameter("class_id").value)
         self.class_name = str(self.get_parameter("class_name").value).strip() or "ugv"
         self.camera_pose_timeout_s = float(self.get_parameter("camera_pose_timeout_s").value)
