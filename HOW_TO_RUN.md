@@ -26,6 +26,14 @@ source /opt/ros/jazzy/setup.bash
 source ~/halmstad_ws/src/lrs_halmstad/clearpath/setup.bash
 source ~/halmstad_ws/install/setup.bash
 ```
+Tips: lägg till detta i din *.bashrc* fil
+```bash 
+build() {
+    colcon build --symlink-install --packages-select lrs_halmstad lrs_halmstad_gui_plugins pointcloud_to_laserscan
+    source /opt/ros/jazzy/setup.bash
+    source ~/halmstad_ws/src/lrs_halmstad/clearpath/setup.bash
+    source ~/halmstad_ws/install/setup.bash
+```
 ```bash
 ./run.sh.sh nav2_tuning start nav2_goals:= ... waypoint:= ... spawn_uav:=true
 ```
