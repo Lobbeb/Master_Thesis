@@ -14,3 +14,8 @@
 - **art**              - *(needs tuning)*
 - **playground**       - *(needs tuning)*
 
+## ISSUES
+
+* When running with *spawn_uav:=false* all **dji0** topics are still published at 10 Hz.
+* */a201_0000/bond* publishes at 200 Hz.
+* */coord* and other topics are published by camera_tracker node even when we don't spawn a UAV for following.

@@ -121,14 +121,14 @@ waypoints:
     pc2ls_min_height: -0.65
     pc2ls_max_height: 0.26
   road_to_spawn_0:
-    pc2ls_min_height: -0.67
-    pc2ls_max_height: 1.0
+    pc2ls_min_height: -0.59
+    pc2ls_max_height: 0.1
   road_to_spawn_1:
     pc2ls_min_height: -0.55
     pc2ls_max_height: 0.3
   road_to_spawn_2:
     pc2ls_min_height: -0.54
-    pc2ls_max_height: 0.5
+    pc2ls_max_height: 0.1
   road_to_spawn_3:
     pc2ls_min_height: -0.54
     pc2ls_max_height: 0.5
@@ -181,26 +181,38 @@ waypoints:
     pc2ls_min_height: -0.54
     pc2ls_max_height: 0.0
   road_to_east_0:
-    pc2ls_min_height: -0.59
+    pc2ls_min_height: -0.64
     pc2ls_max_height: 0.1
   road_to_east_1:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.5
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.1
   road_to_east_2:
     pc2ls_min_height: -0.5
-    pc2ls_max_height: 0.5
+    pc2ls_max_height: 0.1
   road_to_east_3:
-    pc2ls_min_height: -0.61
-    pc2ls_max_height: 0.5
+    pc2ls_min_height: -0.57
+    pc2ls_max_height: 0.1
   road_to_east_4:
-    pc2ls_min_height: -0.45
-    pc2ls_max_height: 0.5
+    pc2ls_min_height: -0.58
+    pc2ls_max_height: 0.0 
   road_to_east_5:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
+  road_to_east_6:
+    pc2ls_min_height: -0.59
+    pc2ls_max_height: 0.5
+  road_to_east_7:
+    pc2ls_min_height: -0.59
+    pc2ls_max_height: -0.4
+  road_to_east_8:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.0
+  road_to_east_9:
     pc2ls_min_height: -0.56
     pc2ls_max_height: 0.6
-  road_to_east_6:
+  road_to_east_10:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 1.3
-  road_to_east_7:
+  road_to_east_11:
     pc2ls_min_height: -0.63
     pc2ls_max_height: 0.4
