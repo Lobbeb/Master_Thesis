@@ -6,15 +6,15 @@ WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
 
-SPEED="0.20"
-TURN="0.25"
+SPEED="0.50"
+TURN="0.30"
 TOPIC=""
 NAMESPACE="$(slam_state_namespace "$WS_ROOT")"
 DRY_RUN="false"
 
 usage() {
   cat <<EOF
-Usage: ./run.sh teleop [speed:=0.20] [turn:=0.25] [namespace:=a201_0000] [topic:=/a201_0000/cmd_vel] [dry_run:=true|false]
+Usage: ./run.sh teleop [speed:=50] [turn:=30] [namespace:=a201_0000] [topic:=/a201_0000/cmd_vel] [dry_run:=true|false]
 
 Examples:
   ./run.sh teleop

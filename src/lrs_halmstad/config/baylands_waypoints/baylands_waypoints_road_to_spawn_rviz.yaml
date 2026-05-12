@@ -119,4 +119,16 @@ waypoints:
     - 0.0
     - 0.7884196581147916
     group: road_to_spawn
+  waypoint10:
+    name: road_to_spawn_10
+    pose:
+    - 4.362795445194915
+    - 91.10918873865954
+    - 0.0
+    orientation:
+    - 0.04722113699782993
+    - 0.0
+    - 0.0
+    - -0.9988844598954537
+    group: road_to_spawn
 group: road_to_spawn
