@@ -241,7 +241,7 @@ class VisualFollowController(Node):
 
         camera_info_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10,
+            depth=5,
             reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.VOLATILE,
         )

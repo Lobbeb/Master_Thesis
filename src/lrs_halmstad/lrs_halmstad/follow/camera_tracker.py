@@ -312,8 +312,8 @@ class CameraTracker(Node):
         if self.gimbal_override_hold_s > 0.0:
             self.create_subscription(Float64, f"/{self.uav_name}/tilt_override", self.on_tilt_override, 10)
             self.create_subscription(Float64, f"/{self.uav_name}/pan_override", self.on_pan_override, 10)
-        self.tilt_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_tilt", 10)
-        self.pan_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_pan", 10)
+        #self.tilt_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_tilt", 10)
+        #self.pan_pub = self.create_publisher(Float64, f"/{self.uav_name}/update_pan", 10)
         self.timer = self.create_timer(1.0 / self.tick_hz, self.on_tick)
         self.get_logger().info(
             f"[camera_tracker] Started: uav={self.uav_name}, leader_input={self.leader_input_type}, "
@@ -924,7 +924,7 @@ class CameraTracker(Node):
         else:
             target_tilt_cmd_deg = float(self.default_tilt_deg)
             tilt_msg.data = float(self.default_tilt_deg)
-        self.tilt_pub.publish(tilt_msg)
+        #self.tilt_pub.publish(tilt_msg)
         self.last_tilt_cmd_deg = float(tilt_msg.data)
 
         pan_msg = Float64()
@@ -944,7 +944,7 @@ class CameraTracker(Node):
             pan_msg.data = float(self.last_pan_cmd_deg)
         else:
             pan_msg.data = float(self.default_pan_deg)
-        self.pan_pub.publish(pan_msg)
+        #self.pan_pub.publish(pan_msg)
         self.last_pan_cmd_deg = float(pan_msg.data)
 
 

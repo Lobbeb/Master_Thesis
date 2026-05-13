@@ -21,7 +21,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
-    controller_frequency: 20.0
+    controller_frequency: 10.0
     min_x_velocity_threshold: 0.01
     min_y_velocity_threshold: 1.0
     min_theta_velocity_threshold: 0.01
@@ -43,9 +43,9 @@ controller_server:
       path_length_tolerance: 2.0
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 40
+      time_steps: 30
       model_dt: 0.1
-      batch_size: 800
+      batch_size: 500
       ax_max: 3.5
       ax_min: -3.5
       ay_max: 3.0
@@ -256,9 +256,6 @@ behavior_server:
     drive_on_heading.deceleration_limit: -3.5
     drive_on_heading.minimum_speed: 0.0
     # AssistedTeleop
-
-
-
 
 
 waypoint_follower:

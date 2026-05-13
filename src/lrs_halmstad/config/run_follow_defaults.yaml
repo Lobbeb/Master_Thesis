@@ -462,7 +462,7 @@ ugv_nav2_driver:
     goal_result_timeout_s: 600.0             # Cancel and advance if Nav2 has not returned a result within this timeout.
     min_goal_xy_delta_m: 0.05                 # Skip a goal if its XY distance from current pose is below this; keep 0.01-0.5 m.
     min_goal_yaw_delta_deg: 2.0              # Skip a goal if its yaw distance from current pose is below this; keep 1-10 deg.
-    pause_after_goal_s: 0.0                 # Dwell time at each completed goal before sending the next one.
+    pause_after_goal_s: 0.5                 # Dwell time at each completed goal before sending the next one.
     lidar_settings_file: ""                 # Optional YAML with waypoints.<name>.pc2ls_* runtime overrides.
     pc2ls_node_name: /a201_0000/pointcloud_to_laserscan  # Node updated when waypoint lidar overrides are present.
     pc2ls_update_timeout_s: 2.0             # Timeout for runtime pointcloud_to_laserscan parameter updates.
@@ -477,5 +477,5 @@ ugv_nav2_driver:
     turn_time_s: 0.65             # Duration of generated turns in seconds.
     pause_every_n: 0                  # Insert a pause every N generated segments; 0 = disabled.
     pause_time_s: 0.0                # Duration of generated pauses in seconds.
-    variation_enable: true      # Enable random variation in the generated route for more natural motion.
+    variation_enable: false      # Enable random variation in the generated route for more natural motion.
     variation_amplitude: 0.10    # Amplitude of random variation added to generated segments; keep 0-0.3.

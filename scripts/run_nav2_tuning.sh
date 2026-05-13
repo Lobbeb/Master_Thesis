@@ -18,9 +18,8 @@ PAUSE_AFTER_GOAL_S="0.0"
 GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="false"
-START_COLLISION_MONITOR="true"
+START_COLLISION_MONITOR="false"
 MUTE_UGV_CAMERA="true"
-SENSOR_PROFILE="nav"
 CLOCK_MODE="guarded"
 START_OPTIONAL_TELEOP="true"
 MAP_PATH="maps/baylands.yaml"
@@ -37,7 +36,7 @@ REALIGN="true"
 
 FOLLOW_START_DELAY_S="15.0"
 LOCALIZATION_READY_TIMEOUT_S="15"
-LOCALIZATION_SCAN_READY_TIMEOUT_S="20"
+LOCALIZATION_SCAN_READY_TIMEOUT_S="15"
 STACK_STOP_GRACE_S="3"
 GAZEBO_READY_TIMEOUT_S="20"
 GAZEBO_POST_READY_DELAY_S="10"
@@ -55,7 +54,6 @@ PERSPECTIVE_EXPLICIT="false"
 START_RQT_EXPLICIT="false"
 START_COLLISION_MONITOR_EXPLICIT="false"
 MUTE_UGV_CAMERA_EXPLICIT="false"
-SENSOR_PROFILE_EXPLICIT="false"
 CLOCK_MODE_EXPLICIT="false"
 START_OPTIONAL_TELEOP_EXPLICIT="false"
 MAP_EXPLICIT="false"
@@ -89,7 +87,6 @@ CLI_PERSPECTIVE=""
 CLI_START_RQT=""
 CLI_START_COLLISION_MONITOR=""
 CLI_MUTE_UGV_CAMERA=""
-CLI_SENSOR_PROFILE=""
 CLI_CLOCK_MODE=""
 CLI_START_OPTIONAL_TELEOP=""
 CLI_MAP_PATH=""
@@ -132,8 +129,8 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
   [pause_after_goal_s:=0.0]
   [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_collision_monitor:=true|false] [map:=maps/baylands.yaml]
-  [sensor_profile:=full|nav|minimal] [clock_mode:=guarded|direct]
-  [mute_ugv_camera:=true|false]  # compatibility alias; true maps full camera down to RGB-only
+  [clock_mode:=guarded|direct]
+  [mute_ugv_camera:=true|false]  # true maps the UGV camera bridge to RGB-only
   [start_optional_teleop:=true|false]
   [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=15.0]
   [uav_camera_update_rate:=10]
@@ -202,7 +199,6 @@ write_state() {
     printf 'START_RQT=%q\n' "$START_RQT"
     printf 'START_COLLISION_MONITOR=%q\n' "$START_COLLISION_MONITOR"
     printf 'MUTE_UGV_CAMERA=%q\n' "$MUTE_UGV_CAMERA"
-    printf 'SENSOR_PROFILE=%q\n' "$SENSOR_PROFILE"
     printf 'CLOCK_MODE=%q\n' "$CLOCK_MODE"
     printf 'START_OPTIONAL_TELEOP=%q\n' "$START_OPTIONAL_TELEOP"
     printf 'MAP_PATH=%q\n' "$MAP_PATH"
@@ -257,7 +253,7 @@ signal_processes_by_pattern() {
   [ -n "$matched" ] || return 1
 
   echo "[nav2_tuning] Fallback cleanup matched $label"
-  printf '%s\n' "$matched"
+  # printf '%s\n' "$matched"
 
   if [ "$DRY_RUN" != "true" ]; then
     pkill -INT -f "$pattern" 2>/dev/null || true
@@ -306,14 +302,12 @@ gazebo_cmd() {
     "gui:=$GUI"
     "waypoint:=$WAYPOINT"
     "mute_ugv_camera:=$MUTE_UGV_CAMERA"
-    "sensor_profile:=$SENSOR_PROFILE"
     "clock_mode:=$CLOCK_MODE"
   )
   echo "$(shell_join "${cmd[@]}")"
 }
 
 spawn_cmd() {
-  sleep "$SPAWN_GAZEBO_HELPER_TIMEOUT_S"
   local cmd=(
     ./run.sh spawn_uav "$WORLD"
     "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
@@ -716,10 +710,11 @@ start_base_processes() {
     fi
     echo "  1. $(gazebo_cmd) rebuild:=false"
     if [ "$SPAWN_UAV" = "true" ]; then
-      echo "  2. $(spawn_cmd)"
-      echo "  3. wait ${SPAWN_POST_DELAY_S}s"
+      echo " 2. wait ${SPAWN_PRE_DELAY_S}s"
+      echo "  3. $(spawn_cmd)"
+      echo "  4. wait ${SPAWN_POST_DELAY_S}s"
       if [ "$START_RQT" = "true" ]; then
-        echo "  4. $(rqt_cmd)"
+        echo "  5. $(rqt_cmd)"
       fi
     else
       if [ "$START_RQT" = "true" ]; then
@@ -730,7 +725,7 @@ start_base_processes() {
   fi
 
   maybe_rebuild
-  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "sensor_profile:=$SENSOR_PROFILE" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
+  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
   cleanup_optional_teleop_nodes
   if [ "$SPAWN_UAV" = "true" ]; then
     if [ "$SPAWN_PRE_DELAY_S" != "0" ] && [ "$SPAWN_PRE_DELAY_S" != "0.0" ]; then
@@ -811,7 +806,7 @@ realign_yaw() {
     return 0
   fi
   echo "[nav2_tuning] Realigning yaw at waypoint $WAYPOINT"
-  bash "$SCRIPT_DIR/run_realign_yaw.sh" "$WORLD" "waypoint:=$WAYPOINT"
+  bash "$SCRIPT_DIR/run_realign_yaw.sh" "$WORLD" "waypoint:=$WAYPOINT" "with_uav:=$SPAWN_UAV"
 }
 
 apply_startup_waypoint_lidar_settings() {
@@ -999,7 +994,6 @@ Perspective: $PERSPECTIVE
 Start rqt: $START_RQT
 Start collision monitor: $START_COLLISION_MONITOR
 Mute UGV camera: $MUTE_UGV_CAMERA
-Sensor profile: $SENSOR_PROFILE
 Clock mode: $CLOCK_MODE
 Start optional teleop: $START_OPTIONAL_TELEOP
 Map: $map_status
@@ -1023,9 +1017,6 @@ apply_profile_defaults() {
       if [ "$LIDAR_EXPLICIT" != "true" ]; then
         LIDAR="3d"
       fi
-      if [ "$SENSOR_PROFILE_EXPLICIT" != "true" ]; then
-        SENSOR_PROFILE="minimal"
-      fi
       if [ "$CLOCK_MODE_EXPLICIT" != "true" ]; then
         CLOCK_MODE="direct"
       fi
@@ -1036,7 +1027,7 @@ apply_profile_defaults() {
         START_RQT="false"
       fi
       if [ "$MUTE_UGV_CAMERA_EXPLICIT" != "true" ]; then
-        MUTE_UGV_CAMERA="false"
+        MUTE_UGV_CAMERA="true"
       fi
       if [ "$START_OPTIONAL_TELEOP_EXPLICIT" != "true" ]; then
         START_OPTIONAL_TELEOP="false"
@@ -1124,10 +1115,6 @@ for arg in "$@"; do
       MUTE_UGV_CAMERA="${arg#mute_ugv_camera:=}"
       MUTE_UGV_CAMERA_EXPLICIT="true"
       ;;
-    sensor_profile:=*)
-      SENSOR_PROFILE="${arg#sensor_profile:=}"
-      SENSOR_PROFILE_EXPLICIT="true"
-      ;;
     clock_mode:=*)
       CLOCK_MODE="${arg#clock_mode:=}"
       CLOCK_MODE_EXPLICIT="true"
@@ -1195,7 +1182,7 @@ for arg in "$@"; do
     dry_run:=*)
       DRY_RUN="${arg#dry_run:=}"
       ;;
-    pc2ls_*|scan_relay_*|use_scan_relay:=*)
+    pc2ls_:=*)
       TUNING_LIDAR_ARGS+=("$arg")
       ;;
     *)
@@ -1229,7 +1216,6 @@ CLI_PERSPECTIVE="$PERSPECTIVE"
 CLI_START_RQT="$START_RQT"
 CLI_START_COLLISION_MONITOR="$START_COLLISION_MONITOR"
 CLI_MUTE_UGV_CAMERA="$MUTE_UGV_CAMERA"
-CLI_SENSOR_PROFILE="$SENSOR_PROFILE"
 CLI_CLOCK_MODE="$CLOCK_MODE"
 CLI_START_OPTIONAL_TELEOP="$START_OPTIONAL_TELEOP"
 CLI_MAP_PATH="$MAP_PATH"
@@ -1279,9 +1265,6 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$MUTE_UGV_CAMERA_EXPLICIT" = "true" ]; then
     MUTE_UGV_CAMERA="$CLI_MUTE_UGV_CAMERA"
-  fi
-  if [ "$SENSOR_PROFILE_EXPLICIT" = "true" ]; then
-    SENSOR_PROFILE="$CLI_SENSOR_PROFILE"
   fi
   if [ "$CLOCK_MODE_EXPLICIT" = "true" ]; then
     CLOCK_MODE="$CLI_CLOCK_MODE"

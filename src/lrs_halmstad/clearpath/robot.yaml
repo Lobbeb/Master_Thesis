@@ -72,7 +72,7 @@ sensors:
           image_width: 640
           enable_color: true
           rgb_camera.profile: 640,480,30
-          enable_depth: true
+          enable_depth: false
           depth_module.profile: 640,480,30
           pointcloud.enable: false
           update_rate: 20
@@ -113,9 +113,9 @@ sensors:
           fixed_frame: lidar3d_0_laser
           target_frame: lidar3d_0_laser
           update_rate: 10
-          min_ang_v: -0.80
-          max_ang_v: 0.80
+          min_ang_v: -0.60
+          max_ang_v: 0.60
           min_range: 0.0
-          max_range: 30.0
+          max_range: 25.0
           min_ang_h: -3.141592
           max_ang_h: 3.141592

@@ -42,7 +42,7 @@ class GenSdf(Node):
         self.declare_parameter("laser", False)
         self.laser = self.get_parameter('laser').get_parameter_value().bool_value
 
-        self.declare_parameter("camera_update_rate", 30)
+        self.declare_parameter("camera_update_rate", 20)
         self.camera_update_rate = self.get_parameter('camera_update_rate').get_parameter_value().integer_value
         numeric_param = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter("camera_pitch_offset_deg", 45.0, numeric_param)

@@ -394,8 +394,6 @@ def generate_launch_description():
         remappings=[
             ('/a201_0000/sensors/camera_0/image', '/a201_0000/sensors/camera_0/color/image'),
             ('/a201_0000/sensors/camera_0/image/compressed', '/a201_0000/sensors/camera_0/color/compressed'),
-            ('/a201_0000/sensors/camera_0/image/compressedDepth', '/a201_0000/sensors/camera_0/color/compressedDepth'),
-            ('/a201_0000/sensors/camera_0/image/theora', '/a201_0000/sensors/camera_0/color/theora'),
         ],
         parameters=[{{'use_sim_time': True}}],
     )

@@ -1,4 +1,4 @@
-from geometry_msgs.msg import PoseStamped
+""" from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Float32, String
 
 from lrs_halmstad.follow.follow_math import Pose2D, quat_from_yaw
@@ -235,3 +235,4 @@ class FollowDebugPublishers:
         msg = String()
         msg.data = value
         pub.publish(msg)
+ """

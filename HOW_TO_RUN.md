@@ -56,7 +56,6 @@ Om du explicit ska skriva varenda argument:
   start_rqt:=true|false 
   start_collision_monitor:=true|false 
   map:=maps/baylands.yaml
-  sensor_profile:=full|nav|minimal 
   clock_mode:=guarded|direct
   mute_ugv_camera:=true|false
   start_optional_teleop:=true|false
