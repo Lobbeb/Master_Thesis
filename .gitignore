@@ -73,6 +73,3 @@ opt/omnetpp-*/
 /maps/backups/*.pgm
 /maps/backups/*.yaml
 /maps/*backup.csv
-
-/src/flex_sync
-/src/topic_tools

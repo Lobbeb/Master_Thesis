@@ -27,20 +27,23 @@ MAP_PATH="maps/baylands.yaml"
 SESSION=""
 TMUX_ATTACH="false"
 SPAWN_UAV="false"
-UAV_CAMERA_UPDATE_RATE="2"
+UAV_CAMERA_UPDATE_RATE="10"
 START_CAMERA_TRACKER="auto"
 WITH_FOLLOW="true"
 REBUILD="false"
 REBUILD_DONE="false"
 DRY_RUN="false"
 REALIGN="true"
-FOLLOW_START_DELAY_S="10.0"
+
+FOLLOW_START_DELAY_S="15.0"
 LOCALIZATION_READY_TIMEOUT_S="15"
-LOCALIZATION_SCAN_READY_TIMEOUT_S="10"
+LOCALIZATION_SCAN_READY_TIMEOUT_S="20"
 STACK_STOP_GRACE_S="3"
-GAZEBO_READY_TIMEOUT_S="10"
-GAZEBO_POST_READY_DELAY_S="20"
+GAZEBO_READY_TIMEOUT_S="20"
+GAZEBO_POST_READY_DELAY_S="10"
+SPAWN_PRE_DELAY_S="20"
 SPAWN_POST_DELAY_S="5"
+SPAWN_GAZEBO_HELPER_TIMEOUT_S="20"
 
 SESSION_EXPLICIT="false"
 PROFILE_EXPLICIT="false"
@@ -125,14 +128,14 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [world:=baylands]
   [profile:=standard|minimal]
   [waypoint:=rotundan_0] [nav2_goals:=rotundan] [lidar:=2d|3d]
-  [pause_after_goal_s:=10.0]
+  [pause_after_goal_s:=0.0]
   [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_collision_monitor:=true|false] [map:=maps/baylands.yaml]
   [sensor_profile:=full|nav|minimal] [clock_mode:=guarded|direct]
   [mute_ugv_camera:=true|false]  # compatibility alias; true maps full camera down to RGB-only
   [start_optional_teleop:=true|false]
-  [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
-  [uav_camera_update_rate:=2]
-  [spawn_post_delay_s:=5]
+  [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=15.0]
+  [uav_camera_update_rate:=10]
+  [spawn_post_delay_s:=10]
   [rebuild:=true|false]
   [session:=name] [tmux_attach:=true|false] [dry_run:=true|false]
 
@@ -208,6 +211,7 @@ write_state() {
     printf 'FOLLOW_START_DELAY_S=%q\n' "$FOLLOW_START_DELAY_S"
     printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
     printf 'GAZEBO_POST_READY_DELAY_S=%q\n' "$GAZEBO_POST_READY_DELAY_S"
+    printf 'SPAWN_PRE_DELAY_S=%q\n' "$SPAWN_PRE_DELAY_S"
     printf 'SPAWN_POST_DELAY_S=%q\n' "$SPAWN_POST_DELAY_S"
     printf 'TUNING_LIDAR_ARGS=('
     local arg=""
@@ -307,6 +311,7 @@ gazebo_cmd() {
 }
 
 spawn_cmd() {
+  sleep "$SPAWN_GAZEBO_HELPER_TIMEOUT_S"
   local cmd=(
     ./run.sh spawn_uav "$WORLD"
     "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
@@ -726,6 +731,10 @@ start_base_processes() {
   send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "sensor_profile:=$SENSOR_PROFILE" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
   cleanup_optional_teleop_nodes
   if [ "$SPAWN_UAV" = "true" ]; then
+    if [ "$SPAWN_PRE_DELAY_S" != "0" ] && [ "$SPAWN_PRE_DELAY_S" != "0.0" ]; then
+      echo "[nav2_tuning] Waiting ${SPAWN_PRE_DELAY_S}s before spawn"
+      sleep "$SPAWN_PRE_DELAY_S"
+    fi
     send_pane_command "$SPAWN_PANE_ID" ./run.sh spawn_uav "$WORLD" "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
     if [ "$SPAWN_POST_DELAY_S" != "0" ] && [ "$SPAWN_POST_DELAY_S" != "0.0" ]; then
       echo "[nav2_tuning] Waiting ${SPAWN_POST_DELAY_S}s after spawn"
@@ -817,7 +826,24 @@ apply_startup_waypoint_lidar_settings() {
     return 0
   fi
 
-  route_lidar_apply_pc2ls_args "startup waypoint '$WAYPOINT'" "8" "${lidar_args[@]}"
+  local -a pending_lidar_args=()
+  local arg prefix desired current
+  for arg in "${lidar_args[@]}"; do
+    prefix="${arg%%:=*}:="
+    desired="${arg#*:=}"
+    current="$(arg_value_for_prefix "$prefix" "${TUNING_LIDAR_ARGS[@]}" 2>/dev/null || true)"
+    if [ -n "$current" ] && [ "$current" = "$desired" ]; then
+      continue
+    fi
+    pending_lidar_args+=("$arg")
+  done
+
+  if [ "${#pending_lidar_args[@]}" -eq 0 ]; then
+    echo "[nav2_tuning] Startup waypoint '$WAYPOINT' lidar settings already applied by localization"
+    return 0
+  fi
+
+  route_lidar_apply_pc2ls_args "startup waypoint '$WAYPOINT'" "20" "${pending_lidar_args[@]}" || true
 }
 
 stop_stack_processes() {
@@ -1144,6 +1170,9 @@ for arg in "$@"; do
       GAZEBO_POST_READY_DELAY_S="${arg#gazebo_post_ready_delay_s:=}"
       GAZEBO_POST_READY_DELAY_EXPLICIT="true"
       ;;
+    spawn_pre_delay_s:=*)
+      SPAWN_PRE_DELAY_S="${arg#spawn_pre_delay_s:=}"
+      ;;
     spawn_post_delay_s:=*)
       SPAWN_POST_DELAY_S="${arg#spawn_post_delay_s:=}"
       SPAWN_POST_DELAY_EXPLICIT="true"
@@ -1278,6 +1307,9 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$GAZEBO_POST_READY_DELAY_EXPLICIT" = "true" ]; then
     GAZEBO_POST_READY_DELAY_S="$CLI_GAZEBO_POST_READY_DELAY_S"
+  fi
+  if [ "$SPAWN_PRE_DELAY_EXPLICIT" = "true" ]; then
+    SPAWN_PRE_DELAY_S="$CLI_SPAWN_PRE_DELAY_S"
   fi
   if [ "$SPAWN_POST_DELAY_EXPLICIT" = "true" ]; then
     SPAWN_POST_DELAY_S="$CLI_SPAWN_POST_DELAY_S"

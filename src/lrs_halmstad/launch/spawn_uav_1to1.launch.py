@@ -37,7 +37,7 @@ def _default_world_value(world_sub, warehouse_value: str, default_value: str, ba
 
 
 def generate_launch_description():
-    world_arg = DeclareLaunchArgument('world', default_value='warehouse')
+    world_arg = DeclareLaunchArgument('world', default_value='baylands')
     uav_name_arg = DeclareLaunchArgument('uav_name', default_value='dji0')
     uav_mode_arg = DeclareLaunchArgument('uav_mode', default_value='teleport')
     x_arg = DeclareLaunchArgument(

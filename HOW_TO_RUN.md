@@ -36,20 +36,21 @@ build() {
     source /opt/ros/jazzy/setup.bash
     source ~/halmstad_ws/src/lrs_halmstad/clearpath/setup.bash
     source ~/halmstad_ws/install/setup.bash
+}
 ```
 
 ```bash
-./run.sh.sh nav2_tuning start nav2_goals:= ... waypoint:= ... spawn_uav:=true
+./run.sh nav2_tuning start nav2_goals:=... waypoint:=... spawn_uav:=true
 ```
 
 Om du explicit ska skriva varenda argument:
 
 ```bash
-./run.sh.sh nav2_tuning start|restart|stack_stop|follow|route_stop|stop|attach|status
+./run.sh nav2_tuning start|restart|stack_stop|follow|route_stop|stop|attach|status
   world:=baylands
   profile:=standard|minimal
   lidar:=2d|3d
-  pause_after_goal_s:=10.0
+  pause_after_goal_s:=0.0
   gui:=true|false 
   perspective:=NAV2 
   start_rqt:=true|false 
@@ -60,12 +61,11 @@ Om du explicit ska skriva varenda argument:
   mute_ugv_camera:=true|false
   start_optional_teleop:=true|false
   spawn_uav:=true|false
+  start_camera_tracker:=true|false
   with_route_driver:=true|false 
-  follow_start_delay_s:=3.0
-  uav_camera_update_rate:=2
-  gazebo_ready_timeout_s:=30
-  gazebo_post_ready_delay_s:=20
-  spawn_post_delay_s:=5
+  follow_start_delay_s:=15.0
+  uav_camera_update_rate:=10
+  spawn_post_delay_s:=10
   rebuild:=true|false
   session:=name 
   tmux_attach:=true|false
@@ -76,15 +76,17 @@ Om du explicit ska skriva varenda argument:
 
 Examples:
 
-* ./run.sh.sh nav2_tuning start
-* ./run.sh.sh nav2_tuning start profile:=minimal
-* ./run.sh.sh nav2_tuning start waypoint:=rotundan_0
-* ./run.sh.sh nav2_tuning restart
-* ./run.sh.sh nav2_tuning stack_stop
-* ./run.sh.sh nav2_tuning follow
-* ./run.sh.sh nav2_tuning route_stop
-* ./run.sh.sh nav2_tuning stop
-* ./run.sh.sh nav2_tuning attach
+* ./run.sh nav2_tuning start
+* ./run.sh nav2_tuning start profile:=minimal
+* ./run.sh nav2_tuning start waypoint:=rotundan_0
+* ./run.sh nav2_tuning start waypoint:=strip_2 nav2_goals:=strip
+* ./run.sh nav2_tuning start spawn_uav:=true
+* ./run.sh nav2_tuning restart
+* ./run.sh nav2_tuning stack_stop
+* ./run.sh nav2_tuning follow
+* ./run.sh nav2_tuning route_stop
+* ./run.sh nav2_tuning stop
+* ./run.sh nav2_tuning attach
 
  Sen attacha med tmux för att kika på vad som händer:
 
@@ -118,7 +120,7 @@ Första sidan visar Gazebo starten och UAV spawning, nästa sida innehåller Loc
 * parkinglot_west_0 \- 21
 * road_to_spawn_0 \- 10
 * spawn_0 \- 8
-* road_to_east_0 \- 5
+* road_to_east_0 \- 11
 * parkinglot_east_0 \- 9
 * road_to_strip_0 \- 9
 * strip_0 \- 16
@@ -133,24 +135,32 @@ Då kör den om allt och startar på samma waypoint som förut och med samma rut
 Vill du börja ifrån en ny waypoint men med samma rutt skriver du:
 
 ```bash
-./run.sh nav2_tuning restart waypoint:= NEW WAYPOINT HERE
+./run.sh nav2_tuning restart waypoint:=NEW_WAYPOINT_HERE
 ```
 
-Men om du vill påbörja en ny rutt så måste den byggas med:
+Vill du byta rutt i samma session, ge både waypoint och route:
+
+```bash
+./run.sh nav2_tuning restart waypoint:=strip_0 nav2_goals:=strip
+```
+
+Vill du påbörja en helt ny session:
 
 ```bash
 ./run.sh nav2_tuning stop
-./run.sh nav2_tuning start nav2_goals:= NEW ROUTE HERE
+./run.sh nav2_tuning start nav2_goals:=NEW_ROUTE_HERE
 ```
 
 Väljs ingen waypoint tas den första i routen automatiskt.
 
 Lidar intställningar för varje waypoint ligger i ~*src/lrs_halmstad/config/baylands_route_lidar.yaml*
-De ska sättas automatiskt strax innan vi anländer till waypointen.
+De sätts automatiskt av localization vid start och av nav2-drivern vid waypoint-övergångar.
 Manuellt kan det tunas med:
 
-```_bash
-
+```bash
+ros2 param set /a201_0000/pointcloud_to_laserscan min_height -0.4
+ros2 param set /a201_0000/pointcloud_to_laserscan max_height 0.5
+./run.sh pc2ls_sweep sweep:=min min_start:=-0.7 max:=0.5 step:=0.05 dwell_s:=1
 ```
 
 Skulle det hänga sig och det ligger massa bakgrunds processer så kör:
@@ -178,7 +188,7 @@ Configs att välja på (ligger i halmstad_ws/src/lrs_halmstad/config/rviz_config
 Jag la till images för kamerorna i där, men vill du köra med rqt så kan du göra det:
 
 ```bash
-./run.sh rqt_perspectives
+./run.sh rqt_perspective
 ```
 
 ## Dataset Collection

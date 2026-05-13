@@ -128,6 +128,40 @@ route_lidar_wait_for_pc2ls_service() {
   return 1
 }
 
+route_lidar_set_pc2ls_param() {
+  local label="$1"
+  local node="$2"
+  local param_name="$3"
+  local param_value="$4"
+  local timeout_s="${5:-8}"
+  local timeout_i="${timeout_s%.*}"
+  local deadline=$((SECONDS + timeout_i))
+  local output=""
+  local last_error=""
+
+  while [ "$SECONDS" -le "$deadline" ]; do
+    if ! route_lidar_wait_for_pc2ls_service "1" "$node"; then
+      last_error="${node}/set_parameters not available"
+      sleep 1
+      continue
+    fi
+
+    if output="$(ros2 param set --no-daemon "$node" "$param_name" "$param_value" 2>&1)"; then
+      echo "[baylands_route_lidar] Applied ${label} lidar setting: ${param_name}=${param_value}"
+      return 0
+    fi
+
+    last_error="$output"
+    sleep 1
+  done
+
+  echo "[baylands_route_lidar] Warning: failed to set ${node}.${param_name}=${param_value} within ${timeout_s}s" >&2
+  if [ -n "$last_error" ]; then
+    printf '%s\n' "$last_error" >&2
+  fi
+  return 1
+}
+
 route_lidar_apply_pc2ls_args() {
   local label="${1:-lidar}"
   local timeout_s="${2:-8}"
@@ -142,7 +176,8 @@ route_lidar_apply_pc2ls_args() {
     return 0
   fi
 
-  local arg param_name param_value
+  local arg param_name param_value failed
+  failed=0
   for arg in "$@"; do
     [ -n "$arg" ] || continue
     param_name="${arg%%:=*}"
@@ -155,12 +190,10 @@ route_lidar_apply_pc2ls_args() {
         param_name="max_height"
         ;;
     esac
-    if ros2 param set --no-daemon "$node" "$param_name" "$param_value" >/dev/null; then
-      echo "[baylands_route_lidar] Applied ${label} lidar setting: ${param_name}=${param_value}"
-    else
-      echo "[baylands_route_lidar] Warning: failed to set ${node}.${param_name}=${param_value}" >&2
-    fi
+    route_lidar_set_pc2ls_param "$label" "$node" "$param_name" "$param_value" "$timeout_s" || failed=1
   done
+
+  return 0
 }
 
 route_lidar_wait_for_scan_once() {
