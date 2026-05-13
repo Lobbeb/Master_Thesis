@@ -36,6 +36,7 @@ DRY_RUN="false"
 REALIGN="true"
 FOLLOW_START_DELAY_S="10.0"
 LOCALIZATION_READY_TIMEOUT_S="15"
+LOCALIZATION_SCAN_READY_TIMEOUT_S="10"
 STACK_STOP_GRACE_S="3"
 GAZEBO_READY_TIMEOUT_S="10"
 GAZEBO_POST_READY_DELAY_S="20"
@@ -101,6 +102,7 @@ TUNING_LIDAR_ARGS=()
 
 source "$SCRIPT_DIR/baylands_route_lidar_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
+source "$SCRIPT_DIR/lidar_mode_common.sh"
 
 # Nav2 tuning is the workflow where we actively test per-route/per-waypoint pc2ls
 # settings. Keep this on by default, but allow callers to disable it with:
@@ -130,7 +132,6 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [start_optional_teleop:=true|false]
   [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
   [uav_camera_update_rate:=2]
-  [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
   [spawn_post_delay_s:=5]
   [rebuild:=true|false]
   [session:=name] [tmux_attach:=true|false] [dry_run:=true|false]
@@ -154,7 +155,7 @@ Notes:
   - Use rebuild:=true when you change Python/launch/package-installed files and want a symlink build first.
   - RViz is intentionally not managed here. Start it separately with: ./run.sh nav2_rviz lidar:=3d
   - Explicit waypoint:=... starts Gazebo there and slices nav2_goals from that waypoint onward.
-  - Startup is sequenced: Gazebo helper ready -> optional UAV spawn -> localization -> realign_yaw -> Nav2/route driver.
+  - Startup is sequenced: Gazebo pane start -> optional UAV spawn -> localization -> realign_yaw -> Nav2/route driver.
 EOF
 }
 
@@ -700,31 +701,6 @@ create_session() {
   write_state
 }
 
-wait_for_gazebo_helper_ready() {
-  local waited=0
-  local sim_pid_file="$STATE_DIR/gazebo_sim.pid"
-  local sim_world_file="$STATE_DIR/gazebo_sim.world"
-  echo "[nav2_tuning] Waiting for gazebo_sim helper readiness..."
-  while [ "$waited" -lt "$GAZEBO_READY_TIMEOUT_S" ]; do
-    if [ -f "$sim_pid_file" ] && [ -f "$sim_world_file" ]; then
-      local sim_pid=""
-      sim_pid="$(cat "$sim_pid_file" 2>/dev/null || true)"
-      if [ -n "$sim_pid" ] && kill -0 "$sim_pid" 2>/dev/null; then
-        echo "[nav2_tuning] Gazebo helper ready"
-        if [ "$GAZEBO_POST_READY_DELAY_S" != "0" ] && [ "$GAZEBO_POST_READY_DELAY_S" != "0.0" ]; then
-          echo "[nav2_tuning] Waiting ${GAZEBO_POST_READY_DELAY_S}s for Gazebo to settle"
-          sleep "$GAZEBO_POST_READY_DELAY_S"
-        fi
-        return 0
-      fi
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  echo "[nav2_tuning] Timed out waiting for gazebo_sim helper readiness" >&2
-  return 1
-}
-
 start_base_processes() {
   if [ "$DRY_RUN" = "true" ]; then
     echo "[nav2_tuning] Would start base processes in order:"
@@ -732,16 +708,15 @@ start_base_processes() {
       echo "  0. colcon build --symlink-install"
     fi
     echo "  1. $(gazebo_cmd) rebuild:=false"
-    echo "  2. wait for /tmp/halmstad_ws/gazebo_sim.pid + .world"
     if [ "$SPAWN_UAV" = "true" ]; then
-      echo "  3. $(spawn_cmd)"
-      echo "  4. wait ${SPAWN_POST_DELAY_S}s"
+      echo "  2. $(spawn_cmd)"
+      echo "  3. wait ${SPAWN_POST_DELAY_S}s"
       if [ "$START_RQT" = "true" ]; then
-        echo "  5. $(rqt_cmd)"
+        echo "  4. $(rqt_cmd)"
       fi
     else
       if [ "$START_RQT" = "true" ]; then
-        echo "  3. $(rqt_cmd)"
+        echo "  2. $(rqt_cmd)"
       fi
     fi
     return 0
@@ -749,7 +724,6 @@ start_base_processes() {
 
   maybe_rebuild
   send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "sensor_profile:=$SENSOR_PROFILE" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
-  wait_for_gazebo_helper_ready
   cleanup_optional_teleop_nodes
   if [ "$SPAWN_UAV" = "true" ]; then
     send_pane_command "$SPAWN_PANE_ID" ./run.sh spawn_uav "$WORLD" "camera_update_rate:=$UAV_CAMERA_UPDATE_RATE"
@@ -779,6 +753,27 @@ wait_for_localization_ready() {
     waited=$((waited + 1))
   done
   echo "[nav2_tuning] Timed out waiting for localization" >&2
+  return 1
+}
+
+wait_for_localization_scan_ready() {
+  local waited=0
+  local scan_topic=""
+  scan_topic="$(lidar_mode_scan_topic "$LIDAR" 2>/dev/null || true)"
+  if [ -z "$scan_topic" ]; then
+    return 0
+  fi
+
+  echo "[nav2_tuning] Waiting for localization scan on $scan_topic..."
+  while [ "$waited" -lt "$LOCALIZATION_SCAN_READY_TIMEOUT_S" ]; do
+    if bash -lc "set +u; source /opt/ros/jazzy/setup.bash >/dev/null 2>&1; source \"$WS_ROOT/install/setup.bash\" >/dev/null 2>&1; source \"$WS_ROOT/src/lrs_halmstad/clearpath/setup.bash\" >/dev/null 2>&1; set -u; timeout 2s ros2 topic echo --no-daemon --once \"$scan_topic\" >/dev/null 2>&1"; then
+      echo "[nav2_tuning] Localization scan ready"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "[nav2_tuning] Warning: no localization scan on $scan_topic within ${LOCALIZATION_SCAN_READY_TIMEOUT_S}s; starting Nav2 anyway" >&2
   return 1
 }
 
@@ -884,6 +879,7 @@ restart_stack() {
     echo "[nav2_tuning] Would restart localization/nav2$( [ "$WITH_FOLLOW" = "true" ] && printf '/route' )"
     echo "[localization] $(localization_cmd)"
     echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
+    echo "[lidar] wait up to ${LOCALIZATION_SCAN_READY_TIMEOUT_S}s for localization scan"
     echo "[nav2] $(nav2_cmd)"
     echo "[lidar] apply waypoint-specific pc2ls settings for $WAYPOINT after Nav2 start"
     echo "[rviz] <not managed: $(rviz_cmd)>"
@@ -905,6 +901,7 @@ restart_stack() {
   fi
   wait_for_localization_ready
   realign_yaw
+  wait_for_localization_scan_ready || true
   send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR" "start_collision_monitor:=$START_COLLISION_MONITOR"
   apply_startup_waypoint_lidar_settings
 
@@ -982,8 +979,6 @@ Spawn UAV: $SPAWN_UAV
 UAV camera update rate: $UAV_CAMERA_UPDATE_RATE
 With route driver: $WITH_FOLLOW
 Follow start delay: $FOLLOW_START_DELAY_S
-Gazebo ready timeout: $GAZEBO_READY_TIMEOUT_S
-Gazebo settle delay: $GAZEBO_POST_READY_DELAY_S
 Spawn settle delay: $SPAWN_POST_DELAY_S
 EOF
 }

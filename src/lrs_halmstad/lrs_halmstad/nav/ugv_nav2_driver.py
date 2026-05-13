@@ -623,6 +623,7 @@ class UgvNav2Driver(Node):
                 goal_sequence_relative = False
 
         raw_waypoints = data.get("waypoints")
+        preserve_file_order = "source_start_waypoint" in data or "source_start_index" in data
         if isinstance(raw_waypoints, dict):
             ordered_waypoints = []
             for name, waypoint in raw_waypoints.items():
@@ -653,7 +654,11 @@ class UgvNav2Driver(Node):
         fixed_last_waypoint = ordered_waypoints[-1]
         randomizable_waypoints = ordered_waypoints[:-1]
 
-        if len(randomizable_waypoints) > 1:
+        if preserve_file_order:
+            self.get_logger().info(
+                f"Preserving sliced waypoint file order from '{self.goal_sequence_file}'"
+            )
+        elif len(randomizable_waypoints) > 1:
             randomizable_waypoints = self._reorder_file_waypoints_for_forward_start(
                 randomizable_waypoints,
                 start_pose,

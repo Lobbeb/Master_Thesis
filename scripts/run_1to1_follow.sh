@@ -13,6 +13,7 @@ DEFAULT_UAV_BODY_Y_OFFSET="0.0"
 DEFAULT_UAV_Z="7.0"
 UAV_START_Z_VALUE="$DEFAULT_UAV_Z"
 UAV_NAME="dji0"
+REQUESTED_WAYPOINT_NAME=""
 
 source "$SCRIPT_DIR/slam_state_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
@@ -91,6 +92,9 @@ HAVE_START_UAV_FOLLOW="false"
 HAVE_START_CAMERA_TRACKER="false"
 for arg in "$@"; do
   case "$arg" in
+    waypoint:=*)
+      REQUESTED_WAYPOINT_NAME="${arg#waypoint:=}"
+      ;;
     start_uav_simulator:=*)
       START_UAV_SIMULATOR_VALUE="${arg#start_uav_simulator:=}"
       EXTRA_ARGS+=("$arg")
@@ -304,25 +308,28 @@ add_ugv_initial_pose_from_baylands_waypoint_map() {
   local amcl_pose_env=""
   local spawn_waypoint=""
 
-  if [ -f "$SIM_SPAWN_WAYPOINT_FILE" ]; then
+  if [ -n "$REQUESTED_WAYPOINT_NAME" ]; then
+    spawn_waypoint="$REQUESTED_WAYPOINT_NAME"
+  elif [ -f "$SIM_SPAWN_WAYPOINT_FILE" ]; then
     spawn_waypoint="$(tr -d '\r\n' < "$SIM_SPAWN_WAYPOINT_FILE" 2>/dev/null || true)"
-    if [ -n "$spawn_waypoint" ]; then
-      if amcl_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint")"; then
-        eval "$amcl_pose_env"
-        if [ "$HAVE_UGV_INITIAL_POSE_X" = "false" ]; then
-          EXTRA_ARGS+=("ugv_initial_pose_x:=$ugv_amcl_x")
-        fi
-        if [ "$HAVE_UGV_INITIAL_POSE_Y" = "false" ]; then
-          EXTRA_ARGS+=("ugv_initial_pose_y:=$ugv_amcl_y")
-        fi
-        if [ "$HAVE_UGV_INITIAL_POSE_YAW" = "false" ]; then
-          EXTRA_ARGS+=("ugv_initial_pose_yaw_deg:=$ugv_amcl_yaw_deg")
-        fi
-        echo "[run_1to1_follow] Using exact Baylands waypoint '$ugv_waypoint_name' for Nav2 initial pose x=${ugv_amcl_x} y=${ugv_amcl_y} yaw_deg=${ugv_amcl_yaw_deg}"
-        return 0
+  fi
+
+  if [ -n "$spawn_waypoint" ]; then
+    if amcl_pose_env="$(resolve_baylands_amcl_waypoint_pose "$spawn_waypoint")"; then
+      eval "$amcl_pose_env"
+      if [ "$HAVE_UGV_INITIAL_POSE_X" = "false" ]; then
+        EXTRA_ARGS+=("ugv_initial_pose_x:=$ugv_amcl_x")
       fi
-      echo "[run_1to1_follow] Warning: exact Baylands waypoint '$spawn_waypoint' has no usable AMCL pose; falling back to nearest world-position match." >&2
+      if [ "$HAVE_UGV_INITIAL_POSE_Y" = "false" ]; then
+        EXTRA_ARGS+=("ugv_initial_pose_y:=$ugv_amcl_y")
+      fi
+      if [ "$HAVE_UGV_INITIAL_POSE_YAW" = "false" ]; then
+        EXTRA_ARGS+=("ugv_initial_pose_yaw_deg:=$ugv_amcl_yaw_deg")
+      fi
+      echo "[run_1to1_follow] Using exact Baylands waypoint '$ugv_waypoint_name' for Nav2 initial pose x=${ugv_amcl_x} y=${ugv_amcl_y} yaw_deg=${ugv_amcl_yaw_deg}"
+      return 0
     fi
+    echo "[run_1to1_follow] Warning: exact Baylands waypoint '$spawn_waypoint' has no usable AMCL pose; falling back to nearest world-position match." >&2
   fi
 
   ugv_pose_env="$(slam_state_capture_gazebo_pose_env "$WS_ROOT" "$WORLD" "$timeout_s")" || return 1

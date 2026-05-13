@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GZ_BIN="/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz"
+STATE_DIR="/tmp/halmstad_ws"
+SIM_SPAWN_WAYPOINT_FILE="$STATE_DIR/gazebo_sim.spawn_waypoint"
 
 source "$SCRIPT_DIR/slam_state_common.sh"
 source "$SCRIPT_DIR/baylands_waypoint_common.sh"
@@ -362,6 +364,13 @@ ros2 run ros_gz_bridge parameter_bridge /world/${GZ_WORLD}/set_pose@ros_gz_inter
 [dry-run] Would set pose:
 ros2 service call ${SERVICE_NAME} ros_gz_interfaces/srv/SetEntityPose "{entity: {name: '${ENTITY_NAME}', type: 2}, pose: {position: {x: ${TARGET_X}, y: ${TARGET_Y}, z: ${TARGET_Z}}, orientation: {x: 0.0, y: 0.0, z: ${TARGET_QZ}, w: ${TARGET_QW}}}}"
 EOF
+  if [ -n "$WAYPOINT_NAME" ]; then
+    cat <<EOF
+
+[dry-run] Would update:
+printf '%s\\n' '${WAYPOINT_NAME}' > ${SIM_SPAWN_WAYPOINT_FILE}
+EOF
+  fi
   if [ "$WITH_UAV" = "true" ]; then
     cat <<EOF
 
@@ -408,6 +417,12 @@ ros2 service call \
   "$SERVICE_NAME" \
   ros_gz_interfaces/srv/SetEntityPose \
   "{entity: {name: '${ENTITY_NAME}', type: 2}, pose: {position: {x: ${TARGET_X}, y: ${TARGET_Y}, z: ${TARGET_Z}}, orientation: {x: 0.0, y: 0.0, z: ${TARGET_QZ}, w: ${TARGET_QW}}}}" >/dev/null
+
+if [ -n "$WAYPOINT_NAME" ]; then
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$WAYPOINT_NAME" > "$SIM_SPAWN_WAYPOINT_FILE"
+  echo "[run_realign_yaw] Updated spawn waypoint state: $WAYPOINT_NAME"
+fi
 
 if [ "$WITH_UAV" = "true" ]; then
   echo "[run_realign_yaw] Setting UAV pose"
