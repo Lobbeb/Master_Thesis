@@ -175,6 +175,9 @@ elif [ "$LIDAR_MODE" = "3d" ] && [ "$USE_POINTCLOUD_TO_LASERSCAN" = "true" ]; th
   if [ -z "$SCAN_RELAY_HZ" ]; then
     SCAN_RELAY_HZ="10.0"
   fi
+  if [ -z "$SCAN_RELAY_START_DELAY_S" ]; then
+    SCAN_RELAY_START_DELAY_S="1.0"
+  fi
 elif [ -z "$USE_SCAN_RELAY" ]; then
   USE_SCAN_RELAY="false"
 fi

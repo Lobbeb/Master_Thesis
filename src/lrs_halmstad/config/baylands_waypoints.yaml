@@ -421,31 +421,36 @@ waypoints:
   yaw_deg: 9.871694242288653
   group: road_to_strip
 - name: road_to_strip_1
-  x: 19.579666975047846
-  y: -34.14585113333436
-  yaw_deg: -86.25166951876031
+  x: 12.95340623973713
+  y: -29.18940376723236
+  yaw_deg: -10.775716043787282
   group: road_to_strip
 - name: road_to_strip_2
-  x: 19.440972474701574
-  y: -44.0421319697246
-  yaw_deg: -88.76211923166379
+  x: 19.325023743221482
+  y: -31.412006678720342
+  yaw_deg: -92.63781233010003
   group: road_to_strip
 - name: road_to_strip_3
+  x: 19.939823472226493
+  y: -41.11586960415111
+  yaw_deg: -89.38249122688421
+  group: road_to_strip
+- name: road_to_strip_4
   x: 20.197289283059042
   y: -56.62567518750564
   yaw_deg: -85.92221319161004
   group: road_to_strip
-- name: road_to_strip_4
-  x: 20.35323395892794
-  y: -71.50895770867464
-  yaw_deg: -80.5623639420916
-  group: road_to_strip
 - name: road_to_strip_5
+  x: 21.091251876597752
+  y: -66.04257985670607
+  yaw_deg: -88.82175252964315
+  group: road_to_strip
+- name: road_to_strip_6
   x: 22.452363804961212
   y: -96.011217185322
   yaw_deg: -78.2378471834183
   group: road_to_strip
-- name: road_to_strip_6
+- name: road_to_strip_7
   x: 26.390738302050796
   y: -114.9868055242067
   yaw_deg: -65.08089362337883

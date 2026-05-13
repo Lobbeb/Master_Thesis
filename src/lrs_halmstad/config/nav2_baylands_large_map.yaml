@@ -53,7 +53,7 @@ controller_server:
       vx_std: 0.9
       vy_std: 0.25
       wz_std: 0.6
-      vx_max: 2.0
+      vx_max: 1.5
       vx_min: -0.6
       vy_max: 1.5
       wz_max: 2.5
@@ -63,7 +63,7 @@ controller_server:
       temperature: 0.3
       gamma: 0.015
       motion_model: "DiffDrive"
-      visualize: true
+      visualize: false
       regenerate_noises: true
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -139,7 +139,7 @@ local_costmap:
       height: 6
       resolution: 0.05
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
-      always_send_full_costmap: true
+      always_send_full_costmap: false
       trinary_costmap: true
       track_unknown_space: true
       use_maximum: false
@@ -178,12 +178,14 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
+      transform_tolerance: 0.5
+      initial_transform_timeout: 15.0
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
       resolution: 0.2
       track_unknown_space: true
       trinary_costmap: true
       always_send_full_costmap: false
-      plugins: ["static_layer", "inflation_layer", "obstacle_layer"]
+      plugins: ["static_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
@@ -191,33 +193,13 @@ global_costmap:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
         inflation_radius: 0.95
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: false
-        observation_sources: "scan"
-        footprint_clearing_enabled: true
-        max_obstacle_height: 2.0
-        combination_method: 1
-        scan:
-          topic: "/a201_0000/sensors/lidar3d_0/scan_from_points"
-          data_type: "LaserScan"
-          marking: true
-          clearing: true
-          obstacle_min_range: 0.35
-          obstacle_max_range: 2.0
-          raytrace_min_range: 0.35
-          raytrace_max_range: 3.0
-          max_obstacle_height: 2.0
-          min_obstacle_height: 0.0
-          inf_is_valid: true
-
-
+        
 planner_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
     expected_planner_frequency: 1.0
     allow_partial_planning: true
-    costmap_update_timeout: 3.0
+    costmap_update_timeout: 10.0
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
@@ -232,8 +214,8 @@ smoother_server:
     smoother_plugins: ["simple_smoother"]
     simple_smoother:
       plugin: "nav2_smoother::SimpleSmoother"
-      tolerance: 1.0e-10
-      max_its: 1000
+      tolerance: 1.0e-6
+      max_its: 100
       do_refinement: true
 
 
@@ -244,7 +226,7 @@ behavior_server:
     global_costmap_topic: global_costmap/costmap_raw
     local_footprint_topic: local_costmap/published_footprint
     global_footprint_topic: global_costmap/published_footprint
-    cycle_frequency: 5.0
+    cycle_frequency: 10.0
     behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
     spin:
       plugin: "nav2_behaviors::Spin"
@@ -260,22 +242,20 @@ behavior_server:
     local_frame: odom
     robot_base_frame: base_link
     transform_tolerance: 0.1
-    enable_stamped_cmd_vel: true
     # Spin
     simulate_ahead_time: 2.0
     max_rotational_vel: 2.0
-    min_rotational_vel: 1.0
+    min_rotational_vel: 0.2
     rotational_acc_lim: 3.2
     # BackUp
     backup.acceleration_limit: 2.5
     backup.deceleration_limit: -2.5
-    backup.minimum_speed: 0.0
+    backup.minimum_speed: 0.1
     # DriveOnHeading
     drive_on_heading.acceleration_limit: 3.5
     drive_on_heading.deceleration_limit: -3.5
     drive_on_heading.minimum_speed: 0.0
     # AssistedTeleop
-    cmd_vel_teleop: /a201_0000/cmd_vel
 
 
 
@@ -317,7 +297,7 @@ collision_monitor:
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.1
+    transform_tolerance: 0.5
     source_timeout: 2.0
     stop_pub_timeout: 2.0
     enable_stamped_cmd_vel: true
@@ -344,19 +324,19 @@ collision_monitor:
     scan:
       type: "scan"
       topic: "/a201_0000/sensors/lidar3d_0/scan_from_points"
-      enabled: false
-    pointcloud:
-      type: "pointcloud"
-      topic: "/a201_0000/sensors/lidar3d_0/points"
-      min_height: -0.2
-      max_height: 0.2
-      use_global_height: false
       enabled: true
+#    pointcloud:
+#      type: "pointcloud"
+#      topic: "/a201_0000/sensors/lidar3d_0/points"
+#      min_height: -0.2
+#      max_height: 0.2
+#      use_global_height: false
+#      enabled: true
 
 docking_server:
   ros__parameters:
     enable_stamped_cmd_vel: true
-    controller_frequency: 50.0
+    controller_frequency: 20.0
     initial_perception_timeout: 5.0
     wait_charge_timeout: 5.0
     dock_approach_timeout: 30.0

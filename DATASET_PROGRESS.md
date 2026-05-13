@@ -7,8 +7,8 @@
 - **parkinglot_west** - **_(COLLECTED)_**
 - **road_to_spawn**    - (ready for collection)
 - **spawn**            - (ready for collection)
-- **road_to_east**     - *(needs tuning)*
-- **parkinglot_east**  - *(needs tuning)*
+- **road_to_east**     - (ready for collection)
+- **parkinglot_east**  - (ready for collection)
 - **road_to_strip**   - *(needs tuning)*
 - **strip**            - *(needs tuning)*
 - **art**              - *(needs tuning)*

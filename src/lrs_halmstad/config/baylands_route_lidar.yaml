@@ -194,7 +194,7 @@ waypoints:
     pc2ls_max_height: 0.1
   road_to_east_4:
     pc2ls_min_height: -0.58
-    pc2ls_max_height: 0.0 
+    pc2ls_max_height: 0.0
   road_to_east_5:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 0.5
@@ -216,3 +216,64 @@ waypoints:
   road_to_east_11:
     pc2ls_min_height: -0.63
     pc2ls_max_height: 0.4
+  parkinglot_east_0:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_1:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_2:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_3:
+    pc2ls_min_height: -0.65
+    pc2ls_max_height: 0.4
+  parkinglot_east_4:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_5:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_6:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_7:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_8:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  parkinglot_east_9:
+    pc2ls_min_height: -0.645
+    pc2ls_max_height: 0.4
+  road_to_strip_0:
+    pc2ls_min_height: -0.58
+    pc2ls_max_height: 0.4
+  road_to_strip_1:
+    pc2ls_min_height: -0.25
+    pc2ls_max_height: 0.5
+  road_to_strip_2:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: -0.51
+  road_to_strip_3:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: -0.5
+  road_to_strip_4:
+    pc2ls_min_height: -0.61
+    pc2ls_max_height: 0.5
+  road_to_strip_5:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 2.0
+  road_to_strip_6:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 2.0
+  road_to_strip_7:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 2.0
+  road_to_strip_8:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 2.0
+  road_to_strip_9:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 2.0
+

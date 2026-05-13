@@ -115,7 +115,7 @@ sensors:
           update_rate: 10
           min_ang_v: -0.80
           max_ang_v: 0.80
-          min_range: -1.0
+          min_range: 0.0
           max_range: 30.0
           min_ang_h: -3.141592
           max_ang_h: 3.141592

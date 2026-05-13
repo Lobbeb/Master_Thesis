@@ -14,29 +14,41 @@ waypoints:
   waypoint1:
     name: road_to_strip_1
     pose:
-    - 19.579666975047846
-    - -34.14585113333436
+    - 12.95340623973713
+    - -29.18940376723236
     - 0.0
     orientation:
-    - 0.7298541131592903
+    - 0.9955818854461516
     - 0.0
     - 0.0
-    - -0.6836029355586954
+    - -0.0938973342086231
     group: road_to_strip
   waypoint2:
     name: road_to_strip_2
     pose:
-    - 19.440972474701574
-    - -44.0421319697246
+    - 19.325023743221482
+    - -31.412006678720342
     - 0.0
     orientation:
-    - 0.7147039297460641
+    - 0.6906438125080001
     - 0.0
     - 0.0
-    - -0.6994271175794752
+    - -0.7231950803513629
     group: road_to_strip
   waypoint3:
     name: road_to_strip_3
+    pose:
+    - 19.939823472226493
+    - -41.11586960415111
+    - 0.0
+    orientation:
+    - 0.7109069392705152
+    - 0.0
+    - 0.0
+    - -0.7032860895091186
+    group: road_to_strip
+  waypoint4:
+    name: road_to_strip_4
     pose:
     - 20.197289283059042
     - -56.62567518750564
@@ -47,20 +59,20 @@ waypoints:
     - 0.0
     - -0.6815017469421704
     group: road_to_strip
-  waypoint4:
-    name: road_to_strip_4
-    pose:
-    - 20.35323395892794
-    - -71.50895770867464
-    - 0.0
-    orientation:
-    - 0.7628807179699374
-    - 0.0
-    - 0.0
-    - -0.6465392564645034
-    group: road_to_strip
   waypoint5:
     name: road_to_strip_5
+    pose:
+    - 21.091251876597752
+    - -66.04257985670607
+    - 0.0
+    orientation:
+    - 0.7143398520258109
+    - 0.0
+    - 0.0
+    - -0.6997989538487055
+    group: road_to_strip
+  waypoint6:
+    name: road_to_strip_6
     pose:
     - 22.452363804961212
     - -96.011217185322
@@ -71,8 +83,8 @@ waypoints:
     - 0.0
     - -0.6309320848452636
     group: road_to_strip
-  waypoint6:
-    name: road_to_strip_6
+  waypoint7:
+    name: road_to_strip_7
     pose:
     - 26.390738302050796
     - -114.9868055242067
@@ -83,7 +95,7 @@ waypoints:
     - 0.0
     - -0.537894849772817
     group: road_to_strip
-  waypoint7:
+  waypoint8:
     name: road_to_strip_8
     pose:
     - 30.85001890274344
@@ -95,7 +107,7 @@ waypoints:
     - 0.0
     - -0.5043673099318232
     group: road_to_strip
-  waypoint8:
+  waypoint9:
     name: road_to_strip_9
     pose:
     - 39.39396060319916

@@ -181,10 +181,57 @@ Jag la till images för kamerorna i där, men vill du köra med rqt så kan du g
 
 ## Dataset Collection
 
-**OBS!!!** 
+Alla dataset hamnar under `~/halmstad_ws/datasets/`
 
-Du måste göra en mapp i ~/halmstad_ws som heter **_datasets_**
+### Leader UAV (`dji0`) - automatisk varied capture
 
 ```bash
-./run.sh capture_dataset output:= NAMN PÅ MAPP I /datasets
+cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands
+```
+
+### Leader UAV (`dji0`) - manuell capture
+
+Starta först follow-sim:
+
+```bash
+cd ~/halmstad_ws
+./run.sh tmux_1to1 baylands mode:=follow waypoint:=parkinglot_west_0 nav2_goals:=parkinglot_west
+```
+
+Starta sedan capture:
+
+```bash
+cd ~/halmstad_ws
+./run.sh capture_dataset baylands out:=datasets/baylands_leader_manual uav_name:=dji0 hz:=0.5 save_overlay:=false save_metadata:=true
+```
+
+### Support UAVs (`dji1` och `dji2`) - capture båda samtidigt
+
+Starta först vanlig follow:
+
+```bash
+cd ~/halmstad_ws
+./run.sh tmux_1to1 baylands mode:=follow waypoint:=parkinglot_west_0 nav2_goals:=parkinglot_west
+```
+
+Starta support-UAV:erna:
+
+```bash
+cd ~/halmstad_ws
+./run.sh support_follow_odom baylands support_with_camera:=true support_bridge_gimbal:=true
+```
+
+Starta kamerasvep:
+
+```bash
+cd ~/halmstad_ws
+./run.sh support_camera_scan baylands yaw_amplitude_deg:=120 period_s:=12 pan_phase_offsets_deg:=0,180 pitch_deg:=-22
+```
+
+Starta capture för båda:
+
+```bash
+cd ~/halmstad_ws
+./run.sh support_capture_pair baylands out:=datasets/baylands_support_pair hz:=1.0 save_overlay:=false
 ```
