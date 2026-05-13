@@ -29,6 +29,7 @@ lidar_mode_parse_args 3d "$@"
 USE_POINTCLOUD_TO_LASERSCAN="false"
 USE_SCAN_RELAY="false"
 USE_SCAN_RELAY_OVERRIDE=""
+SCAN_RELAY_STAMP_OFFSET_S=""
 PC2LS_ARGS_IGNORED=()
 NAV2_PASSTHROUGH_ARGS=()
 
@@ -36,6 +37,9 @@ for arg in "${LIDAR_REMAINING_ARGS[@]}"; do
   case "$arg" in
     use_scan_relay:=*)
       USE_SCAN_RELAY_OVERRIDE="${arg#use_scan_relay:=}"
+      ;;
+    scan_relay_stamp_offset_s:=*)
+      SCAN_RELAY_STAMP_OFFSET_S="${arg#scan_relay_stamp_offset_s:=}"
       ;;
     use_pointcloud_to_laserscan:=*|pc2ls_*|pointcloud_topic:=*)
       PC2LS_ARGS_IGNORED+=("$arg")
@@ -48,15 +52,18 @@ done
 LIDAR_REMAINING_ARGS=("${NAV2_PASSTHROUGH_ARGS[@]}")
 
 if [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
-  if [ "$USE_SCAN_RELAY_OVERRIDE" = "true" ]; then
-    USE_SCAN_RELAY="true"
-    echo "[run_nav2] 3D lidar mode: starting Nav2-owned scan relay for converted scan $LIDAR_SCAN_TOPIC" >&2
-  else
+  if [ "$USE_SCAN_RELAY_OVERRIDE" = "false" ]; then
     USE_SCAN_RELAY="false"
     echo "[run_nav2] 3D lidar mode: using direct pc2ls scan $LIDAR_SCAN_TOPIC" >&2
-    if [ "${#PC2LS_ARGS_IGNORED[@]}" -gt 0 ]; then
-      echo "[run_nav2] 3D lidar mode: ignoring pc2ls args in Nav2; pass them to localization instead." >&2
+  else
+    USE_SCAN_RELAY="true"
+    if [ -z "$SCAN_RELAY_STAMP_OFFSET_S" ]; then
+      SCAN_RELAY_STAMP_OFFSET_S="-0.20"
     fi
+    echo "[run_nav2] 3D lidar mode: using restamped scan relay for TF timing stability (${SCAN_RELAY_STAMP_OFFSET_S}s)" >&2
+  fi
+  if [ "${#PC2LS_ARGS_IGNORED[@]}" -gt 0 ]; then
+    echo "[run_nav2] 3D lidar mode: ignoring pc2ls args in Nav2; pass them to localization instead." >&2
   fi
 elif [ "$BASE_NAV2_PARAMS" = "$BAYLANDS_NAV2_PARAMS" ] && [ "$LIDAR_MODE" = "2d" ] && [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 2d)" ]; then
   if [ "$USE_SCAN_RELAY_OVERRIDE" = "true" ]; then
@@ -98,6 +105,10 @@ LAUNCH_ARGS=(
   use_scan_relay:="$USE_SCAN_RELAY"
   params_file:="$TMP_NAV2_PARAMS"
 )
+
+if [ "$USE_SCAN_RELAY" = "true" ] && [ -n "$SCAN_RELAY_STAMP_OFFSET_S" ]; then
+  LAUNCH_ARGS+=("scan_relay_stamp_offset_s:=$SCAN_RELAY_STAMP_OFFSET_S")
+fi
 
 LAUNCH_ARGS+=("${LIDAR_REMAINING_ARGS[@]}")
 

@@ -71,6 +71,12 @@ ARGUMENTS = [
         choices=['true', 'false'],
         description='Do not launch the UGV camera ROS bridges. This keeps the robot model intact but mutes camera topics.',
     ),
+    DeclareLaunchArgument(
+        'clock_mode',
+        default_value='guarded',
+        choices=['direct', 'guarded'],
+        description='direct bridges Gazebo /clock directly; guarded uses /clock_raw through clock_guard.',
+    ),
 ]
 
 for pose_element in ['x', 'y', 'yaw']:
@@ -158,6 +164,46 @@ def _gz_launch(context, *args, **kwargs):
     )
 
     return [gz_sim]
+
+
+def _clock_launch(context, *args, **kwargs):
+    clock_mode = LaunchConfiguration('clock_mode').perform(context)
+    ros_clock_topic = '/clock_raw' if clock_mode == 'guarded' else '/clock'
+
+    clock_bridge = RosGzBridge(
+        bridge_name='clock_bridge',
+        use_composition=False,
+        extra_bridge_params={
+            'bridges': {
+                'bridge_0': {
+                    'ros_topic_name': ros_clock_topic,
+                    'ros_type_name': 'rosgraph_msgs/msg/Clock',
+                    'gz_topic_name': '/clock',
+                    'gz_type_name': 'gz.msgs.Clock',
+                    'direction': 'GZ_TO_ROS',
+                    'lazy': False,
+                },
+            },
+            'bridge_names': ['bridge_0'],
+        },
+    )
+
+    actions = [clock_bridge]
+    if clock_mode == 'guarded':
+        actions.append(
+            Node(
+                package='lrs_halmstad',
+                executable='clock_guard',
+                name='clock_guard',
+                output='screen',
+                parameters=[{
+                    'input_topic': '/clock_raw',
+                    'output_topic': '/clock',
+                }],
+            )
+        )
+
+    return actions
 
 
 def _resolve_real_time_factor(context) -> float:
@@ -476,35 +522,6 @@ def generate_launch_description():
         value=LaunchConfiguration('yaw'),
     )
 
-    clock_bridge = RosGzBridge(
-        bridge_name='clock_bridge',
-        use_composition=False,
-        extra_bridge_params={
-            'bridges': {
-                'bridge_0': {
-                    'ros_topic_name': '/clock_raw',
-                    'ros_type_name': 'rosgraph_msgs/msg/Clock',
-                    'gz_topic_name': '/clock',
-                    'gz_type_name': 'gz.msgs.Clock',
-                    'direction': 'GZ_TO_ROS',
-                    'lazy': False,
-                },
-            },
-            'bridge_names': ['bridge_0'],
-        },
-    )
-
-    clock_guard = Node(
-        package='lrs_halmstad',
-        executable='clock_guard',
-        name='clock_guard',
-        output='screen',
-        parameters=[{
-            'input_topic': '/clock_raw',
-            'output_topic': '/clock',
-        }],
-    )
-
     ld = LaunchDescription(arguments)
     ld.add_action(gz_sim_resource_path)
     ld.add_action(gz_gui_plugin_path)
@@ -514,7 +531,6 @@ def generate_launch_description():
     ld.add_action(ugv_spawn_z)
     ld.add_action(ugv_spawn_yaw)
     ld.add_action(OpaqueFunction(function=_gz_launch))
-    ld.add_action(clock_bridge)
-    ld.add_action(clock_guard)
+    ld.add_action(OpaqueFunction(function=_clock_launch))
     ld.add_action(OpaqueFunction(function=_robot_spawn_launch))
     return ld

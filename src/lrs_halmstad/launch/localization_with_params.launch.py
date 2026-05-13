@@ -65,6 +65,7 @@ ARGUMENTS = [
     DeclareLaunchArgument("scan_relay_hz", default_value="10.0"),
     DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.2"),
     DeclareLaunchArgument("scan_relay_restamp", default_value="true", choices=["true", "false"]),
+    DeclareLaunchArgument("scan_relay_stamp_offset_s", default_value="0.0"),
     DeclareLaunchArgument("scan_relay_start_delay_s", default_value="0.0"),
 ]
 
@@ -101,6 +102,7 @@ def launch_setup(context, *args, **kwargs):
     scan_relay_hz = LaunchConfiguration("scan_relay_hz")
     scan_relay_max_age_s = LaunchConfiguration("scan_relay_max_age_s")
     scan_relay_restamp = LaunchConfiguration("scan_relay_restamp")
+    scan_relay_stamp_offset_s = LaunchConfiguration("scan_relay_stamp_offset_s")
     scan_relay_start_delay_s = LaunchConfiguration("scan_relay_start_delay_s")
 
     config = read_yaml(os.path.join(setup_path.perform(context), "robot.yaml"))
@@ -163,6 +165,7 @@ def launch_setup(context, *args, **kwargs):
                     "publish_hz": scan_relay_hz,
                     "max_age_s": scan_relay_max_age_s,
                     "restamp": scan_relay_restamp,
+                    "stamp_offset_s": scan_relay_stamp_offset_s,
                     "startup_hold_s": scan_relay_start_delay_s,
                 }
             ],

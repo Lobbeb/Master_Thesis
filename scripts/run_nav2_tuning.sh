@@ -26,13 +26,13 @@ MAP_PATH="maps/baylands.yaml"
 SESSION=""
 TMUX_ATTACH="false"
 SPAWN_UAV="false"
-UAV_CAMERA_UPDATE_RATE="2.0"
+UAV_CAMERA_UPDATE_RATE="2"
+START_CAMERA_TRACKER="auto"
 WITH_FOLLOW="true"
 REBUILD="false"
 REBUILD_DONE="false"
 DRY_RUN="false"
 REALIGN="true"
-
 FOLLOW_START_DELAY_S="10.0"
 LOCALIZATION_READY_TIMEOUT_S="15"
 STACK_STOP_GRACE_S="3"
@@ -56,6 +56,7 @@ START_OPTIONAL_TELEOP_EXPLICIT="false"
 MAP_EXPLICIT="false"
 SPAWN_UAV_EXPLICIT="false"
 UAV_CAMERA_UPDATE_RATE_EXPLICIT="false"
+START_CAMERA_TRACKER_EXPLICIT="false"
 WITH_FOLLOW_EXPLICIT="false"
 PAUSE_AFTER_GOAL_EXPLICIT="false"
 FOLLOW_START_DELAY_EXPLICIT="false"
@@ -87,6 +88,7 @@ CLI_START_OPTIONAL_TELEOP=""
 CLI_MAP_PATH=""
 CLI_SPAWN_UAV=""
 CLI_UAV_CAMERA_UPDATE_RATE=""
+CLI_START_CAMERA_TRACKER=""
 CLI_WITH_FOLLOW=""
 CLI_FOLLOW_START_DELAY_S=""
 CLI_GAZEBO_READY_TIMEOUT_S=""
@@ -124,7 +126,7 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [sensor_profile:=full|nav|minimal] [clock_mode:=guarded|direct]
   [mute_ugv_camera:=true|false]  # compatibility alias; true maps full camera down to RGB-only
   [start_optional_teleop:=true|false]
-  [spawn_uav:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
+  [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=3.0]
   [uav_camera_update_rate:=2]
   [gazebo_ready_timeout_s:=30] [gazebo_post_ready_delay_s:=20]
   [spawn_post_delay_s:=5]
@@ -196,6 +198,7 @@ write_state() {
     printf 'MAP_PATH=%q\n' "$MAP_PATH"
     printf 'SPAWN_UAV=%q\n' "$SPAWN_UAV"
     printf 'UAV_CAMERA_UPDATE_RATE=%q\n' "$UAV_CAMERA_UPDATE_RATE"
+    printf 'START_CAMERA_TRACKER=%q\n' "$START_CAMERA_TRACKER"
     printf 'WITH_FOLLOW=%q\n' "$WITH_FOLLOW"
     printf 'FOLLOW_START_DELAY_S=%q\n' "$FOLLOW_START_DELAY_S"
     printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
@@ -430,23 +433,35 @@ follow_cmd() {
     "params_file:=$follow_params"
   )
   if [ "$SPAWN_UAV" != "true" ]; then
+    local camera_tracker_value="false"
+    if [ "$START_CAMERA_TRACKER_EXPLICIT" = "true" ]; then
+      camera_tracker_value="$START_CAMERA_TRACKER"
+    fi
     cmd+=(
       "start_uav_simulator:=false"
       "start_uav_follow:=false"
-      "start_camera_tracker:=false"
+      "start_camera_tracker:=$camera_tracker_value"
       "require_uav_actual_before_motion:=false"
     )
+  elif [ "$START_CAMERA_TRACKER_EXPLICIT" = "true" ]; then
+    cmd+=("start_camera_tracker:=$START_CAMERA_TRACKER")
   fi
   echo "$(shell_join "${cmd[@]}")"
 }
 
 follow_extra_args() {
   if [ "$SPAWN_UAV" != "true" ]; then
+    local camera_tracker_value="false"
+    if [ "$START_CAMERA_TRACKER_EXPLICIT" = "true" ]; then
+      camera_tracker_value="$START_CAMERA_TRACKER"
+    fi
     printf '%s\n' \
       "start_uav_simulator:=false" \
       "start_uav_follow:=false" \
-      "start_camera_tracker:=false" \
+      "start_camera_tracker:=$camera_tracker_value" \
       "require_uav_actual_before_motion:=false"
+  elif [ "$START_CAMERA_TRACKER_EXPLICIT" = "true" ]; then
+    printf '%s\n' "start_camera_tracker:=$START_CAMERA_TRACKER"
   fi
 }
 
@@ -951,6 +966,10 @@ for arg in "$@"; do
     uav_camera_update_rate:=*)
       UAV_CAMERA_UPDATE_RATE="${arg#uav_camera_update_rate:=}"
       UAV_CAMERA_UPDATE_RATE_EXPLICIT="true"
+      ;;
+    start_camera_tracker:=*)
+      START_CAMERA_TRACKER="${arg#start_camera_tracker:=}"
+      START_CAMERA_TRACKER_EXPLICIT="true"
       ;;
     with_route_driver:=*)
       WITH_FOLLOW="${arg#with_route_driver:=}"

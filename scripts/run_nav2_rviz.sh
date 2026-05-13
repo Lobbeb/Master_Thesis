@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/halmstad_ws"
 SIM_WORLD_FILE="$STATE_DIR/gazebo_sim.world"
-RVIZ_CONFIG_DIR="$WS_ROOT/src/lrs_halmstad/config/rviz_configs"
+CONFIG_ROOT="$WS_ROOT/src/lrs_halmstad/config"
+RVIZ_CONFIG_DIR="$CONFIG_ROOT/rviz_configs"
 BASE_RVIZ_CONFIG="$RVIZ_CONFIG_DIR/waypoints_testing.rviz"
 RVIZ_CONFIG_OVERRIDE=""
 RVIZ_SOFTWARE_RENDERING="${RVIZ_SOFTWARE_RENDERING:-auto}"
@@ -42,19 +43,52 @@ LIDAR_REMAINING_ARGS=("${RVIZ_PASSTHROUGH_ARGS[@]}")
 
 if [ -n "$RVIZ_CONFIG_OVERRIDE" ]; then
   RVIZ_CONFIG_CANDIDATES=()
-  if [[ "$RVIZ_CONFIG_OVERRIDE" = /* ]]; then
-    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_OVERRIDE")
-  else
-    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_DIR/$RVIZ_CONFIG_OVERRIDE")
-    if [[ "$RVIZ_CONFIG_OVERRIDE" != *.rviz ]]; then
-      RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_DIR/$RVIZ_CONFIG_OVERRIDE.rviz")
+
+  add_rviz_config_candidate() {
+    local candidate="$1"
+    local existing
+
+    [ -n "$candidate" ] || return 0
+    for existing in "${RVIZ_CONFIG_CANDIDATES[@]}"; do
+      [ "$existing" = "$candidate" ] && return 0
+    done
+    RVIZ_CONFIG_CANDIDATES+=("$candidate")
+  }
+
+  add_rviz_config_variants() {
+    local base="$1"
+
+    add_rviz_config_candidate "$base"
+    if [[ "$base" != *.rviz ]]; then
+      add_rviz_config_candidate "$base.rviz"
     fi
-    RVIZ_CONFIG_CANDIDATES+=("$RVIZ_CONFIG_OVERRIDE")
-    RVIZ_CONFIG_CANDIDATES+=("$WS_ROOT/$RVIZ_CONFIG_OVERRIDE")
+  }
+
+  case "$RVIZ_CONFIG_OVERRIDE" in
+    "~")
+      RVIZ_CONFIG_OVERRIDE="$HOME"
+      ;;
+    "~/"*)
+      RVIZ_CONFIG_OVERRIDE="$HOME/${RVIZ_CONFIG_OVERRIDE#~/}"
+      ;;
+  esac
+
+  if [[ "$RVIZ_CONFIG_OVERRIDE" = /* ]]; then
+    add_rviz_config_variants "$RVIZ_CONFIG_OVERRIDE"
+  else
+    add_rviz_config_variants "$RVIZ_CONFIG_DIR/$RVIZ_CONFIG_OVERRIDE"
+    add_rviz_config_variants "$CONFIG_ROOT/$RVIZ_CONFIG_OVERRIDE"
+    add_rviz_config_variants "$WS_ROOT/$RVIZ_CONFIG_OVERRIDE"
+    add_rviz_config_variants "$PWD/$RVIZ_CONFIG_OVERRIDE"
+    add_rviz_config_variants "$RVIZ_CONFIG_OVERRIDE"
   fi
 
   for candidate in "${RVIZ_CONFIG_CANDIDATES[@]}"; do
     if [ -f "$candidate" ]; then
+      if [[ "$candidate" != *.rviz ]]; then
+        echo "[run_nav2_rviz] Found file, but RViz display configs must be .rviz files: $candidate" >&2
+        exit 2
+      fi
       BASE_RVIZ_CONFIG="$candidate"
       break
     fi
@@ -62,6 +96,8 @@ if [ -n "$RVIZ_CONFIG_OVERRIDE" ]; then
 
   if [ ! -f "$BASE_RVIZ_CONFIG" ]; then
     echo "[run_nav2_rviz] RViz config not found: $RVIZ_CONFIG_OVERRIDE" >&2
+    echo "[run_nav2_rviz] Checked:" >&2
+    printf '  - %s\n' "${RVIZ_CONFIG_CANDIDATES[@]}" >&2
     exit 2
   fi
 fi
@@ -71,8 +107,8 @@ source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/install/setup.bash"
 set -u
 
-RVIZ_VIEW_X="0.0"
-RVIZ_VIEW_Y="0.0"
+RVIZ_VIEW_X=""
+RVIZ_VIEW_Y=""
 AMCL_TMP="$(mktemp)"
 AMCL_ERR_TMP="$(mktemp)"
 if timeout 2s ros2 topic echo --no-daemon --once /a201_0000/amcl_pose >"$AMCL_TMP" 2>"$AMCL_ERR_TMP"; then
@@ -176,6 +212,9 @@ elif [ "$RVIZ_SOFTWARE_RENDERING" = "true" ]; then
   export LIBGL_ALWAYS_SOFTWARE=1
   echo "[run_nav2_rviz] Forced software rendering: LIBGL_ALWAYS_SOFTWARE=1"
 fi
+
+cd "$CONFIG_ROOT"
+echo "[run_nav2_rviz] Using RViz config: $RVIZ_CONFIG"
 
 ros2 launch nav2_bringup rviz_launch.py \
   namespace:=a201_0000 \

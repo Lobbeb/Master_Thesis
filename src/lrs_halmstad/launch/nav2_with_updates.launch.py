@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -65,6 +66,7 @@ ARGUMENTS = [
     DeclareLaunchArgument("scan_relay_hz", default_value="10.0"),
     DeclareLaunchArgument("scan_relay_max_age_s", default_value="0.2"),
     DeclareLaunchArgument("scan_relay_restamp", default_value="true", choices=["true", "false"]),
+    DeclareLaunchArgument("scan_relay_stamp_offset_s", default_value="0.0"),
     DeclareLaunchArgument("scan_relay_start_delay_s", default_value="0.0"),
     DeclareLaunchArgument(
         "params_file",
@@ -84,6 +86,51 @@ ARGUMENTS = [
         description="Compatibility argument. Collision monitor is started by Nav2 navigation_launch.",
     ),
 ]
+
+
+def _find_call_start(lines, marker_index):
+    for index in range(marker_index, -1, -1):
+        stripped = lines[index].strip()
+        if stripped in ("Node(", "ComposableNode("):
+            return index
+    raise RuntimeError("Could not find opennav_docking launch call start")
+
+
+def _find_call_end(lines, start_index):
+    depth = 0
+    for index in range(start_index, len(lines)):
+        depth += lines[index].count("(")
+        depth -= lines[index].count(")")
+        if depth <= 0 and index > start_index:
+            return index + 1
+    raise RuntimeError("Could not find opennav_docking launch call end")
+
+
+def _navigation_launch_without_docking(pkg_nav2_bringup):
+    source = Path(pkg_nav2_bringup) / "launch" / "navigation_launch.py"
+    destination = Path("/tmp/halmstad_ws/navigation_launch_no_docking.py")
+    lines = source.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    lines = [line for line in lines if line.strip() != "'docking_server',"]
+
+    while True:
+        marker_index = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if "package='opennav_docking'" in line
+            ),
+            None,
+        )
+        if marker_index is None:
+            break
+        start_index = _find_call_start(lines, marker_index)
+        end_index = _find_call_end(lines, start_index)
+        del lines[start_index:end_index]
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("".join(lines), encoding="utf-8")
+    return str(destination)
 
 
 def launch_setup(context, *args, **kwargs):
@@ -112,6 +159,7 @@ def launch_setup(context, *args, **kwargs):
     scan_relay_hz = LaunchConfiguration("scan_relay_hz")
     scan_relay_max_age_s = LaunchConfiguration("scan_relay_max_age_s")
     scan_relay_restamp = LaunchConfiguration("scan_relay_restamp")
+    scan_relay_stamp_offset_s = LaunchConfiguration("scan_relay_stamp_offset_s")
     scan_relay_start_delay_s = LaunchConfiguration("scan_relay_start_delay_s")
     params_file = LaunchConfiguration("params_file")
     start_teleop_base = LaunchConfiguration("start_teleop_base")
@@ -138,7 +186,7 @@ def launch_setup(context, *args, **kwargs):
             pkg_clearpath_nav2_demos, "config", platform_model, "nav2.yaml"
         )
 
-    launch_nav2 = PathJoinSubstitution([pkg_nav2_bringup, "launch", "navigation_launch.py"])
+    launch_nav2 = _navigation_launch_without_docking(pkg_nav2_bringup)
     launch_teleop_base = PathJoinSubstitution([pkg_clearpath_control, "launch", "teleop_base.launch.py"])
 
     converter_node = None
@@ -188,6 +236,7 @@ def launch_setup(context, *args, **kwargs):
                     "publish_hz": scan_relay_hz,
                     "max_age_s": scan_relay_max_age_s,
                     "restamp": scan_relay_restamp,
+                    "stamp_offset_s": scan_relay_stamp_offset_s,
                     "startup_hold_s": scan_relay_start_delay_s,
                 }
             ],
