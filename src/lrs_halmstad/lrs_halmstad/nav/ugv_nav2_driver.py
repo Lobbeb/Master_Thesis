@@ -645,8 +645,8 @@ class UgvNav2Driver(Node):
         else:
             raise ValueError("goal_sequence_file must contain a waypoint list or RViz waypoint mapping")
 
-        if len(ordered_waypoints) < 2:
-            raise ValueError("goal_sequence_file must contain at least two waypoints")
+        if len(ordered_waypoints) < 1:
+            raise ValueError("goal_sequence_file must contain at least one waypoint")
 
         seed = self.goal_sequence_seed if self.goal_sequence_seed >= 0 else int(time.time_ns() & 0xFFFFFFFF)
         rng = random.Random(seed)
@@ -795,7 +795,7 @@ class UgvNav2Driver(Node):
         )
         return segments, integrate_segments(start_pose.x, start_pose.y, start_pose.yaw, segments)
 
-    def _filtered_waypoints(self, waypoints):
+    def _filtered_waypoints(self, waypoints, start_pose: Optional[Pose2DState] = None):
         filtered = []
         last_goal = None
 
@@ -805,6 +805,16 @@ class UgvNav2Driver(Node):
                 continue
 
             if last_goal is None:
+                if start_pose is not None:
+                    dx = waypoint.x - start_pose.x
+                    dy = waypoint.y - start_pose.y
+                    dyaw = normalize_angle(waypoint.yaw - start_pose.yaw)
+                    if math.hypot(dx, dy) < self.min_goal_xy_delta_m and abs(dyaw) < self.min_goal_yaw_delta_rad:
+                        self.get_logger().info(
+                            f"Skipping first waypoint '{waypoint.segment_name}' because the UGV is already there"
+                        )
+                        last_goal = waypoint
+                        continue
                 filtered.append(waypoint)
                 last_goal = waypoint
                 continue
@@ -926,7 +936,7 @@ class UgvNav2Driver(Node):
         self._settle_before_goals()
 
         segments, waypoints = self._build_waypoints(start_pose)
-        filtered_waypoints = self._filtered_waypoints(waypoints)
+        filtered_waypoints = self._filtered_waypoints(waypoints, start_pose)
         goal_frame_id = self.goal_frame_id or start_pose.frame_id
         if segments:
             est_motion_s = sum(float(segment.duration_s) for segment in segments)

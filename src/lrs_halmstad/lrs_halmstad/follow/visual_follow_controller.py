@@ -42,7 +42,7 @@ class VisualFollowController(Node):
         self.declare_parameter("status_topic", "/coord/leader_visual_control_status")
         self.declare_parameter("debug_image_topic", "/coord/leader_visual_control_debug_image")
         self.declare_parameter("publish_status", True)
-        self.declare_parameter("publish_debug_topics", True)
+        self.declare_parameter("publish_debug_topics", False)
         self.declare_parameter("publish_debug_image", True)
         self.declare_parameter("tick_hz", 20.0)
         self.declare_parameter("target_timeout_s", 1.0)

@@ -166,11 +166,6 @@ class FollowUav(FollowControllerCoreMixin, Node):
             if self.publish_pose_cmd_topics
             else None
         )
-        self.anchor_point_pub = self.create_publisher(
-            PointStamped,
-            f"/{self.uav_name}/follow/target/anchor_point",
-            10,
-        )
 
         self.timer = self.create_timer(1.0 / self.tick_hz, self.on_tick)
         self.add_on_set_parameters_callback(self._on_set_parameters)
@@ -414,15 +409,6 @@ class FollowUav(FollowControllerCoreMixin, Node):
         yaw_target = solve_yaw_to_target(anchor_x, anchor_y, self.ugv_pose.x, self.ugv_pose.y)
         return Pose2D(anchor_x, anchor_y, yaw_target)
 
-    def publish_anchor_point(self, anchor_pose: Pose2D) -> None:
-        msg = PointStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = self.leader_frame_id or "map"
-        msg.point.x = float(anchor_pose.x)
-        msg.point.y = float(anchor_pose.y)
-        msg.point.z = float(self.ugv_z)
-        self.anchor_point_pub.publish(msg)
-
     def _effective_follow_speed_mps(self, current_uav: Pose2D, anchor_pose: Pose2D) -> float:
         error = math.hypot(anchor_pose.x - current_uav.x, anchor_pose.y - current_uav.y)
         return min(
@@ -502,7 +488,6 @@ class FollowUav(FollowControllerCoreMixin, Node):
         vertical_delta = current_uav_z - self.ugv_z
         target_horizontal_distance = horizontal_distance_for_euclidean(self.d_target, vertical_delta)
         anchor_pose = self._compute_anchor_pose(target_horizontal_distance)
-        self.publish_anchor_point(anchor_pose)
 
         dx = anchor_pose.x - current_uav.x
         dy = anchor_pose.y - current_uav.y

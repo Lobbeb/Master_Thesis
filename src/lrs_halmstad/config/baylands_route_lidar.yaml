@@ -21,8 +21,8 @@ routes:
     pc2ls_min_height: -0.64
     pc2ls_max_height: 0.0
   strip:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
 waypoints:
   rotundan_0:
     pc2ls_min_height: -0.1
@@ -280,10 +280,10 @@ waypoints:
     pc2ls_min_height: -0.59
     pc2ls_max_height: 0.5
   strip_1:
-    pc2ls_min_height: -0.61
-    pc2ls_max_height: 1.0
+    pc2ls_min_height: -0.62
+    pc2ls_max_height: 0.5
   strip_2:
-    pc2ls_min_height: -0.6
+    pc2ls_min_height: -0.63
     pc2ls_max_height: 0.5
   strip_3:
     pc2ls_min_height: -0.53
@@ -295,35 +295,35 @@ waypoints:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 0.5
   strip_6:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_7:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_8:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_9:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_10:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_11:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_12:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_13:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_14:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_15:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5
   strip_16:
-    pc2ls_min_height: -0.63
-    pc2ls_max_height: 0.12
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.5

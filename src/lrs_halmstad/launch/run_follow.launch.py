@@ -58,10 +58,13 @@ def _external_ugv_condition():
 
 def _leader_odom_condition():
     leader_mode = LaunchConfiguration('leader_mode')
+    start_follow = LaunchConfiguration('start_uav_follow')
     start_bridge = LaunchConfiguration('start_visual_actuation_bridge')
     return IfCondition(
         PythonExpression([
             "'",
+            start_follow,
+            "'.lower() in ('1','true','yes','on') and '",
             leader_mode,
             "'.lower() == 'odom' and '",
             start_bridge,
@@ -72,14 +75,28 @@ def _leader_odom_condition():
 
 def _leader_nonodom_condition():
     leader_mode = LaunchConfiguration('leader_mode')
+    start_follow = LaunchConfiguration('start_uav_follow')
     start_bridge = LaunchConfiguration('start_visual_actuation_bridge')
     return IfCondition(
         PythonExpression([
             "'",
+            start_follow,
+            "'.lower() in ('1','true','yes','on') and '",
             leader_mode,
             "'.lower() != 'odom' and '",
             start_bridge,
             "'.lower() not in ('1','true','yes','on')",
+        ])
+    )
+
+
+def _camera_tracker_condition():
+    start_tracker = LaunchConfiguration('start_camera_tracker')
+    return IfCondition(
+        PythonExpression([
+            "'",
+            start_tracker,
+            "'.lower() in ('1','true','yes','on')",
         ])
     )
 
@@ -674,6 +691,16 @@ def generate_launch_description():
     camera_yaw_offset_deg_arg = DeclareLaunchArgument('camera_yaw_offset_deg', default_value='0.0')
     camera_pan_sign_arg = DeclareLaunchArgument('camera_pan_sign', default_value='1.0')
     start_uav_simulator_arg = DeclareLaunchArgument('start_uav_simulator', default_value='true')
+    start_uav_follow_arg = DeclareLaunchArgument(
+        'start_uav_follow',
+        default_value='true',
+        description='Start the UAV follow command node.',
+    )
+    start_camera_tracker_arg = DeclareLaunchArgument(
+        'start_camera_tracker',
+        default_value='true',
+        description='Start the legacy camera pan/tilt tracker.',
+    )
     uav_camera_mode_arg = DeclareLaunchArgument('uav_camera_mode', default_value='integrated_joint')
     ugv_namespace_arg = DeclareLaunchArgument('ugv_namespace', default_value='a201_0000')
     ugv_mode_arg = DeclareLaunchArgument(
@@ -1110,7 +1137,10 @@ def generate_launch_description():
         condition=_leader_nonodom_condition(),
     )
 
-    camera_tracker_node = OpaqueFunction(function=_build_camera_tracker_node)
+    camera_tracker_node = OpaqueFunction(
+        function=_build_camera_tracker_node,
+        condition=_camera_tracker_condition(),
+    )
 
     selected_target_filter_node = Node(
         package='lrs_halmstad',
@@ -1337,6 +1367,8 @@ def generate_launch_description():
         camera_yaw_offset_deg_arg,
         camera_pan_sign_arg,
         start_uav_simulator_arg,
+        start_uav_follow_arg,
+        start_camera_tracker_arg,
         uav_camera_mode_arg,
         ugv_namespace_arg,
         ugv_mode_arg,

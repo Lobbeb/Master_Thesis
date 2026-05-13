@@ -12,6 +12,7 @@ PROFILE="standard"
 WORLD="baylands"
 WAYPOINT="rotundan_0"
 NAV2_GOALS="rotundan"
+NAV2_GOALS_SOURCE=""
 LIDAR="3d"
 PAUSE_AFTER_GOAL_S="0.0"
 GUI="false"
@@ -75,6 +76,7 @@ CLI_WORLD=""
 CLI_PROFILE=""
 CLI_WAYPOINT=""
 CLI_NAV2_GOALS=""
+CLI_NAV2_GOALS_SOURCE=""
 CLI_LIDAR=""
 CLI_PAUSE_AFTER_GOAL_S=""
 CLI_GUI=""
@@ -151,6 +153,7 @@ Notes:
   - Changes to nav2_baylands_large_map.yaml do not require a build; run_nav2.sh reads it from src/.
   - Use rebuild:=true when you change Python/launch/package-installed files and want a symlink build first.
   - RViz is intentionally not managed here. Start it separately with: ./run.sh nav2_rviz lidar:=3d
+  - Explicit waypoint:=... starts Gazebo there and slices nav2_goals from that waypoint onward.
   - Startup is sequenced: Gazebo helper ready -> optional UAV spawn -> localization -> realign_yaw -> Nav2/route driver.
 EOF
 }
@@ -185,6 +188,7 @@ write_state() {
     printf 'WORLD=%q\n' "$WORLD"
     printf 'WAYPOINT=%q\n' "$WAYPOINT"
     printf 'NAV2_GOALS=%q\n' "$NAV2_GOALS"
+    printf 'NAV2_GOALS_SOURCE=%q\n' "$NAV2_GOALS_SOURCE"
     printf 'LIDAR=%q\n' "$LIDAR"
     printf 'PAUSE_AFTER_GOAL_S=%q\n' "$PAUSE_AFTER_GOAL_S"
     printf 'GUI=%q\n' "$GUI"
@@ -385,6 +389,82 @@ raise SystemExit(1)
 PY
 }
 
+resolve_nav2_goals_for_waypoint() {
+  local waypoint="$1"
+  python3 - "$WS_ROOT" "$waypoint" <<'PY'
+import csv
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+ws_root = Path(sys.argv[1])
+waypoint_name = sys.argv[2]
+config_dir = ws_root / "src" / "lrs_halmstad" / "config"
+waypoint_dir = config_dir / "baylands_waypoints"
+csv_path = ws_root / "maps" / "waypoints_baylands_groups.csv"
+
+if csv_path.is_file():
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            if row.get("place") == waypoint_name and row.get("group"):
+                print(row["group"])
+                raise SystemExit(0)
+
+if waypoint_dir.is_dir():
+    for path in sorted(waypoint_dir.glob("baylands_waypoints_*.yaml")):
+        if path.name.endswith("_rviz.yaml"):
+            continue
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        group = str(data.get("group") or "").strip()
+        for waypoint in data.get("waypoints") or []:
+            if isinstance(waypoint, dict) and waypoint.get("name") == waypoint_name:
+                if group:
+                    print(group)
+                    raise SystemExit(0)
+                name = path.stem
+                if name.startswith("baylands_waypoints_"):
+                    print(name[len("baylands_waypoints_"):])
+                    raise SystemExit(0)
+
+match = re.match(r"^(.+)_\d+$", waypoint_name)
+if match:
+    print(match.group(1))
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+safe_slug() {
+  printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_'
+}
+
+apply_waypoint_default_nav2_goals() {
+  if [ "$WAYPOINT_EXPLICIT" != "true" ]; then
+    return 0
+  fi
+  if [ "$NAV2_GOALS_EXPLICIT" = "true" ]; then
+    return 0
+  fi
+  if [[ "$WORLD" != baylands* ]]; then
+    return 0
+  fi
+
+  local resolved=""
+  resolved="$(resolve_nav2_goals_for_waypoint "$WAYPOINT" 2>/dev/null || true)"
+  if [ -z "$resolved" ]; then
+    return 0
+  fi
+
+  if [ "$NAV2_GOALS" != "$resolved" ]; then
+    echo "[nav2_tuning] waypoint:=$WAYPOINT implies nav2_goals:=$resolved"
+  fi
+  NAV2_GOALS="$resolved"
+  NAV2_GOALS_SOURCE="$resolved"
+}
+
 apply_nav2_goals_default_waypoint() {
   if [ "$WAYPOINT_EXPLICIT" = "true" ]; then
     return 0
@@ -400,6 +480,83 @@ apply_nav2_goals_default_waypoint() {
     exit 2
   fi
   WAYPOINT="$resolved"
+}
+
+apply_nav2_goals_waypoint_slice() {
+  if [ "$WAYPOINT_EXPLICIT" != "true" ]; then
+    return 0
+  fi
+  if [ -z "$WAYPOINT" ] || [ -z "$NAV2_GOALS" ]; then
+    return 0
+  fi
+  if [[ "$WORLD" != baylands* ]]; then
+    return 0
+  fi
+
+  if [ "$NAV2_GOALS_EXPLICIT" = "true" ] || [ -z "$NAV2_GOALS_SOURCE" ]; then
+    NAV2_GOALS_SOURCE="$NAV2_GOALS"
+  fi
+
+  local source_path=""
+  source_path="$(baylands_route_yaml_path "$NAV2_GOALS_SOURCE")"
+  if [ ! -f "$source_path" ]; then
+    echo "[nav2_tuning] Warning: cannot slice nav2_goals '$NAV2_GOALS_SOURCE'; missing $source_path" >&2
+    return 0
+  fi
+
+  local slice_dir="$STATE_DIR/nav2_tuning_goal_slices"
+  local source_label waypoint_label slice_path result
+  source_label="$(safe_slug "$(basename "$NAV2_GOALS_SOURCE" .yaml)")"
+  waypoint_label="$(safe_slug "$WAYPOINT")"
+  slice_path="$slice_dir/$(session_safe)_${source_label}_from_${waypoint_label}.yaml"
+
+  if ! result="$(python3 - "$source_path" "$WAYPOINT" "$slice_path" "$DRY_RUN" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+import yaml
+
+source_path = Path(sys.argv[1])
+start_name = sys.argv[2]
+out_path = Path(sys.argv[3])
+dry_run = sys.argv[4].lower() == "true"
+
+data = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
+waypoints = data.get("waypoints") or []
+if not isinstance(waypoints, list):
+    raise SystemExit(f"{source_path} does not contain a waypoint list")
+
+start_index = None
+for index, waypoint in enumerate(waypoints):
+    if isinstance(waypoint, dict) and str(waypoint.get("name", "")).strip() == start_name:
+        start_index = index
+        break
+
+if start_index is None:
+    raise SystemExit(f"waypoint '{start_name}' is not present in {source_path}")
+
+out_data = dict(data)
+out_data["source_goal_sequence_file"] = str(source_path)
+out_data["source_start_waypoint"] = start_name
+out_data["source_start_index"] = start_index
+out_data["waypoints"] = waypoints[start_index:]
+
+if not dry_run:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(yaml.safe_dump(out_data, sort_keys=False), encoding="utf-8")
+
+print(f"{out_path}\t{start_index}\t{len(waypoints)}\t{len(out_data['waypoints'])}")
+PY
+)"; then
+    echo "[nav2_tuning] Warning: $result" >&2
+    return 0
+  fi
+
+  local resolved_slice start_index total_count slice_count
+  IFS=$'\t' read -r resolved_slice start_index total_count slice_count <<< "$result"
+  NAV2_GOALS="$resolved_slice"
+  echo "[nav2_tuning] Using Nav2 goal slice from $WAYPOINT: $slice_count/$total_count waypoints starting at index $start_index"
 }
 
 localization_cmd() {
@@ -809,6 +966,7 @@ Profile: $PROFILE
 World: $WORLD
 Waypoint: $WAYPOINT
 Nav2 goals: $NAV2_GOALS
+Nav2 goals source: ${NAV2_GOALS_SOURCE:-$NAV2_GOALS}
 Lidar: $LIDAR
 Pause after goal: $PAUSE_AFTER_GOAL_S
 GUI: $GUI
@@ -1028,6 +1186,7 @@ if [[ "$WORLD" == baylands* ]]; then
   baylands_sync_waypoints "$DRY_RUN"
 fi
 
+apply_waypoint_default_nav2_goals
 apply_nav2_goals_default_waypoint
 mapfile -t route_default_lidar_args < <(route_lidar_preset_args "$NAV2_GOALS" "$LIDAR" "${TUNING_LIDAR_ARGS[@]}")
 TUNING_LIDAR_ARGS+=("${route_default_lidar_args[@]}")
@@ -1036,6 +1195,7 @@ CLI_WORLD="$WORLD"
 CLI_PROFILE="$PROFILE"
 CLI_WAYPOINT="$WAYPOINT"
 CLI_NAV2_GOALS="$NAV2_GOALS"
+CLI_NAV2_GOALS_SOURCE="$NAV2_GOALS_SOURCE"
 CLI_LIDAR="$LIDAR"
 CLI_PAUSE_AFTER_GOAL_S="$PAUSE_AFTER_GOAL_S"
 CLI_GUI="$GUI"
@@ -1071,6 +1231,7 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   fi
   if [ "$NAV2_GOALS_EXPLICIT" = "true" ]; then
     NAV2_GOALS="$CLI_NAV2_GOALS"
+    NAV2_GOALS_SOURCE="$CLI_NAV2_GOALS_SOURCE"
   fi
   if [ "$LIDAR_EXPLICIT" = "true" ]; then
     LIDAR="$CLI_LIDAR"
@@ -1126,7 +1287,12 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   if [ "$SPAWN_POST_DELAY_EXPLICIT" = "true" ]; then
     SPAWN_POST_DELAY_S="$CLI_SPAWN_POST_DELAY_S"
   fi
-  apply_nav2_goals_default_waypoint
+fi
+
+apply_waypoint_default_nav2_goals
+apply_nav2_goals_default_waypoint
+apply_nav2_goals_waypoint_slice
+if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   write_state
 fi
 
