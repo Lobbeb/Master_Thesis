@@ -92,6 +92,8 @@ Examples:
  tmux attach
 ```
 
+Första sidan visar Gazebo starten och UAV spawning, nästa sida innehåller Localization, Nav2 och Follow koden. (Ctrl+B, sen klicka på N för att bläddra)
+
 *Nav2 Goals/routes du kan välja på: (I ordern dem är i den stora rutten):*
 
 * rotundan          (finished)
