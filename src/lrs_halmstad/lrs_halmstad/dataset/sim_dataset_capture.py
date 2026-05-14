@@ -472,6 +472,12 @@ class SimDatasetCapture(Node):
 
         bw = x2 - x1
         bh = y2 - y1
+        if bw <= 0.0 or bh <= 0.0:
+            return None, projected
+        if self.min_bbox_pixels > 0.0 and (bw < self.min_bbox_pixels or bh < self.min_bbox_pixels):
+            return None, projected
+        if self.min_bbox_area_px > 0.0 and (bw * bh) < self.min_bbox_area_px:
+            return None, projected
 
         xc = (x1 + x2) / (2.0 * self.camera_model.width)
         yc = (y1 + y2) / (2.0 * self.camera_model.height)

@@ -1,5 +1,1 @@
--   Make sure we use controller.py and simulator.py when moving the UAV and UGV so it
-    integrates cleanly with the gitlab code we had from the start.
-
--   Go through the run_follow_defaults.yaml and make sure there are no unused parameters,
-    and that these ARE the defaults UNLESS overriden by terminal input arguments.
+-   There's a bug with the waypoints that it goes back to 0 in rotundan before 8

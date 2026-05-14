@@ -1,31 +1,22 @@
 world: baylands
-output_dir: datasets/baylands_leader_varied
+output_dir: datasets/baylands_leader_routes
 
 capture:
   uav_name: dji0
-  hz: 1.0
+  hz: 0.5
+  duration_s: 100.0
   save_overlay: false
   save_metadata: true
   save_negative_examples: true
+  make_obb: true
+  obb_overlay: true
+  obb_overwrite: true
 
 startup:
   warmup_s: 6.0
   stop_on_error: false
   scenario_retry_count: 1
   retry_delay_s: 8.0
-
-gimbal:
-  mode: random_hold
-  interval_s: 6.0
-  hold_s: 7.0
-  pan_center_deg: 0.0
-  pan_amplitude_deg: 18.0
-  pan_min_deg: -30.0
-  pan_max_deg: 30.0
-  tilt_center_deg: -45.0
-  tilt_amplitude_deg: 10.0
-  tilt_min_deg: -60.0
-  tilt_max_deg: -25.0
 
 pose_variations:
   - name: right
@@ -50,16 +41,39 @@ pose_variations:
     hold_s: 20.0
 
 scenarios:
-  - name: art
-    waypoint: art_0
-    nav2_goals: art
+  - name: rotundan
+    waypoint: rotundan_0
+    nav2_goals: rotundan
+    uav_pattern: manual
+  - name: road_to_west
+    waypoint: road_to_west_0
+    nav2_goals: road_to_west
+    uav_pattern: scripted
   - name: parkinglot_west
     waypoint: parkinglot_west_0
     nav2_goals: parkinglot_west
+    uav_pattern: scripted
+  - name: road_to_spawn
+    waypoint: road_to_spawn_0
+    nav2_goals: road_to_spawn
+    uav_pattern: manual
+  - name: spawn
+    waypoint: spawn_0
+    nav2_goals: spawn
+    uav_pattern: scripted
+  - name: road_to_east
+    waypoint: road_to_east_0
+    nav2_goals: road_to_east
+    uav_pattern: scripted
   - name: parkinglot_east
     waypoint: parkinglot_east_0
     nav2_goals: parkinglot_east
+    uav_pattern: scripted
+  - name: road_to_strip
+    waypoint: road_to_strip_0
+    nav2_goals: road_to_strip
+    uav_pattern: scripted
   - name: strip
     waypoint: strip_0
     nav2_goals: strip
-  
+    uav_pattern: scripted

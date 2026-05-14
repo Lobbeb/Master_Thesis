@@ -179,7 +179,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       transform_tolerance: 1.0
-      initial_transform_timeout: 25.0
+      initial_transform_timeout: 40.0
       footprint: "[ [0.55, 0.45], [0.55, -0.45], [-0.55, -0.45], [-0.55, 0.45] ]"
       resolution: 0.2
       track_unknown_space: true

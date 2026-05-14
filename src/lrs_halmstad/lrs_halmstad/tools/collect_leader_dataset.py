@@ -49,9 +49,13 @@ def _require_list(value: Any, label: str) -> list[Any]:
 class CaptureConfig:
     uav_name: str
     hz: float
+    duration_s: float
     save_overlay: bool
     save_metadata: bool
     save_negative_examples: bool
+    make_obb: bool
+    obb_overlay: bool
+    obb_overwrite: bool
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,7 @@ class Scenario:
     name: str
     waypoint: str
     nav2_goals: str
+    uav_pattern: str
 
 
 @dataclass(frozen=True)
@@ -122,17 +127,20 @@ class LeaderDatasetCollector:
         self.manifest_arg: Optional[str] = None
         self.output_override: Optional[str] = None
         self.session_name = "halmstad-baylands-leader-dataset"
+        self.launcher = "nav2_tuning"
+        self.scenario_filter_names: list[str] = []
         self.dry_run = False
 
         self._stop_requested = False
         self._active_capture: Optional[subprocess.Popen[str]] = None
-        self._active_gimbal: Optional[subprocess.Popen[str]] = None
         self._temp_params_file: Optional[Path] = None
         self._summary_path: Optional[Path] = None
         self._run_started_at = _utc_now_iso()
         self._summary: dict[str, Any] = {
             "started_at": self._run_started_at,
             "dry_run": False,
+            "launcher": self.launcher,
+            "scenario_filter": [],
             "manifest_path": "",
             "output_dir": "",
             "session_name": self.session_name,
@@ -144,12 +152,15 @@ class LeaderDatasetCollector:
         self._parse_args(argv)
         self.manifest_path = self._resolve_manifest_path()
         self.manifest = self._load_manifest(self.manifest_path)
+        self.selected_scenarios = self._select_scenarios(self.manifest.scenarios)
         self.world = self._resolve_world()
         self.output_dir = self._resolve_output_dir()
         self._summary["dry_run"] = self.dry_run
         self._summary["manifest_path"] = str(self.manifest_path)
         self._summary["output_dir"] = str(self.output_dir)
         self._summary["session_name"] = self.session_name
+        self._summary["launcher"] = self.launcher
+        self._summary["scenario_filter"] = self.scenario_filter_names
 
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
@@ -166,17 +177,35 @@ class LeaderDatasetCollector:
                 self.output_override = arg.split(":=", 1)[1]
             elif arg.startswith("session:="):
                 self.session_name = arg.split(":=", 1)[1].strip() or self.session_name
+            elif arg.startswith("launcher:="):
+                self.launcher = arg.split(":=", 1)[1].strip() or self.launcher
+                if self.launcher not in ("nav2_tuning", "tmux_1to1", "external", "manual"):
+                    raise ValueError("launcher must be nav2_tuning, tmux_1to1, external, or manual")
+            elif arg.startswith("route:=") or arg.startswith("scenario:="):
+                self.scenario_filter_names.append(arg.split(":=", 1)[1].strip())
+            elif arg.startswith("routes:=") or arg.startswith("scenarios:="):
+                raw = arg.split(":=", 1)[1]
+                self.scenario_filter_names.extend(item.strip() for item in raw.split(","))
             elif arg.startswith("dry_run:="):
                 self.dry_run = _coerce_bool(arg.split(":=", 1)[1])
             else:
                 raise ValueError(
                     "Unknown argument: "
                     f"{arg}\nUsage: ./run.sh collect_leader_dataset [world] "
-                    "[manifest:=path.yaml] [out:=datasets/name] [session:=name] [dry_run:=true|false]"
+                    "[manifest:=path.yaml] [out:=datasets/name] [session:=name] "
+                    "[route:=name] [routes:=a,b] [launcher:=nav2_tuning|tmux_1to1|external] "
+                    "[dry_run:=true|false]"
                 )
 
     def _resolve_manifest_path(self) -> Path:
-        default_path = self.package_share / "config" / "baylands_leader_dataset_manifest.yaml"
+        source_default_path = (
+            self.ws_root / "src" / "lrs_halmstad" / "config" / "baylands_leader_dataset_manifest.yaml"
+        )
+        default_path = (
+            source_default_path
+            if source_default_path.is_file()
+            else self.package_share / "config" / "baylands_leader_dataset_manifest.yaml"
+        )
         raw = self.manifest_arg
         if not raw:
             return default_path
@@ -207,6 +236,31 @@ class LeaderDatasetCollector:
         pose_variations_raw = _require_list(data.get("pose_variations", []), "pose_variations")
         scenarios_raw = _require_list(data.get("scenarios", []), "scenarios")
 
+        pose_variations = [
+            PoseVariation(
+                name=str(_require_dict(item, "pose_variation").get("name", "")).strip()
+                or f"variation_{index + 1}",
+                leader_heading_offset_deg=float(_require_dict(item, "pose_variation").get("leader_heading_offset_deg")),
+                d_target_m=float(_require_dict(item, "pose_variation").get("d_target_m")),
+                hold_s=float(_require_dict(item, "pose_variation").get("hold_s")),
+            )
+            for index, item in enumerate(pose_variations_raw)
+        ]
+        scenarios = []
+        for index, item in enumerate(scenarios_raw):
+            scenario_data = _require_dict(item, "scenario")
+            scenarios.append(
+                Scenario(
+                    name=str(scenario_data.get("name", "")).strip() or f"scenario_{index + 1}",
+                    waypoint=str(scenario_data.get("waypoint", "")).strip(),
+                    nav2_goals=str(scenario_data.get("nav2_goals", "")).strip(),
+                    uav_pattern=str(scenario_data.get("uav_pattern", "manual")).strip() or "manual",
+                )
+            )
+        capture_duration_s = float(capture.get("duration_s", 0.0))
+        if capture_duration_s <= 0.0:
+            capture_duration_s = sum(item.hold_s for item in pose_variations)
+
         manifest = Manifest(
             world=str(data.get("world", "baylands")).strip() or "baylands",
             output_dir=str(data.get("output_dir", "datasets/baylands_leader_varied")).strip()
@@ -214,9 +268,13 @@ class LeaderDatasetCollector:
             capture=CaptureConfig(
                 uav_name=str(capture.get("uav_name", "dji0")).strip() or "dji0",
                 hz=float(capture.get("hz", 1.0)),
+                duration_s=capture_duration_s,
                 save_overlay=_coerce_bool(capture.get("save_overlay", False)),
                 save_metadata=_coerce_bool(capture.get("save_metadata", True)),
                 save_negative_examples=_coerce_bool(capture.get("save_negative_examples", True)),
+                make_obb=_coerce_bool(capture.get("make_obb", True)),
+                obb_overlay=_coerce_bool(capture.get("obb_overlay", capture.get("save_overlay", False))),
+                obb_overwrite=_coerce_bool(capture.get("obb_overwrite", False)),
             ),
             startup=StartupConfig(
                 warmup_s=float(startup.get("warmup_s", 12.0)),
@@ -237,24 +295,8 @@ class LeaderDatasetCollector:
                 tilt_min_deg=float(gimbal.get("tilt_min_deg", -60.0)),
                 tilt_max_deg=float(gimbal.get("tilt_max_deg", -25.0)),
             ),
-            pose_variations=[
-                PoseVariation(
-                    name=str(_require_dict(item, "pose_variation").get("name", "")).strip()
-                    or f"variation_{index + 1}",
-                    leader_heading_offset_deg=float(_require_dict(item, "pose_variation").get("leader_heading_offset_deg")),
-                    d_target_m=float(_require_dict(item, "pose_variation").get("d_target_m")),
-                    hold_s=float(_require_dict(item, "pose_variation").get("hold_s")),
-                )
-                for index, item in enumerate(pose_variations_raw)
-            ],
-            scenarios=[
-                Scenario(
-                    name=str(_require_dict(item, "scenario").get("name", "")).strip() or f"scenario_{index + 1}",
-                    waypoint=str(_require_dict(item, "scenario").get("waypoint", "")).strip(),
-                    nav2_goals=str(_require_dict(item, "scenario").get("nav2_goals", "")).strip(),
-                )
-                for index, item in enumerate(scenarios_raw)
-            ],
+            pose_variations=pose_variations,
+            scenarios=scenarios,
         )
 
         self._validate_manifest(manifest)
@@ -265,6 +307,8 @@ class LeaderDatasetCollector:
             raise ValueError("Only world=baylands is supported by collect_leader_dataset right now")
         if manifest.capture.hz <= 0.0:
             raise ValueError("capture.hz must be > 0")
+        if manifest.capture.duration_s <= 0.0:
+            raise ValueError("capture.duration_s must be > 0 when no pose variation hold times are configured")
         if manifest.startup.warmup_s < 0.0:
             raise ValueError("startup.warmup_s must be >= 0")
         if manifest.startup.scenario_retry_count < 0:
@@ -279,13 +323,15 @@ class LeaderDatasetCollector:
             raise ValueError("gimbal.hold_s must be > 0")
         if manifest.gimbal.hold_s < manifest.gimbal.interval_s:
             raise ValueError("gimbal.hold_s must be >= gimbal.interval_s")
-        if not manifest.pose_variations:
-            raise ValueError("manifest must contain at least one pose variation")
         if not manifest.scenarios:
             raise ValueError("manifest must contain at least one scenario")
         for scenario in manifest.scenarios:
             if not scenario.waypoint or not scenario.nav2_goals:
                 raise ValueError(f"scenario '{scenario.name}' must define waypoint and nav2_goals")
+            if scenario.uav_pattern not in ("manual", "scripted"):
+                raise ValueError(f"scenario '{scenario.name}' uav_pattern must be manual or scripted")
+            if scenario.uav_pattern == "scripted" and not manifest.pose_variations:
+                raise ValueError(f"scenario '{scenario.name}' uses uav_pattern=scripted but pose_variations is empty")
         for variation in manifest.pose_variations:
             if variation.hold_s <= 0.0:
                 raise ValueError(f"pose variation '{variation.name}' hold_s must be > 0")
@@ -298,6 +344,30 @@ class LeaderDatasetCollector:
                 f"World mismatch: command requested '{self.world_arg}' but manifest uses '{self.manifest.world}'"
             )
         return self.world_arg or self.manifest.world
+
+    def _select_scenarios(self, scenarios: list[Scenario]) -> list[Scenario]:
+        requested = [item for item in self.scenario_filter_names if item]
+        if not requested:
+            return scenarios
+
+        selected: list[Scenario] = []
+        selected_names: set[str] = set()
+        for name in requested:
+            match = next(
+                (
+                    scenario
+                    for scenario in scenarios
+                    if scenario.name == name or scenario.nav2_goals == name or scenario.waypoint == name
+                ),
+                None,
+            )
+            if match is None:
+                valid = ", ".join(scenario.name for scenario in scenarios)
+                raise ValueError(f"Unknown route/scenario '{name}'. Valid scenarios: {valid}")
+            if match.name not in selected_names:
+                selected.append(match)
+                selected_names.add(match.name)
+        return selected
 
     def _resolve_output_dir(self) -> Path:
         raw = self.output_override or self.manifest.output_dir
@@ -391,10 +461,7 @@ class LeaderDatasetCollector:
             time.sleep(min(0.5, deadline - time.monotonic()))
 
     def _check_helper_processes(self) -> None:
-        for process, label in (
-            (self._active_capture, "capture_dataset"),
-            (self._active_gimbal, "follow_control"),
-        ):
+        for process, label in ((self._active_capture, "capture_dataset"),):
             if process is not None and process.poll() is not None:
                 raise ScenarioFailure(f"{label} exited early with code {process.returncode}")
 
@@ -449,14 +516,14 @@ class LeaderDatasetCollector:
             time.sleep(0.5)
         raise ScenarioFailure(f"Timed out waiting for param {param_name} on {node_name}")
 
-    def _set_follow_param(self, name: str, value: float) -> None:
-        self._run(
-            ["ros2", "param", "set", "--no-daemon", "/follow_uav", name, f"{value:.6f}"],
-            label=f"set {name}",
-        )
-
     def _write_effective_params_file(self) -> Path:
-        with (self.package_share / "config" / "run_follow_defaults.yaml").open("r", encoding="utf-8") as handle:
+        source_params_path = self.ws_root / "src" / "lrs_halmstad" / "config" / "run_follow_defaults.yaml"
+        params_path = (
+            source_params_path
+            if source_params_path.is_file()
+            else self.package_share / "config" / "run_follow_defaults.yaml"
+        )
+        with params_path.open("r", encoding="utf-8") as handle:
             params_data = yaml.safe_load(handle) or {}
 
         camera_tracker = _require_dict(params_data.setdefault("camera_tracker", {}), "camera_tracker")
@@ -502,9 +569,27 @@ class LeaderDatasetCollector:
             json.dump(self._summary, handle, indent=2, sort_keys=True)
 
     def _cleanup_session(self) -> None:
+        if self.launcher in ("external", "manual"):
+            print("[collect_leader_dataset] External launcher mode: leaving Nav2/follow stack running", flush=True)
+            return
+
+        if self.launcher == "tmux_1to1":
+            self._run(
+                ["./stop.sh", "tmux_1to1", self.world, f"session:={self.session_name}"],
+                label="stop tmux_1to1",
+                allow_failure=True,
+            )
+            return
+
         self._run(
-            ["./stop.sh", "tmux_1to1", self.world, f"session:={self.session_name}"],
-            label="stop tmux_1to1",
+            [
+                "./run.sh",
+                "nav2_tuning",
+                "stop",
+                f"world:={self.world}",
+                f"session:={self.session_name}",
+            ],
+            label="stop nav2_tuning",
             allow_failure=True,
         )
 
@@ -513,17 +598,49 @@ class LeaderDatasetCollector:
         if params_file is None:
             raise RuntimeError("params file was not prepared")
 
+        if self.launcher in ("external", "manual"):
+            print(
+                "[collect_leader_dataset] External launcher mode: "
+                f"expecting route '{scenario.name}' to already be running "
+                f"(waypoint={scenario.waypoint}, nav2_goals={scenario.nav2_goals})",
+                flush=True,
+            )
+            return
+
+        if self.launcher == "tmux_1to1":
+            self._run(
+                [
+                    "./run.sh",
+                    "tmux_1to1",
+                    self.world,
+                    "mode:=follow",
+                    "tmux_attach:=false",
+                    f"session:={self.session_name}",
+                    f"params_file:={params_file}",
+                    f"waypoint:={scenario.waypoint}",
+                    f"nav2_goals:={scenario.nav2_goals}",
+                ],
+                label=f"start scenario {scenario.name}",
+            )
+            return
+
         self._run(
             [
                 "./run.sh",
-                "tmux_1to1",
-                self.world,
-                "mode:=follow",
+                "nav2_tuning",
+                "start",
+                f"world:={self.world}",
                 "tmux_attach:=false",
                 f"session:={self.session_name}",
                 f"params_file:={params_file}",
                 f"waypoint:={scenario.waypoint}",
                 f"nav2_goals:={scenario.nav2_goals}",
+                "lidar:=3d",
+                "spawn_uav:=true",
+                "start_camera_tracker:=true",
+                "with_route_driver:=true",
+                "start_optional_teleop:=false",
+                "mute_ugv_camera:=true",
             ],
             label=f"start scenario {scenario.name}",
         )
@@ -541,6 +658,7 @@ class LeaderDatasetCollector:
 
     def _start_capture(self) -> Optional[subprocess.Popen[str]]:
         capture = self.manifest.capture
+        save_metadata = capture.save_metadata or capture.make_obb
         return self._spawn(
             [
                 "./run.sh",
@@ -550,48 +668,47 @@ class LeaderDatasetCollector:
                 f"uav_name:={capture.uav_name}",
                 f"hz:={capture.hz}",
                 f"save_overlay:={'true' if capture.save_overlay else 'false'}",
-                f"save_metadata:={'true' if capture.save_metadata else 'false'}",
+                f"save_metadata:={'true' if save_metadata else 'false'}",
                 f"save_negative_examples:={'true' if capture.save_negative_examples else 'false'}",
             ],
             label="start capture_dataset",
         )
 
-    def _start_gimbal_helper(self) -> Optional[subprocess.Popen[str]]:
-        gimbal = self.manifest.gimbal
+    def _run_obb_generation(self) -> None:
         capture = self.manifest.capture
-        return self._spawn(
-            [
-                "./run.sh",
-                "follow_control",
-                "random",
-                "--gimbal-only",
-                "--uav-name",
-                capture.uav_name,
-                "--interval",
-                f"{gimbal.interval_s}",
-                "--gimbal-interval",
-                f"{gimbal.interval_s}",
-                "--start-delay",
-                "0",
-                "--pan-center",
-                f"{gimbal.pan_center_deg}",
-                "--pan-amplitude",
-                f"{gimbal.pan_amplitude_deg}",
-                "--pan-min",
-                f"{gimbal.pan_min_deg}",
-                "--pan-max",
-                f"{gimbal.pan_max_deg}",
-                "--tilt-center",
-                f"{gimbal.tilt_center_deg}",
-                "--tilt-amplitude",
-                f"{gimbal.tilt_amplitude_deg}",
-                "--tilt-min",
-                f"{gimbal.tilt_min_deg}",
-                "--tilt-max",
-                f"{gimbal.tilt_max_deg}",
-            ],
-            label="start follow_control gimbal-only",
+        if not capture.make_obb:
+            return
+        command = [
+            "./run.sh",
+            "dataset_make_obb",
+            str(self.output_dir),
+        ]
+        if capture.obb_overlay:
+            command.append("--overlay")
+        if capture.obb_overwrite:
+            command.append("--overwrite")
+        self._run(command, label="generate OBB labels")
+
+    def _set_follow_param(self, name: str, value: float) -> None:
+        self._run(
+            ["ros2", "param", "set", "--no-daemon", "/follow_uav", name, f"{value:.6f}"],
+            label=f"set {name}",
         )
+
+    def _run_scripted_uav_pattern(self, scenario: Scenario) -> None:
+        for variation in self.manifest.pose_variations:
+            self._ensure_not_stopped()
+            print(
+                "[collect_leader_dataset] UAV pattern "
+                f"{scenario.name}/{variation.name}: "
+                f"heading_offset_deg={variation.leader_heading_offset_deg:.1f} "
+                f"d_target_m={variation.d_target_m:.2f} hold_s={variation.hold_s:.1f}",
+                flush=True,
+            )
+            if not self.dry_run:
+                self._set_follow_param("leader_heading_offset_deg", variation.leader_heading_offset_deg)
+                self._set_follow_param("d_target", variation.d_target_m)
+            self._sleep(variation.hold_s, label=f"UAV pattern {scenario.name}/{variation.name}")
 
     def _poll_child_or_fail(self, process: Optional[subprocess.Popen[str]], label: str) -> None:
         if process is None or self.dry_run:
@@ -600,23 +717,8 @@ class LeaderDatasetCollector:
         if process.poll() is not None:
             raise ScenarioFailure(f"{label} exited early with code {process.returncode}")
 
-    def _run_pose_schedule(self) -> None:
-        for variation in self.manifest.pose_variations:
-            self._ensure_not_stopped()
-            print(
-                "[collect_leader_dataset] Pose variation "
-                f"{variation.name}: heading_offset_deg={variation.leader_heading_offset_deg:.1f} "
-                f"d_target_m={variation.d_target_m:.2f} hold_s={variation.hold_s:.1f}",
-                flush=True,
-            )
-            if not self.dry_run:
-                self._set_follow_param("leader_heading_offset_deg", variation.leader_heading_offset_deg)
-                self._set_follow_param("d_target", variation.d_target_m)
-            self._sleep(variation.hold_s, label=f"pose variation {variation.name}")
-
     def _run_scenario_attempt(self, scenario: Scenario, attempt_summary: dict[str, Any]) -> None:
         self._active_capture = None
-        self._active_gimbal = None
         try:
             self._cleanup_session()
             self._start_scenario_stack(scenario)
@@ -626,10 +728,13 @@ class LeaderDatasetCollector:
             self._active_capture = self._start_capture()
             self._poll_child_or_fail(self._active_capture, "capture_dataset")
 
-            self._active_gimbal = self._start_gimbal_helper()
-            self._poll_child_or_fail(self._active_gimbal, "follow_control")
-
-            self._run_pose_schedule()
+            if scenario.uav_pattern == "scripted":
+                self._run_scripted_uav_pattern(scenario)
+            else:
+                self._sleep(self.manifest.capture.duration_s, label=f"capture window {scenario.name}")
+            self._stop_process(self._active_capture, "capture_dataset")
+            self._active_capture = None
+            self._run_obb_generation()
 
             attempt_summary["status"] = "completed"
             attempt_summary["finished_at"] = _utc_now_iso()
@@ -645,8 +750,6 @@ class LeaderDatasetCollector:
         finally:
             self._stop_process(self._active_capture, "capture_dataset")
             self._active_capture = None
-            self._stop_process(self._active_gimbal, "follow_control")
-            self._active_gimbal = None
             self._cleanup_session()
             self._write_summary()
 
@@ -656,6 +759,7 @@ class LeaderDatasetCollector:
             "name": scenario.name,
             "waypoint": scenario.waypoint,
             "nav2_goals": scenario.nav2_goals,
+            "uav_pattern": scenario.uav_pattern,
             "started_at": started_at,
             "status": "running",
             "attempts": [],
@@ -722,12 +826,14 @@ class LeaderDatasetCollector:
 
         print(
             f"[collect_leader_dataset] Starting collection: world={self.world} "
-            f"output_dir={self.output_dir} manifest={self.manifest_path}",
+            f"output_dir={self.output_dir} manifest={self.manifest_path} "
+            f"capture_duration_s={self.manifest.capture.duration_s:.1f} "
+            f"make_obb={self.manifest.capture.make_obb} launcher={self.launcher}",
             flush=True,
         )
 
         try:
-            for scenario in self.manifest.scenarios:
+            for scenario in self.selected_scenarios:
                 self._ensure_not_stopped()
                 print(f"[collect_leader_dataset] === Scenario: {scenario.name} ===", flush=True)
                 try:
@@ -756,7 +862,6 @@ class LeaderDatasetCollector:
             raise
         finally:
             self._stop_process(self._active_capture, "capture_dataset")
-            self._stop_process(self._active_gimbal, "follow_control")
             self._cleanup_session()
             if self._temp_params_file is not None:
                 try:

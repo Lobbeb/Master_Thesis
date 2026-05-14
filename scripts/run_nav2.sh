@@ -52,7 +52,7 @@ done
 LIDAR_REMAINING_ARGS=("${NAV2_PASSTHROUGH_ARGS[@]}")
 
 if [ "$LIDAR_SCAN_TOPIC" = "$(lidar_mode_scan_topic 3d)" ]; then
-  if [ "$USE_SCAN_RELAY_OVERRIDE" = "false" ]; then
+  if [ "$USE_SCAN_RELAY_OVERRIDE" != "true" ]; then
     USE_SCAN_RELAY="false"
     echo "[run_nav2] 3D lidar mode: using direct pc2ls scan $LIDAR_SCAN_TOPIC" >&2
   else

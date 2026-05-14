@@ -59,7 +59,10 @@ sensors:
   camera:
     - model: intel_realsense
       urdf_enabled: true
-      launch_enabled: true
+      # Generated Clearpath camera launch is disabled. Gazebo still creates
+      # the camera from this URDF entry; ROS only receives the color topics
+      # bridged by lrs_halmstad/launch/ugv_rgb_camera_bridge.launch.py.
+      launch_enabled: false
       parent: base_link
       xyz: [0.36, 0.0, 0.15]
       rpy: [0.0, -0.2, 0.0]
@@ -71,11 +74,7 @@ sensors:
           image_height: 480
           image_width: 640
           enable_color: true
-          rgb_camera.profile: 640,480,30
-          enable_depth: false
-          depth_module.profile: 640,480,30
-          pointcloud.enable: false
-          update_rate: 20
+          rgb_camera.profile: 640,480,20
   gps: []
   imu: []
   lidar2d:
@@ -96,26 +95,12 @@ sensors:
           max_range: 25.0
           update_rate: 10
   lidar3d:
+    # Disabled in Clearpath generation. The active Gazebo lidar is defined by
+    # platform.extras.urdf above, and ROS only bridges its PointCloud2 through
+    # lrs_halmstad/launch/ugv_lidar3d_points_bridge.launch.py.
     - model: velodyne_lidar
       urdf_enabled: false
-      launch_enabled: true
+      launch_enabled: false
       parent: sensor_arch_mount
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
-      ros_parameters:
-        velodyne_driver_node:
-          frame_id: lidar3d_0_laser
-          device_ip: 192.168.131.25
-          port: 2368
-          model: VLP16
-        velodyne_transform_node:
-          model: VLP16
-          fixed_frame: lidar3d_0_laser
-          target_frame: lidar3d_0_laser
-          update_rate: 10
-          min_ang_v: -0.60
-          max_ang_v: 0.60
-          min_range: 0.0
-          max_range: 25.0
-          min_ang_h: -3.141592
-          max_ang_h: 3.141592

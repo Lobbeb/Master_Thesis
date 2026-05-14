@@ -18,7 +18,7 @@ PAUSE_AFTER_GOAL_S="0.0"
 GUI="false"
 PERSPECTIVE="NAV2"
 START_RQT="false"
-START_COLLISION_MONITOR="false"
+START_COLLISION_MONITOR="true"
 MUTE_UGV_CAMERA="true"
 CLOCK_MODE="guarded"
 START_OPTIONAL_TELEOP="true"
@@ -33,16 +33,26 @@ REBUILD="false"
 REBUILD_DONE="false"
 DRY_RUN="false"
 REALIGN="true"
+FOLLOW_PARAMS_SOURCE="$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml"
 
-FOLLOW_START_DELAY_S="15.0"
-LOCALIZATION_READY_TIMEOUT_S="15"
-LOCALIZATION_SCAN_READY_TIMEOUT_S="15"
+# Delay between starting Nav2 and starting the route/follow driver.
+FOLLOW_START_DELAY_S="1"
+# Wait for localization lifecycle nodes, mainly map_server and AMCL, to become active.
+LOCALIZATION_READY_TIMEOUT_S="5"
+# Wait for the localization scan topic. In 3D mode this is the pc2ls scan_from_points topic.
+LOCALIZATION_SCAN_READY_TIMEOUT_S="5"
+# Fixed delay after localization/realign/scan before Nav2 starts. This gives
+# AMCL and odom TF time to settle without depending on tf2_echo readiness checks.
+NAV2_START_DELAY_S="1"
+# Grace period after Ctrl-C before force-killing stack/base processes.
 STACK_STOP_GRACE_S="3"
-GAZEBO_READY_TIMEOUT_S="20"
-GAZEBO_POST_READY_DELAY_S="10"
-SPAWN_PRE_DELAY_S="20"
-SPAWN_POST_DELAY_S="5"
-SPAWN_GAZEBO_HELPER_TIMEOUT_S="20"
+# Fixed settle time after starting gazebo_sim, before localization starts.
+GAZEBO_POST_READY_DELAY_S="5"
+# Delay before spawning UAV, used so the UGV/Gazebo side has settled first.
+SPAWN_PRE_DELAY_S="15"
+# Delay after spawning UAV, used before starting localization/Nav2/follow.
+SPAWN_POST_DELAY_S="2"
+SPAWN_GAZEBO_HELPER_TIMEOUT_S="10"
 
 SESSION_EXPLICIT="false"
 PROFILE_EXPLICIT="false"
@@ -63,7 +73,9 @@ START_CAMERA_TRACKER_EXPLICIT="false"
 WITH_FOLLOW_EXPLICIT="false"
 PAUSE_AFTER_GOAL_EXPLICIT="false"
 FOLLOW_START_DELAY_EXPLICIT="false"
-GAZEBO_READY_TIMEOUT_EXPLICIT="false"
+LOCALIZATION_READY_TIMEOUT_EXPLICIT="false"
+LOCALIZATION_SCAN_READY_TIMEOUT_EXPLICIT="false"
+NAV2_START_DELAY_EXPLICIT="false"
 GAZEBO_POST_READY_DELAY_EXPLICIT="false"
 SPAWN_PRE_DELAY_EXPLICIT="false"
 SPAWN_POST_DELAY_EXPLICIT="false"
@@ -95,7 +107,9 @@ CLI_UAV_CAMERA_UPDATE_RATE=""
 CLI_START_CAMERA_TRACKER=""
 CLI_WITH_FOLLOW=""
 CLI_FOLLOW_START_DELAY_S=""
-CLI_GAZEBO_READY_TIMEOUT_S=""
+CLI_LOCALIZATION_READY_TIMEOUT_S=""
+CLI_LOCALIZATION_SCAN_READY_TIMEOUT_S=""
+CLI_NAV2_START_DELAY_S=""
 CLI_GAZEBO_POST_READY_DELAY_S=""
 CLI_SPAWN_PRE_DELAY_S=""
 CLI_SPAWN_POST_DELAY_S=""
@@ -130,11 +144,12 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [pause_after_goal_s:=0.0]
   [gui:=true|false] [perspective:=NAV2] [start_rqt:=true|false] [start_collision_monitor:=true|false] [map:=maps/baylands.yaml]
   [clock_mode:=guarded|direct]
-  [mute_ugv_camera:=true|false]  # true maps the UGV camera bridge to RGB-only
   [start_optional_teleop:=true|false]
-  [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=15.0]
+  [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=10.0]
   [uav_camera_update_rate:=10]
-  [spawn_post_delay_s:=10]
+  [localization_ready_timeout_s:=20] [localization_scan_ready_timeout_s:=20] [nav2_start_delay_s:=10]
+  [spawn_pre_delay_s:=20] [spawn_post_delay_s:=5]
+  [params_file:=path/to/run_follow_defaults.yaml]
   [rebuild:=true|false]
   [session:=name] [tmux_attach:=true|false] [dry_run:=true|false]
 
@@ -207,7 +222,9 @@ write_state() {
     printf 'START_CAMERA_TRACKER=%q\n' "$START_CAMERA_TRACKER"
     printf 'WITH_FOLLOW=%q\n' "$WITH_FOLLOW"
     printf 'FOLLOW_START_DELAY_S=%q\n' "$FOLLOW_START_DELAY_S"
-    printf 'GAZEBO_READY_TIMEOUT_S=%q\n' "$GAZEBO_READY_TIMEOUT_S"
+    printf 'LOCALIZATION_READY_TIMEOUT_S=%q\n' "$LOCALIZATION_READY_TIMEOUT_S"
+    printf 'LOCALIZATION_SCAN_READY_TIMEOUT_S=%q\n' "$LOCALIZATION_SCAN_READY_TIMEOUT_S"
+    printf 'NAV2_START_DELAY_S=%q\n' "$NAV2_START_DELAY_S"
     printf 'GAZEBO_POST_READY_DELAY_S=%q\n' "$GAZEBO_POST_READY_DELAY_S"
     printf 'SPAWN_PRE_DELAY_S=%q\n' "$SPAWN_PRE_DELAY_S"
     printf 'SPAWN_POST_DELAY_S=%q\n' "$SPAWN_POST_DELAY_S"
@@ -301,7 +318,6 @@ gazebo_cmd() {
     ./run.sh gazebo_sim "$WORLD"
     "gui:=$GUI"
     "waypoint:=$WAYPOINT"
-    "mute_ugv_camera:=$MUTE_UGV_CAMERA"
     "clock_mode:=$CLOCK_MODE"
   )
   echo "$(shell_join "${cmd[@]}")"
@@ -632,7 +648,7 @@ write_follow_params_file() {
   local output_file
   output_file="$(follow_params_file)"
   mkdir -p "$STATE_DIR"
-  python3 - "$WS_ROOT/src/lrs_halmstad/config/run_follow_defaults.yaml" "$output_file" "$PAUSE_AFTER_GOAL_S" "$(route_lidar_config_path)" "$(route_lidar_pc2ls_node_name)" <<'PY'
+  python3 - "$FOLLOW_PARAMS_SOURCE" "$output_file" "$PAUSE_AFTER_GOAL_S" "$(route_lidar_config_path)" "$(route_lidar_pc2ls_node_name)" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -709,23 +725,28 @@ start_base_processes() {
       echo "  0. colcon build --symlink-install"
     fi
     echo "  1. $(gazebo_cmd) rebuild:=false"
+    echo "  2. wait ${GAZEBO_POST_READY_DELAY_S}s after starting gazebo_sim"
     if [ "$SPAWN_UAV" = "true" ]; then
-      echo " 2. wait ${SPAWN_PRE_DELAY_S}s"
-      echo "  3. $(spawn_cmd)"
-      echo "  4. wait ${SPAWN_POST_DELAY_S}s"
+      echo "  4. wait ${SPAWN_PRE_DELAY_S}s"
+      echo "  5. $(spawn_cmd)"
+      echo "  6. wait ${SPAWN_POST_DELAY_S}s"
       if [ "$START_RQT" = "true" ]; then
-        echo "  5. $(rqt_cmd)"
+        echo "  7. $(rqt_cmd)"
       fi
     else
       if [ "$START_RQT" = "true" ]; then
-        echo "  2. $(rqt_cmd)"
+        echo "  4. $(rqt_cmd)"
       fi
     fi
     return 0
   fi
 
   maybe_rebuild
-  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "mute_ugv_camera:=$MUTE_UGV_CAMERA" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
+  send_pane_command "$GAZEBO_PANE_ID" ./run.sh gazebo_sim "$WORLD" "gui:=$GUI" "waypoint:=$WAYPOINT" "clock_mode:=$CLOCK_MODE" "rebuild:=false"
+  if [ "$GAZEBO_POST_READY_DELAY_S" != "0" ] && [ "$GAZEBO_POST_READY_DELAY_S" != "0.0" ]; then
+    echo "[nav2_tuning] Waiting ${GAZEBO_POST_READY_DELAY_S}s after starting gazebo_sim"
+    sleep "$GAZEBO_POST_READY_DELAY_S"
+  fi
   cleanup_optional_teleop_nodes
   if [ "$SPAWN_UAV" = "true" ]; then
     if [ "$SPAWN_PRE_DELAY_S" != "0" ] && [ "$SPAWN_PRE_DELAY_S" != "0.0" ]; then
@@ -781,6 +802,14 @@ wait_for_localization_scan_ready() {
   done
   echo "[nav2_tuning] Warning: no localization scan on $scan_topic within ${LOCALIZATION_SCAN_READY_TIMEOUT_S}s; starting Nav2 anyway" >&2
   return 1
+}
+
+delay_before_nav2_start() {
+  if [ "$NAV2_START_DELAY_S" = "0" ] || [ "$NAV2_START_DELAY_S" = "0.0" ]; then
+    return 0
+  fi
+  echo "[nav2_tuning] Waiting ${NAV2_START_DELAY_S}s before Nav2 start"
+  sleep "$NAV2_START_DELAY_S"
 }
 
 maybe_rebuild() {
@@ -903,6 +932,7 @@ restart_stack() {
     echo "[localization] $(localization_cmd)"
     echo "[realign] ./run.sh realign_yaw $WORLD waypoint:=$WAYPOINT"
     echo "[lidar] wait up to ${LOCALIZATION_SCAN_READY_TIMEOUT_S}s for localization scan"
+    echo "[nav2-delay] wait ${NAV2_START_DELAY_S}s before Nav2 start"
     echo "[nav2] $(nav2_cmd)"
     echo "[lidar] apply waypoint-specific pc2ls settings for $WAYPOINT after Nav2 start"
     echo "[rviz] <not managed: $(rviz_cmd)>"
@@ -925,13 +955,16 @@ restart_stack() {
   wait_for_localization_ready
   realign_yaw
   wait_for_localization_scan_ready || true
+  delay_before_nav2_start
   send_pane_command "$NAV2_PANE_ID" ./run.sh nav2 "lidar:=$LIDAR" "start_collision_monitor:=$START_COLLISION_MONITOR"
   apply_startup_waypoint_lidar_settings
 
   if [ "$WITH_FOLLOW" = "true" ]; then
+    echo "[nav2_tuning] Waiting ${FOLLOW_START_DELAY_S}s before route/follow start"
     sleep "$FOLLOW_START_DELAY_S"
     local -a follow_args=()
     mapfile -t follow_args < <(follow_extra_args)
+    echo "[nav2_tuning] Starting route/follow driver"
     send_pane_command "$FOLLOW_PANE_ID" ./run.sh 1to1_follow "$WORLD" "waypoint:=$WAYPOINT" "nav2_goals:=$NAV2_GOALS" "params_file:=$(follow_params_file)" "${follow_args[@]}"
   fi
 }
@@ -993,7 +1026,6 @@ GUI: $GUI
 Perspective: $PERSPECTIVE
 Start rqt: $START_RQT
 Start collision monitor: $START_COLLISION_MONITOR
-Mute UGV camera: $MUTE_UGV_CAMERA
 Clock mode: $CLOCK_MODE
 Start optional teleop: $START_OPTIONAL_TELEOP
 Map: $map_status
@@ -1001,6 +1033,9 @@ Spawn UAV: $SPAWN_UAV
 UAV camera update rate: $UAV_CAMERA_UPDATE_RATE
 With route driver: $WITH_FOLLOW
 Follow start delay: $FOLLOW_START_DELAY_S
+Localization lifecycle timeout: $LOCALIZATION_READY_TIMEOUT_S
+Localization scan timeout: $LOCALIZATION_SCAN_READY_TIMEOUT_S
+Nav2 start delay: $NAV2_START_DELAY_S
 Spawn settle delay: $SPAWN_POST_DELAY_S
 EOF
 }
@@ -1151,9 +1186,17 @@ for arg in "$@"; do
       FOLLOW_START_DELAY_S="${arg#follow_start_delay_s:=}"
       FOLLOW_START_DELAY_EXPLICIT="true"
       ;;
-    gazebo_ready_timeout_s:=*)
-      GAZEBO_READY_TIMEOUT_S="${arg#gazebo_ready_timeout_s:=}"
-      GAZEBO_READY_TIMEOUT_EXPLICIT="true"
+    localization_ready_timeout_s:=*)
+      LOCALIZATION_READY_TIMEOUT_S="${arg#localization_ready_timeout_s:=}"
+      LOCALIZATION_READY_TIMEOUT_EXPLICIT="true"
+      ;;
+    localization_scan_ready_timeout_s:=*)
+      LOCALIZATION_SCAN_READY_TIMEOUT_S="${arg#localization_scan_ready_timeout_s:=}"
+      LOCALIZATION_SCAN_READY_TIMEOUT_EXPLICIT="true"
+      ;;
+    nav2_start_delay_s:=*)
+      NAV2_START_DELAY_S="${arg#nav2_start_delay_s:=}"
+      NAV2_START_DELAY_EXPLICIT="true"
       ;;
     gazebo_post_ready_delay_s:=*)
       GAZEBO_POST_READY_DELAY_S="${arg#gazebo_post_ready_delay_s:=}"
@@ -1161,10 +1204,14 @@ for arg in "$@"; do
       ;;
     spawn_pre_delay_s:=*)
       SPAWN_PRE_DELAY_S="${arg#spawn_pre_delay_s:=}"
+      SPAWN_PRE_DELAY_EXPLICIT="true"
       ;;
     spawn_post_delay_s:=*)
       SPAWN_POST_DELAY_S="${arg#spawn_post_delay_s:=}"
       SPAWN_POST_DELAY_EXPLICIT="true"
+      ;;
+    params_file:=*)
+      FOLLOW_PARAMS_SOURCE="${arg#params_file:=}"
       ;;
     rebuild:=*)
       REBUILD="${arg#rebuild:=}"
@@ -1182,7 +1229,7 @@ for arg in "$@"; do
     dry_run:=*)
       DRY_RUN="${arg#dry_run:=}"
       ;;
-    pc2ls_:=*)
+    pc2ls_*)
       TUNING_LIDAR_ARGS+=("$arg")
       ;;
     *)
@@ -1223,8 +1270,11 @@ CLI_SPAWN_UAV="$SPAWN_UAV"
 CLI_UAV_CAMERA_UPDATE_RATE="$UAV_CAMERA_UPDATE_RATE"
 CLI_WITH_FOLLOW="$WITH_FOLLOW"
 CLI_FOLLOW_START_DELAY_S="$FOLLOW_START_DELAY_S"
-CLI_GAZEBO_READY_TIMEOUT_S="$GAZEBO_READY_TIMEOUT_S"
+CLI_LOCALIZATION_READY_TIMEOUT_S="$LOCALIZATION_READY_TIMEOUT_S"
+CLI_LOCALIZATION_SCAN_READY_TIMEOUT_S="$LOCALIZATION_SCAN_READY_TIMEOUT_S"
+CLI_NAV2_START_DELAY_S="$NAV2_START_DELAY_S"
 CLI_GAZEBO_POST_READY_DELAY_S="$GAZEBO_POST_READY_DELAY_S"
+CLI_SPAWN_PRE_DELAY_S="$SPAWN_PRE_DELAY_S"
 CLI_SPAWN_POST_DELAY_S="$SPAWN_POST_DELAY_S"
 CLI_TUNING_LIDAR_ARGS=("${TUNING_LIDAR_ARGS[@]}")
 
@@ -1287,8 +1337,14 @@ if [ "$ACTION" != "start" ] && [ "$DRY_RUN" != "true" ]; then
   if [ "$FOLLOW_START_DELAY_EXPLICIT" = "true" ]; then
     FOLLOW_START_DELAY_S="$CLI_FOLLOW_START_DELAY_S"
   fi
-  if [ "$GAZEBO_READY_TIMEOUT_EXPLICIT" = "true" ]; then
-    GAZEBO_READY_TIMEOUT_S="$CLI_GAZEBO_READY_TIMEOUT_S"
+  if [ "$LOCALIZATION_READY_TIMEOUT_EXPLICIT" = "true" ]; then
+    LOCALIZATION_READY_TIMEOUT_S="$CLI_LOCALIZATION_READY_TIMEOUT_S"
+  fi
+  if [ "$LOCALIZATION_SCAN_READY_TIMEOUT_EXPLICIT" = "true" ]; then
+    LOCALIZATION_SCAN_READY_TIMEOUT_S="$CLI_LOCALIZATION_SCAN_READY_TIMEOUT_S"
+  fi
+  if [ "$NAV2_START_DELAY_EXPLICIT" = "true" ]; then
+    NAV2_START_DELAY_S="$CLI_NAV2_START_DELAY_S"
   fi
   if [ "$GAZEBO_POST_READY_DELAY_EXPLICIT" = "true" ]; then
     GAZEBO_POST_READY_DELAY_S="$CLI_GAZEBO_POST_READY_DELAY_S"

@@ -57,14 +57,17 @@ Om du explicit ska skriva varenda argument:
   start_collision_monitor:=true|false 
   map:=maps/baylands.yaml
   clock_mode:=guarded|direct
-  mute_ugv_camera:=true|false
   start_optional_teleop:=true|false
   spawn_uav:=true|false
   start_camera_tracker:=true|false
   with_route_driver:=true|false 
-  follow_start_delay_s:=15.0
+  follow_start_delay_s:=10.0
   uav_camera_update_rate:=10
-  spawn_post_delay_s:=10
+  localization_ready_timeout_s:=20
+  localization_scan_ready_timeout_s:=20
+  nav2_start_delay_s:=10
+  spawn_pre_delay_s:=20
+  spawn_post_delay_s:=5
   rebuild:=true|false
   session:=name 
   tmux_attach:=true|false
@@ -152,6 +155,30 @@ Vill du påbörja en helt ny session:
 
 Väljs ingen waypoint tas den första i routen automatiskt.
 
+## Active UGV sensor setup
+
+The Clearpath-generated camera and 3D lidar ROS launches are disabled in:
+
+* `src/lrs_halmstad/clearpath/robot.yaml`
+
+Current ownership is:
+
+* UGV RGB camera sensor is still created by `robot.yaml` with `urdf_enabled: true`.
+  * Set UGV camera size/rate there with `image_width`, `image_height` and `rgb_camera.profile`.
+  * ROS bridging is done by `src/lrs_halmstad/launch/ugv_rgb_camera_bridge.launch.py`.
+  * Only the color image and color camera info are bridged.
+* UGV 3D lidar sensor is created by `src/lrs_halmstad/clearpath/lidar3d_0_override.urdf.xacro`.
+  * Set lidar range, angles and Gazebo update rate there.
+  * ROS bridging is done by `src/lrs_halmstad/launch/ugv_lidar3d_points_bridge.launch.py`.
+  * Only `/a201_0000/sensors/lidar3d_0/points` is bridged.
+  * Native `/a201_0000/sensors/lidar3d_0/scan` is intentionally not bridged.
+* Nav2/localization should use pc2ls:
+  * `/a201_0000/sensors/lidar3d_0/points`
+  * `/a201_0000/sensors/lidar3d_0/scan_from_points`
+
+Do not tune UGV 3D lidar rate/range in the disabled `lidar3d:` block in `robot.yaml`; that block is only kept as a disabled Clearpath entry.
+Generated files under `src/lrs_halmstad/clearpath/sensors/config/` may still exist after Clearpath generation, but they are not active when `src/lrs_halmstad/clearpath/sensors/launch/sensors-service.launch.py` is empty.
+
 Lidar intställningar för varje waypoint ligger i ~*src/lrs_halmstad/config/baylands_route_lidar.yaml*
 De sätts automatiskt av localization vid start och av nav2-drivern vid waypoint-övergångar.
 Manuellt kan det tunas med:
@@ -194,28 +221,95 @@ Jag la till images för kamerorna i där, men vill du köra med rqt så kan du g
 
 Alla dataset hamnar under `~/halmstad_ws/datasets/`
 
-### Leader UAV (`dji0`) - automatisk varied capture
+### Leader UAV (`dji0`) - route capture + OBB labels
 
 ```bash
 cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands dry_run:=true
 ./run.sh collect_leader_dataset baylands
+```
+
+This uses `nav2_tuning` internally, starts `dji0`, runs each route from
+`baylands_leader_dataset_manifest.yaml`, captures at 0.5 Hz, saves metadata,
+and then generates Ultralytics OBB labels in `labels_obb/`. Output goes to
+`datasets/baylands_leader_routes` unless `out:=...` is provided.
+
+The collector does not automatically move the UAV through angle/distance
+variations unless a scenario in `baylands_leader_dataset_manifest.yaml` has
+`uav_pattern: scripted`. Manual scenarios keep the current UAV placement for
+`capture.duration_s`; scripted scenarios step through `pose_variations`.
+
+Run one route, or a selected list of routes:
+
+```bash
+cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands route:=strip
+./run.sh collect_leader_dataset baylands routes:=parkinglot_west,strip
+```
+
+For controlled collection, start Nav2/follow yourself in one terminal, then run
+the collector in external mode from another terminal. External mode does not
+start or stop Nav2:
+
+```bash
+cd ~/halmstad_ws
+./run.sh nav2_tuning start spawn_uav:=true waypoint:=strip_0 nav2_goals:=strip
+./run.sh collect_leader_dataset baylands route:=strip launcher:=external out:=datasets/strip_manual
+```
+
+You can then stop/restart collection independently while Nav2 keeps running.
+
+Use the old launcher path only when comparing behavior:
+
+```bash
+cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands launcher:=tmux_1to1
 ```
 
 ### Leader UAV (`dji0`) - manuell capture
 
-Starta först follow-sim:
+Starta först Nav2/follow med UAV:
 
 ```bash
 cd ~/halmstad_ws
-./run.sh tmux_1to1 baylands mode:=follow waypoint:=parkinglot_west_0 nav2_goals:=parkinglot_west
+./run.sh nav2_tuning start spawn_uav:=true waypoint:=rotundan_0 nav2_goals:=rotundan start_camera_tracker:=true
 ```
 
 Starta sedan capture:
 
 ```bash
 cd ~/halmstad_ws
-./run.sh capture_dataset baylands out:=datasets/baylands_leader_manual uav_name:=dji0 hz:=0.5 save_overlay:=false save_metadata:=true
+./run.sh capture_dataset baylands out:=datasets/pilot_rotundan uav_name:=dji0 hz:=0.5 save_overlay:=true save_metadata:=true negatives:=true
 ```
+
+Generate OBB labels from the saved metadata after capture:
+
+```bash
+cd ~/halmstad_ws
+./run.sh dataset_make_obb datasets/pilot_rotundan --overlay --overwrite
+```
+
+Optional gimbal-only variation while capture is running:
+
+```bash
+cd ~/halmstad_ws
+./run.sh follow_control random --gimbal-only --uav-name dji0 --interval 6 --gimbal-interval 6 --pan-amplitude 25 --tilt-center -45 --tilt-amplitude 12
+```
+
+Simple live UAV follow-position commands:
+
+```bash
+cd ~/halmstad_ws
+./run.sh uav_position angle 45
+./run.sh uav_position angle -45
+./run.sh uav_position distance 12
+./run.sh uav_position angle:=45 distance:=12
+./run.sh uav_position angle_abs:=0 distance:=8 wait_s:=1
+```
+
+`angle` is relative to the current follow angle. `angle_abs` and `distance`
+are absolute. Default wait for `/follow_uav` is 3 seconds; use `wait_s:=1` or
+`no_wait:=true` if you know it is already active.
 
 ### Support UAVs (`dji1` och `dji2`) - capture båda samtidigt
 
