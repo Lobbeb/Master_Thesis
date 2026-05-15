@@ -19,7 +19,7 @@ from lrs_halmstad.dataset.sync_check import IMAGE_EXTS, DATASETS_ROOT, resolve_d
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            f"Generate Ultralytics OBB labels in labels_obb/ for one or more datasets under {DATASETS_ROOT} "
+            f"Generate Ultralytics OBB labels in labels/ for one or more datasets under {DATASETS_ROOT} "
             "using the saved projected_points metadata."
         )
     )
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Rewrite existing labels_obb and overlay_obb files instead of leaving them untouched.",
+        help="Rewrite existing labels and overlay_obb files instead of leaving them untouched.",
     )
     parser.add_argument(
         "--overlay",
@@ -161,7 +161,7 @@ def convert_dataset(dataset_dir: Path, overwrite: bool, show_limit: int, overlay
     for split in splits:
         images_dir = dataset_dir / "images" / split
         metadata_dir = dataset_dir / "metadata" / split
-        output_dir = dataset_dir / "labels_obb" / split
+        output_dir = dataset_dir / "labels" / split
         overlay_dir = dataset_dir / "overlay_obb" / split
 
         for stem in _iter_image_stems(images_dir):
@@ -210,7 +210,7 @@ def convert_dataset(dataset_dir: Path, overwrite: bool, show_limit: int, overlay
                         overlays_written += 1
 
     print(f"Dataset: {dataset_dir}")
-    print(f"  Wrote {written} labels_obb file(s)")
+    print(f"  Wrote {written} Ultralytics OBB labels file(s) in labels/")
     if overlay:
         print(f"  Wrote {overlays_written} overlay_obb image(s)")
     if warnings:

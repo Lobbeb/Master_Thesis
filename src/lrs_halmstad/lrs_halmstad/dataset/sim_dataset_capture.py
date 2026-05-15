@@ -14,6 +14,7 @@ import rclpy.clock
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image
@@ -81,7 +82,7 @@ class SimDatasetCapture(Node):
         self.declare_parameter("camera_topic", "")
         self.declare_parameter("camera_info_topic", "")
         self.declare_parameter("camera_pose_topic", "")
-        self.declare_parameter("target_pose_topic", "/a201_0000/amcl_pose_odom")
+        self.declare_parameter("target_pose_topic", "/a201_0000/ground_truth/odom")
         self.declare_parameter("output_dir", "datasets/baylands_auto")
         self.declare_parameter("dataset_name", "baylands_auto")
         self.declare_parameter("class_id", 0)
@@ -166,7 +167,7 @@ class SimDatasetCapture(Node):
     def _ensure_dataset_layout(self) -> None:
         for subset in ("train", "val"):
             os.makedirs(os.path.join(self.output_dir, "images", subset), exist_ok=True)
-            os.makedirs(os.path.join(self.output_dir, "labels", subset), exist_ok=True)
+            os.makedirs(os.path.join(self.output_dir, "labels_aabb", subset), exist_ok=True)
             if self.save_metadata:
                 os.makedirs(os.path.join(self.output_dir, "metadata", subset), exist_ok=True)
             if self.save_overlay:
@@ -270,7 +271,7 @@ class SimDatasetCapture(Node):
         stem = self._unique_frame_stem(subset, stem)
 
         image_path = os.path.join(self.output_dir, "images", subset, f"{stem}.jpg")
-        label_path = os.path.join(self.output_dir, "labels", subset, f"{stem}.txt")
+        label_path = os.path.join(self.output_dir, "labels_aabb", subset, f"{stem}.txt")
         overlay_path = os.path.join(self.output_dir, "overlay", subset, f"{stem}.jpg")
         metadata_path = os.path.join(self.output_dir, "metadata", subset, f"{stem}.json")
 
@@ -347,7 +348,7 @@ class SimDatasetCapture(Node):
         def paths_for(candidate: str) -> List[str]:
             paths = [
                 os.path.join(self.output_dir, "images", subset, f"{candidate}.jpg"),
-                os.path.join(self.output_dir, "labels", subset, f"{candidate}.txt"),
+                os.path.join(self.output_dir, "labels_aabb", subset, f"{candidate}.txt"),
             ]
             if self.save_overlay:
                 paths.append(os.path.join(self.output_dir, "overlay", subset, f"{candidate}.jpg"))
@@ -400,7 +401,7 @@ class SimDatasetCapture(Node):
         def rotate_local(px: float, py: float, pz: float) -> Tuple[float, float, float]:
             wx = tp.x + cy * px - sy * py
             wy = tp.y + sy * px + cy * py
-            wz = self.target_base_z_m + pz
+            wz = tp.z + self.target_base_z_m + pz
             return (wx, wy, wz)
 
         xs = (-half_l, 0.0, half_l)
@@ -559,8 +560,10 @@ class SimDatasetCapture(Node):
                 },
             },
             "dataset_name": self.dataset_name,
+            "aabb_label_path": label_path,
             "image_path": image_path,
             "label_path": label_path,
+            "obb_label_path": label_path.replace(f"{os.sep}labels_aabb{os.sep}", f"{os.sep}labels{os.sep}"),
             "projected_points": [[float(u), float(v)] for u, v in projected_points],
             "stamp_ns": int(stamp_ns),
             "subset": subset,
@@ -591,11 +594,18 @@ def main(args: Optional[Sequence[str]] = None) -> None:
     node = SimDatasetCapture()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

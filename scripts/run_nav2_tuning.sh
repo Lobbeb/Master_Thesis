@@ -26,7 +26,7 @@ MAP_PATH="maps/baylands.yaml"
 SESSION=""
 TMUX_ATTACH="false"
 SPAWN_UAV="false"
-UAV_CAMERA_UPDATE_RATE="10"
+UAV_CAMERA_UPDATE_RATE="20"
 START_CAMERA_TRACKER="auto"
 WITH_FOLLOW="true"
 REBUILD="false"
@@ -146,7 +146,7 @@ Usage: ./run.sh nav2_tuning [start|restart|stack_stop|follow|route_stop|stop|att
   [clock_mode:=guarded|direct]
   [start_optional_teleop:=true|false]
   [spawn_uav:=true|false] [start_camera_tracker:=true|false] [with_route_driver:=true|false] [follow_start_delay_s:=10.0]
-  [uav_camera_update_rate:=10]
+  [uav_camera_update_rate:=20]
   [localization_ready_timeout_s:=20] [localization_scan_ready_timeout_s:=20] [nav2_start_delay_s:=10]
   [spawn_pre_delay_s:=20] [spawn_post_delay_s:=5]
   [params_file:=path/to/run_follow_defaults.yaml]

@@ -62,7 +62,7 @@ Om du explicit ska skriva varenda argument:
   start_camera_tracker:=true|false
   with_route_driver:=true|false 
   follow_start_delay_s:=10.0
-  uav_camera_update_rate:=10
+  uav_camera_update_rate:=20
   localization_ready_timeout_s:=20
   localization_scan_ready_timeout_s:=20
   nav2_start_delay_s:=10
@@ -223,48 +223,88 @@ Alla dataset hamnar under `~/halmstad_ws/datasets/`
 
 ### Leader UAV (`dji0`) - route capture + OBB labels
 
+Start Nav2/follow yourself first. The collector does not start or stop
+Gazebo, localization, Nav2, follow, or the UAV:
+
 ```bash
 cd ~/halmstad_ws
-./run.sh collect_leader_dataset baylands dry_run:=true
-./run.sh collect_leader_dataset baylands
+./run.sh nav2_tuning start spawn_uav:=true waypoint:=strip_0 nav2_goals:=strip
 ```
 
-This uses `nav2_tuning` internally, starts `dji0`, runs each route from
-`baylands_leader_dataset_manifest.yaml`, captures at 0.5 Hz, saves metadata,
-and then generates Ultralytics OBB labels in `labels_obb/`. Output goes to
-`datasets/baylands_leader_routes` unless `out:=...` is provided.
+Then run the collector from another terminal:
 
-The collector does not automatically move the UAV through angle/distance
-variations unless a scenario in `baylands_leader_dataset_manifest.yaml` has
-`uav_pattern: scripted`. Manual scenarios keep the current UAV placement for
-`capture.duration_s`; scripted scenarios step through `pose_variations`.
+```bash
+cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands route:=strip
+```
+
+Output goes to:
+
+```text
+datasets/baylands_leader_routes/<route>/v1
+datasets/baylands_leader_routes/<route>/v2
+...
+```
+
+The collector starts the recorder when it sees the external Nav2 route driver,
+then keeps recording until you stop it with `Ctrl-C`. The recorder waits
+internally for UAV camera, camera pose, and UGV pose messages. It saves only
+useful frames: it skips images when the UGV pose is not available or when the
+UGV does not project into a valid box. It writes AABB labels to `labels_aabb/`
+and metadata to `metadata/`. When you stop the collector, it only stops the
+recorder.
+
+Generate Ultralytics OBB labels after capture:
+
+```bash
+cd ~/halmstad_ws
+./run.sh dataset_make_obb datasets/baylands_leader_routes/strip/v1 --overwrite --overlay
+```
+
+That writes OBB labels to `labels/` in Ultralytics format:
+
+```text
+class_index x1 y1 x2 y2 x3 y3 x4 y4
+```
+
+Coordinates are normalized to `[0, 1]`, matching the Ultralytics OBB dataset
+format.
 
 Run one route, or a selected list of routes:
 
 ```bash
 cd ~/halmstad_ws
+./run.sh collect_leader_dataset baylands dry_run:=true
 ./run.sh collect_leader_dataset baylands route:=strip
 ./run.sh collect_leader_dataset baylands routes:=parkinglot_west,strip
 ```
 
-For controlled collection, start Nav2/follow yourself in one terminal, then run
-the collector in external mode from another terminal. External mode does not
-start or stop Nav2:
+Use `once:=true` if you want the collector to capture one route run and then
+exit:
 
 ```bash
 cd ~/halmstad_ws
-./run.sh nav2_tuning start spawn_uav:=true waypoint:=strip_0 nav2_goals:=strip
-./run.sh collect_leader_dataset baylands route:=strip launcher:=external out:=datasets/strip_manual
+./run.sh collect_leader_dataset baylands route:=strip once:=true
 ```
 
-You can then stop/restart collection independently while Nav2 keeps running.
-
-Use the old launcher path only when comparing behavior:
+You can still move the UAV manually while capture is running:
 
 ```bash
 cd ~/halmstad_ws
-./run.sh collect_leader_dataset baylands launcher:=tmux_1to1
+./run.sh uav_position angle 30
+./run.sh uav_position distance 12
 ```
+
+For live keyboard control of follow distance, follow angle, and gimbal:
+
+```bash
+cd ~/halmstad_ws
+./run.sh follow_control keyboard --uav-name dji0 --step-d-target 1 --step-heading 15 --step-pan 5 --step-tilt 5
+```
+
+Keys: `w/s` changes follow distance, `a/d` changes follow angle, `j/l`
+changes gimbal pan, `i/k` changes gimbal tilt, `c` centers the gimbal, `p`
+prints current values, `q` quits.
 
 ### Leader UAV (`dji0`) - manuell capture
 
@@ -282,7 +322,7 @@ cd ~/halmstad_ws
 ./run.sh capture_dataset baylands out:=datasets/pilot_rotundan uav_name:=dji0 hz:=0.5 save_overlay:=true save_metadata:=true negatives:=true
 ```
 
-Generate OBB labels from the saved metadata after capture:
+Generate Ultralytics OBB labels from the saved metadata after capture:
 
 ```bash
 cd ~/halmstad_ws
@@ -295,6 +335,9 @@ Optional gimbal-only variation while capture is running:
 cd ~/halmstad_ws
 ./run.sh follow_control random --gimbal-only --uav-name dji0 --interval 6 --gimbal-interval 6 --pan-amplitude 25 --tilt-center -45 --tilt-amplitude 12
 ```
+
+`follow_control` sends gimbal commands directly to `/dji0/update_pan` and
+`/dji0/update_tilt`.
 
 Simple live UAV follow-position commands:
 

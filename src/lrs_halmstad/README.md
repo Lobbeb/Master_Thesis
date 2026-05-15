@@ -25,8 +25,8 @@ Current real follow launch:
 - `/dji0/camera0/camera_info`
 - `/dji0/camera0/depth_image`
 - `/dji0/psdk_ros2/flight_control_setpoint_ENUposition_yaw`
-- `/dji0/tilt_override` â€” external tilt command; held for `gimbal_override_hold_s` seconds, suppressing geometric computation
-- `/dji0/pan_override` â€” external pan command; same hold mechanism
+- `/dji0/update_tilt` - external tilt command in degrees
+- `/dji0/update_pan` - external pan command in degrees
 - `/dji0/pose`
 
 Legacy optional debug topics:
@@ -262,27 +262,46 @@ Expected rollback result:
 - the old static-body teleport behavior returns
 - attached gimbal joints may stop producing visible camera motion in Gazebo again
 
-## Gimbal override
+## Gimbal control
 
-`camera_tracker` ticks at 10 Hz and continuously recomputes tilt/pan geometrically. Publishing directly to the old `update_pan`/`update_tilt` topics was instantly overwritten. The override mechanism lets external tools (e.g. `follow_control --gimbal`) hold a commanded angle for a configurable duration:
+`follow_control` commands the simulator gimbal directly. It publishes
+`std_msgs/Float64` degrees to:
 
-- `gimbal_override_hold_s` (in `run_follow_defaults.yaml` under `camera_tracker`): how many seconds to suppress geometric recomputation after receiving an override. Default `0.0` (disabled). Set to a value greater than the gimbal sweep interval when using `follow_control --gimbal`.
-- While an override is active, `camera_tracker` skips its own tilt/pan computation and sends the override value directly.
-- Topics: `/{uav_name}/tilt_override` and `/{uav_name}/pan_override` (`std_msgs/Float64`, degrees).
+- `/{uav_name}/update_pan`
+- `/{uav_name}/update_tilt`
+
+This path does not depend on `camera_tracker` override topics.
+
+### follow_control keyboard mode
+
+```bash
+ros2 run lrs_halmstad run_follow_control keyboard --uav-name dji0
+```
+
+Keys:
+
+- `w/s`: increase/decrease `d_target`
+- `a/d`: decrease/increase `leader_heading_offset_deg`
+- `j/l`: pan left/right
+- `i/k`: tilt up/down
+- `c`: center gimbal
+- `p`: print current values
+- `q`: quit
 
 ### follow_control gimbal sweep (random dataset collection)
 
-`follow_control` in `random` mode can simultaneously sweep the gimbal alongside distance/altitude randomisation:
+`follow_control` in `random` mode can simultaneously sweep the gimbal alongside
+follow distance randomisation:
 
 ```bash
-# Sweep d_target, z_min AND gimbal together
-ros2 run lrs_halmstad follow_control random --gimbal --uav-name dji0
+# Sweep d_target and gimbal together
+ros2 run lrs_halmstad run_follow_control random --gimbal --uav-name dji0
 
-# Only sweep gimbal (skip d_target/z_min param changes)
-ros2 run lrs_halmstad follow_control random --gimbal-only --uav-name dji0
+# Only sweep gimbal (skip d_target param changes)
+ros2 run lrs_halmstad run_follow_control random --gimbal-only --uav-name dji0
 
 # Custom sweep ranges and cadence
-ros2 run lrs_halmstad follow_control random --gimbal \
+ros2 run lrs_halmstad run_follow_control random --gimbal \
   --tilt-center -45 --tilt-amplitude 20 --tilt-min -75 --tilt-max -15 \
   --pan-center 0   --pan-amplitude 25  --pan-min -45 --pan-max 45 \
   --gimbal-interval 8 --interval 10 --uav-name dji0
@@ -292,8 +311,8 @@ Relevant `follow_control random` gimbal args:
 
 | Arg | Default | Description |
 | --- | --- | --- |
-| `--gimbal` | off | Also sweep pan/tilt alongside d_target/z_min |
-| `--gimbal-only` | off | Only sweep pan/tilt; skip d_target/z_min |
+| `--gimbal` | off | Also sweep pan/tilt alongside d_target |
+| `--gimbal-only` | off | Only sweep pan/tilt; skip d_target |
 | `--gimbal-interval` | `--interval` | Seconds between gimbal updates |
 | `--tilt-center` | -45Â° | Centre of the tilt random distribution |
 | `--tilt-amplitude` | 15Â° | Â±amplitude around centre |
@@ -301,7 +320,7 @@ Relevant `follow_control random` gimbal args:
 | `--pan-center` | 0Â° | Centre of the pan random distribution |
 | `--pan-amplitude` | 20Â° | Â±amplitude around centre |
 | `--pan-min` / `--pan-max` | -45Â° / 45Â° | Hard limits |
-| `--uav-name` | `dji0` | UAV namespace for override topics |
+| `--uav-name` | `dji0` | UAV namespace for update topics |
 
 Set `gimbal_override_hold_s` in `run_follow_defaults.yaml` to a value slightly larger than `--gimbal-interval` (e.g. `10.0` with `--gimbal-interval 8`).
 

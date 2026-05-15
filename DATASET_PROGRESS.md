@@ -2,15 +2,15 @@
 
 *Nav2 Goals/routes:*
 
-- **rotundan**         - (ready for collection)
-- **road_to_west**     - (ready for collection)
+- **rotundan**         - **_(COLLECTED)_**
+- **road_to_west**     - **_(COLLECTED)_**
 - **parkinglot_west**  - **_(COLLECTED)_**
-- **road_to_spawn**    - (ready for collection)
-- **spawn**            - (ready for collection)
-- **road_to_east**     - (ready for collection)
-- **parkinglot_east**  - (ready for collection)
-- **road_to_strip**    - (ready for collection)
-- **strip**            - *(needs tuning)*
+- **road_to_spawn**    - **_(COLLECTED)_**
+- **spawn**            - **_(COLLECTED)_**
+- **road_to_east**     - **_(COLLECTED)_**
+- **parkinglot_east**  - **_(COLLECTED)_**
+- **road_to_strip**    - **_(COLLECTED)_**
+- **strip**            - **_(COLLECTED)_**
 - **art**              - *(needs tuning)*
 - **playground**       - *(needs tuning)*
 

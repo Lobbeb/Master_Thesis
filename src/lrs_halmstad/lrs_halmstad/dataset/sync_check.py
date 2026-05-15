@@ -15,7 +15,7 @@ def _default_datasets_root() -> Path:
     configured_root = os.environ.get("LRS_HALMSTAD_DATASETS_ROOT", "").strip()
     if configured_root:
         return Path(configured_root).expanduser().resolve()
-    return (workspace_root(__file__) / "datasets").resolve()
+    return (workspace_root(__file__)).resolve()
 
 
 DATASETS_ROOT = _default_datasets_root()
@@ -23,10 +23,22 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 CATEGORY_EXTS = {
     "images": IMAGE_EXTS,
     "labels": {".txt"},
+    "labels_aabb": {".txt"},
+    "labels_det": {".txt"},
     "metadata": {".json"},
     "overlay": IMAGE_EXTS,
+    "overlay_obb": IMAGE_EXTS,
+    "overlay_detection": IMAGE_EXTS,
 }
-DEFAULT_OPTIONAL_CATEGORIES = ("labels", "metadata", "overlay")
+DEFAULT_OPTIONAL_CATEGORIES = (
+    "labels",
+    "labels_aabb",
+    "labels_det",
+    "metadata",
+    "overlay",
+    "overlay_obb",
+    "overlay_detection",
+)
 
 
 @dataclass
@@ -57,8 +69,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             f"Check a dataset under {datasets_root} for missing or orphaned files "
-            "across images, labels, metadata, and overlay. When overlay/<split> exists, "
-            "the kept set is the intersection of images/<split> and overlay/<split>."
+            "across images, labels, labels_aabb, metadata, and overlay outputs. "
+            "When overlay/<split> exists, the kept set is the intersection of "
+            "images/<split> and overlay/<split>."
         )
     )
     parser.add_argument(

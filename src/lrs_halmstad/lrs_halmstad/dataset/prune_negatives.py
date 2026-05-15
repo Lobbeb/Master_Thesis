@@ -12,6 +12,7 @@ from lrs_halmstad.dataset.sync_check import DATASETS_ROOT, IMAGE_EXTS, resolve_d
 SIBLING_DIRS = [
     "images",
     "labels",
+    "labels_aabb",
     "labels_det",
     "metadata",
     "overlay",

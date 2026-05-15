@@ -11,6 +11,7 @@ RVIZ_CONFIG_DIR="$CONFIG_ROOT/rviz_configs"
 BASE_RVIZ_CONFIG="$RVIZ_CONFIG_DIR/waypoints_testing.rviz"
 RVIZ_CONFIG_OVERRIDE=""
 RVIZ_SOFTWARE_RENDERING="${RVIZ_SOFTWARE_RENDERING:-auto}"
+RVIZ_QT_PLATFORM="${RVIZ_QT_PLATFORM:-auto}"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
 
@@ -34,6 +35,9 @@ for arg in "${LIDAR_REMAINING_ARGS[@]}"; do
       ;;
     rviz_software_rendering:=*|software_rendering:=*)
       RVIZ_SOFTWARE_RENDERING="${arg#*:=}"
+      ;;
+    rviz_qt_platform:=*|qt_platform:=*)
+      RVIZ_QT_PLATFORM="${arg#*:=}"
       ;;
     *)
       RVIZ_PASSTHROUGH_ARGS+=("$arg")
@@ -113,12 +117,21 @@ set -u
 RVIZ_CONFIG="$BASE_RVIZ_CONFIG"
 
 if [ -n "${WSL_INTEROP:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
-  if command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo -display "${DISPLAY:-:0}" >/dev/null 2>&1; then
+  if [ "$RVIZ_QT_PLATFORM" != "auto" ]; then
+    export QT_QPA_PLATFORM="$RVIZ_QT_PLATFORM"
+    if [ "$RVIZ_QT_PLATFORM" = "xcb" ]; then
+      unset WAYLAND_DISPLAY
+    fi
+    echo "[run_nav2_rviz] WSL detected: using QT_QPA_PLATFORM=$QT_QPA_PLATFORM"
+  elif command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo -display "${DISPLAY:-:0}" >/dev/null 2>&1; then
     export QT_QPA_PLATFORM=xcb
     unset WAYLAND_DISPLAY
     echo "[run_nav2_rviz] WSL detected: using QT_QPA_PLATFORM=xcb"
+  elif [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    export QT_QPA_PLATFORM=wayland
+    echo "[run_nav2_rviz] WSL detected: using QT_QPA_PLATFORM=wayland"
   else
-    echo "[run_nav2_rviz] Warning: X11 display '${DISPLAY:-:0}' is not reachable. WSLg may need a reset with 'wsl --shutdown'." >&2
+    echo "[run_nav2_rviz] Warning: no reachable WSL GUI display found. WSLg may need a reset with 'wsl --shutdown'." >&2
   fi
 
   if [ "$RVIZ_SOFTWARE_RENDERING" = "auto" ] || [ "$RVIZ_SOFTWARE_RENDERING" = "true" ]; then
@@ -135,9 +148,17 @@ fi
 cd "$CONFIG_ROOT"
 echo "[run_nav2_rviz] Using RViz config: $RVIZ_CONFIG"
 
-ros2 launch nav2_bringup rviz_launch.py \
-  namespace:=a201_0000 \
-  use_namespace:=true \
-  use_sim_time:=true \
-  rviz_config:="$RVIZ_CONFIG" \
-  "${LIDAR_REMAINING_ARGS[@]}"
+if [ "${#LIDAR_REMAINING_ARGS[@]}" -gt 0 ]; then
+  echo "[run_nav2_rviz] Warning: ignoring unsupported direct RViz args: ${LIDAR_REMAINING_ARGS[*]}" >&2
+fi
+
+ros2 run rviz2 rviz2 -d "$RVIZ_CONFIG" \
+  --ros-args \
+  -r __ns:=/a201_0000 \
+  -p use_sim_time:=true \
+  -r /map:=map \
+  -r /tf:=tf \
+  -r /tf_static:=tf_static \
+  -r /goal_pose:=goal_pose \
+  -r /clicked_point:=clicked_point \
+  -r /initialpose:=initialpose
