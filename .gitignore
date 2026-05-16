@@ -57,7 +57,9 @@ opt/omnetpp-*/
 /models/detection
 /models/detection
 /models/obb/mymodels/warehouse*.pt
-/datasets
+/datasets/*
+/merge
+/merge/*
 /descriptions/
 *_MATH.md
 
