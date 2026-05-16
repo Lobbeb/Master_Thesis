@@ -30,17 +30,17 @@ HAVE_RANGE_MODE="false"
 HAVE_UGV_INITIAL_POSE_X="false"
 HAVE_UGV_INITIAL_POSE_Y="false"
 HAVE_UGV_INITIAL_POSE_YAW="false"
-HAVE_START_VISUAL_ACTUATION_BRIDGE="true"
-HAVE_START_VISUAL_FOLLOW_CONTROLLER="true"
-HAVE_START_VISUAL_FOLLOW_POINT_GENERATOR="true"
-HAVE_START_VISUAL_FOLLOW_PLANNER="true"
+HAVE_START_VISUAL_ACTUATION_BRIDGE="false"
+HAVE_START_VISUAL_FOLLOW_CONTROLLER="false"
+HAVE_START_VISUAL_FOLLOW_POINT_GENERATOR="false"
+HAVE_START_VISUAL_FOLLOW_PLANNER="false"
 HAVE_UGV_GOAL_SEQUENCE="false"
-USE_CONDA="true"
+USE_CONDA="false"
 CONDA_ENV_NAME="${LRS_HALMSTAD_GPU_ENV_NAME:-}"
 DEFAULT_CUSTOM_WEIGHTS="obb/mymodels/baylands_leader_v1-obb.pt"
 DEFAULT_DETECTION_WEIGHTS="detection/mymodels/warehouse_v1-v2-yolo26n.pt"
-DEFAULT_OBB_WEIGHTS="obb/mymodels/baylands_leader_v1-obb.pt"
-DEFAULT_BAYLANDS_OBB_WEIGHTS="obb/mymodels/baylands_leader_v1-obb.pt"
+DEFAULT_OBB_WEIGHTS="obb/mymodels/baylands-leader-v1-obb.pt"
+DEFAULT_BAYLANDS_OBB_WEIGHTS="obb/mymodels/baylands-leader-v1-obb.pt"
 MODELS_ROOT="${LRS_HALMSTAD_MODELS_ROOT:-$WS_ROOT/models}"
 DEFAULT_UAV_BODY_X_OFFSET="-7.0"
 DEFAULT_UAV_BODY_Y_OFFSET="0.0"
@@ -378,20 +378,17 @@ else
   ARG_WEIGHTS_ROOT="detection"
 fi
 
-if [ "$YOLO_CONTROL_MODE" = "follow_uav_estimate" ]; then
-  USE_ESTIMATE="true"
-fi
-
-LEADER_MODE="estimate"
-
-CONTROL_ARGS=()
 if [ "$YOLO_CONTROL_MODE" = "visual_bridge" ]; then
-  CONTROL_ARGS+=(
-    "start_visual_actuation_bridge:=true"
-    "start_visual_follow_point_generator:=true"
-    "start_visual_follow_planner:=true"
+  CONTROL_ARGS=(
+      "start_visual_actuation_bridge:=true"
+      "start_visual_follow_point_generator:=true"
+      "start_visual_follow_planner:=true"
   )
+else
+  LEADER_MODE="estimate"
 fi
+
+
 
 if [ -z "$WEIGHTS_REL" ]; then
   if [ "$USE_OBB" = true ]; then
@@ -447,6 +444,8 @@ if [ ! -f "$WEIGHTS_PATH" ]; then
   echo "Use an existing absolute path or a path relative to: $MODELS_ROOT" >&2
   exit 2
 fi
+
+echo "[run_1to1_yolo] Using YOLO weights: $WEIGHTS_PATH"
 
 if [ "$HAVE_DETECTOR_BACKEND" != true ] && [ "$USE_OBB" = true ]; then
   ONNX_CANDIDATE="${WEIGHTS_PATH%.*}.onnx"
