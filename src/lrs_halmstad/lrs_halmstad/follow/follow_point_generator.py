@@ -6,6 +6,7 @@ from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from rclpy.time import Time
 from std_msgs.msg import String
@@ -62,6 +63,7 @@ class FollowPointGenerator(Node):
         self.declare_parameter("point_alpha", 0.55)
         self.declare_parameter("max_follow_point_jump_m", 2.0)
         self.declare_parameter("uav_start_z", 7.0)
+        self.declare_parameter("follow_z_offset_m", 7.0)
         self.declare_parameter("camera_x_offset_m", 0.0)
         self.declare_parameter("camera_y_offset_m", 0.0)
         self.declare_parameter("predicted_lookahead_scale", 0.65)
@@ -118,6 +120,7 @@ class FollowPointGenerator(Node):
         self.point_alpha = float(self.get_parameter("point_alpha").value)
         self.max_follow_point_jump_m = float(self.get_parameter("max_follow_point_jump_m").value)
         self.uav_start_z = float(self.get_parameter("uav_start_z").value)
+        self.follow_z_offset_m = float(self.get_parameter("follow_z_offset_m").value)
         self.camera_x_offset_m = float(self.get_parameter("camera_x_offset_m").value)
         self.camera_y_offset_m = float(self.get_parameter("camera_y_offset_m").value)
         self.predicted_lookahead_scale = float(self.get_parameter("predicted_lookahead_scale").value)
@@ -160,6 +163,10 @@ class FollowPointGenerator(Node):
             raise ValueError("hold_timeout_s must be >= 0")
         if self.d_target <= 0.0:
             raise ValueError("d_target must be > 0")
+        if self.follow_z_offset_m < 0.0:
+            raise ValueError("follow_z_offset_m must be >= 0")
+        if self.follow_z_offset_m > self.d_target:
+            raise ValueError("follow_z_offset_m must be <= d_target to preserve the 3D follow distance")
         if self.lookahead_horizon_s < 0.0:
             raise ValueError("lookahead_horizon_s must be >= 0")
         if self.target_pose_timeout_s <= 0.0:
@@ -237,13 +244,49 @@ class FollowPointGenerator(Node):
         self.follow_point_pub = self.create_publisher(PoseStamped, self.out_topic, 10)
         self.status_pub = self.create_publisher(String, self.status_topic, 10) if self.publish_status else None
         self.timer = self.create_timer(1.0 / self.tick_hz, self.on_tick)
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
         self.get_logger().info(
             "[follow_point_generator] Started: "
             f"target_estimate={self.target_estimate_topic}, camera_pose={self.camera_pose_topic}, "
             f"uav_pose={self.uav_pose_topic}, out={self.out_topic}, "
-            f"d_target={self.d_target:.2f}, uav_start_z={self.uav_start_z:.2f}"
+            f"d_target={self.d_target:.2f}, follow_z_offset_m={self.follow_z_offset_m:.2f}, "
+            f"uav_start_z={self.uav_start_z:.2f}"
         )
+
+    def _on_set_parameters(self, params):
+        updates = {}
+        for param in params:
+            if param.name not in {"d_target", "follow_z_offset_m"}:
+                continue
+            try:
+                updates[param.name] = float(param.value)
+            except Exception as exc:
+                return SetParametersResult(successful=False, reason=f"invalid {param.name}: {exc}")
+
+        if not updates:
+            return SetParametersResult(successful=True)
+
+        next_d_target = float(updates.get("d_target", self.d_target))
+        next_z_offset = float(updates.get("follow_z_offset_m", self.follow_z_offset_m))
+        if next_d_target <= 0.0:
+            return SetParametersResult(successful=False, reason="d_target must be > 0")
+        if next_z_offset < 0.0:
+            return SetParametersResult(successful=False, reason="follow_z_offset_m must be >= 0")
+        if next_z_offset > next_d_target:
+            return SetParametersResult(
+                successful=False,
+                reason="follow_z_offset_m must be <= d_target to preserve the 3D follow distance",
+            )
+
+        for name, value in updates.items():
+            setattr(self, name, value)
+
+        self.get_logger().info(
+            "[follow_point_generator] Runtime parameter update: "
+            + ", ".join(f"{name}={value}" for name, value in sorted(updates.items()))
+        )
+        return SetParametersResult(successful=True)
 
     def on_target_estimate(self, msg: Odometry) -> None:
         self.last_target_estimate = decode_visual_target_estimate_msg(msg)
@@ -298,6 +341,9 @@ class FollowPointGenerator(Node):
         if stamp is None:
             return False
         return (now - stamp).nanoseconds * 1e-9 <= timeout_s
+
+    def _target_follow_z(self, leader_z: float) -> float:
+        return float(leader_z) + self.follow_z_offset_m
 
     def _dt_s(self, now: Time) -> float:
         if self.last_tick_time is None:
@@ -663,10 +709,11 @@ class FollowPointGenerator(Node):
                         if self.last_target_pose_z is not None and math.isfinite(self.last_target_pose_z)
                         else 0.0
                     )
-                    follow_z = self.uav_start_z
+                    follow_z = self._target_follow_z(leader_z)
                     z_delta = follow_z - leader_z
                     effective_follow_distance = max(
                         0.5,
+                        self.follow_z_offset_m,
                         self.d_target * max(0.0, follow_distance_scale),
                     )
                     effective_lateral_offset = self.lateral_offset_m * max(0.0, lateral_offset_scale)

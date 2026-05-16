@@ -16,7 +16,7 @@
     leader_look_target_y_m: 0.0       # Lateral offset into the leader body frame for the pan/tilt look-at target point.
 
     # Canonical 3D UAV-leader standoff used by follow_uav and as estimator const fallback.
-    d_target: 8.0  # Canonical 3D UAV-leader standoff. Used by follow_uav and as estimator const fallback.
+    d_target: 10.0  # Canonical 3D UAV-leader standoff. Used by follow_uav and as estimator const fallback.
 
 
 # <<------ Core UAV follow command loop ------ >>
@@ -38,21 +38,22 @@ follow_uav:
     pose_timeout_s: 3.0
 
     # Anchor placement and horizontal motion.
-    xy_anchor_max: 10.0              # Safety radius for the horizontal anchor target around the leader.
-    follow_speed_mps: 3.0
-    follow_speed_gain: 1.2
-    leader_heading_offset_deg: 0.0   # Odom-follow anchor heading offset only.
+    xy_anchor_max: 20.0              # Safety radius for the horizontal anchor target around the leader.
+    follow_z_offset_m: 7.0           # Desired UAV height above leader. Horizontal distance is reduced so d_target remains the true 3D standoff.
+    follow_speed_mps: 5.0
+    follow_speed_gain: 2.0
+    leader_heading_offset_deg: 0.0   # Anchor heading offset for follow_uav and follow_uav_odom.
     leader_motion_heading_min_speed_mps: 0.10  # Estimate-follow anchor heading switches to motion only above this leader speed.
     leader_motion_heading_min_delta_m: 0.20    # Accumulate at least this much leader-estimate XY motion before updating heading.
     leader_motion_heading_alpha: 0.8           # Low-pass alpha for estimate-follow motion heading; higher = faster heading changes.
 
     # Yaw command.
     follow_yaw: true
-    follow_yaw_rate_rad_s: 0.6
-    follow_yaw_rate_gain: 1.2
+    follow_yaw_rate_rad_s: 0.8
+    follow_yaw_rate_gain: 2.5
 
     # Outputs.
-    publish_pose_cmd_topics: true
+    publish_pose_cmd_topics: false
 
 
 # <<------ UAV simulator and gimbal dynamics ------ >>
@@ -60,11 +61,11 @@ uav_simulator:
   ros__parameters:
     # Gimbal limits.
     gimbal_pitch_min_rad: -1.5708        # Minimum gimbal pitch in radians (-pi/2 = -90 deg, straight down).
-    gimbal_pitch_max_rad: 0.7854          # Maximum gimbal pitch in radians (pi/4 = 45 deg up).
+    gimbal_pitch_max_rad: 0.5235         # Maximum gimbal pitch in radians (pi/4 = 45 deg up).
 
     # Gimbal rate limits.
-    pan_rate_deg_s: 30.0                   # Maximum gimbal pan speed in deg/s; keep 20-120 deg/s.
-    tilt_rate_deg_s: 22.5                   # Maximum gimbal tilt speed in deg/s; keep 15-90 deg/s.
+    pan_rate_deg_s: 60.0                   # Maximum gimbal pan speed in deg/s; keep 20-120 deg/s.
+    tilt_rate_deg_s: 45.0                   # Maximum gimbal tilt speed in deg/s; keep 15-90 deg/s.
 
     # Gazebo SetEntityPose protection.
     startup_set_pose_grace_s: 3.0           # Block SetEntityPose calls for this long after startup to avoid Gazebo spam; keep 1-5 s.
@@ -95,10 +96,10 @@ camera_tracker:
     image_center_correction_timeout_s: 0.45  # Keep using the latest box long enough to bridge the current ~3 Hz detector cadence without over-holding stale corrections.
     image_center_correction_max_latency_ms: 1000.0  # Do not let late detector boxes kick the gimbal; geometry/truth reacquire handles slower recovery.
     image_center_memory_timeout_s: 0.55      # After direct image correction times out, keep a small decaying memory of the last seen target direction so the camera still nudges toward reacquisition briefly.
-    pan_image_center_gain: 0.22             # Slightly stronger horizontal re-centering so the target spends less time near image borders.
-    pan_image_center_max_deg: 2.5           # Allow a modest extra pan correction before geometry-only tracking takes over again.
-    tilt_image_center_gain: 0.26            # Slightly stronger vertical re-centering to keep the UGV better framed through weak detections.
-    tilt_image_center_max_deg: 5.0          # Allow a modest extra tilt correction during recovery without making the camera twitchy.
+    pan_image_center_gain: 0.75             # Slightly stronger horizontal re-centering so the target spends less time near image borders.
+    pan_image_center_max_deg: 5.0           # Allow a modest extra pan correction before geometry-only tracking takes over again.
+    tilt_image_center_gain: 0.5            # Slightly stronger vertical re-centering to keep the UGV better framed through weak detections.
+    tilt_image_center_max_deg: 2.5          # Allow a modest extra tilt correction during recovery without making the camera twitchy.
 
     # Weak detector-status correction for gimbal-only recovery.
     weak_status_center_correction_enable: true  # When detections fall just below threshold, let camera_tracker use the weak raw target centre from detector status for gimbal-only recentering.
@@ -111,7 +112,7 @@ camera_tracker:
     visual_target_estimate_timeout_s: 0.75   # Let camera_tracker use fresh TRACKED/PREDICTED/DEGRADED visual target estimates as a reacquisition fallback before dropping to stale hold.
 
     # Debug output.
-    publish_debug_topics: true          # Publish /<uav>/camera/{target,debug}/* geometry and image-centering topics.
+    publish_debug_topics: false          # Publish /<uav>/camera/{target,debug}/* geometry and image-centering topics.
 
 
 ############################################################################################
@@ -234,7 +235,7 @@ leader_estimator:
     external_detection_max_latency_ms: 3000.0                      # Match sim CPU detector latency budget so valid tracker hits can reach the estimator.
 
     # Range source selection.
-    range_mode: radio  # Range source: auto (depth->radio->const fallback chain), depth, radio, or const.
+    range_mode: auto  # Range source: auto (depth->radio->const fallback chain), depth, radio, or const.
 
     # Depth range input.
     depth_scale: 0.001                   # Scale factor converting raw 16UC1 depth pixel values to metres.
@@ -325,7 +326,8 @@ follow_point_generator:
     prefer_target_pose_position: false  # false = use visual_target_estimator bearing+range for world XY (goes through selected_target_filter trust gating); true = use leader_estimator OBB world-frame pose directly (old behaviour).
     prefer_target_pose_heading: false  # true = use OBB yaw from leader_estimator for follow heading; false = use visual motion/held/anchor/view-line fallback. Keep this path runtime-validated before changing reverse semantics.
 
-    # Nominal follow geometry. Distance uses shared d_target; altitude uses uav_start_z launch/default.
+    # Nominal follow geometry. Distance uses shared d_target; altitude uses follow_z_offset_m above the leader.
+    follow_z_offset_m: 7.0           # Desired UAV height above leader. Horizontal distance is reduced so d_target remains the true 3D standoff.
     lateral_offset_m: 0.0           # Fixed lateral offset from the follow point; positive = left; keep -3 to 3 m.
     lookahead_horizon_s: 0.15      # Lookahead horizon for leader velocity prediction when placing the follow point; keep 0.0-0.4 s.
 
@@ -392,7 +394,7 @@ visual_actuation_bridge:
   ros__parameters:
     # Input selection and command mirroring.
     input_mode: "auto"         # Input source: auto (prefers planned_target, falls back to follow_point), control, follow_point, or planned_target.
-    publish_pose_cmd_mirror: true  # Also publish the issued command on /<uav>/pose_cmd for logging/debug.
+    publish_pose_cmd_mirror: false  # Also publish the issued command on /<uav>/pose_cmd for logging/debug.
     use_current_altitude: false   # Use the planned target Z; true would ignore planned Z and break 3D follow distance geometry.
 
     # Control scaling.

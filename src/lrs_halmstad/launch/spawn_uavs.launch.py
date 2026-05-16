@@ -30,6 +30,11 @@ camera_mode_arg = DeclareLaunchArgument(
     default_value='integrated',
     description='Integrated camera mode only; detached camera mode has been removed from simulation'
 )
+camera_update_rate_arg = DeclareLaunchArgument(
+    'camera_update_rate',
+    default_value='20',
+    description='UAV camera sensor update rate in Hz'
+)
 
 def generate_launch_description():
     gz_world = _gazebo_world_name(LaunchConfiguration('world'))
@@ -44,6 +49,7 @@ def generate_launch_description():
                           "uav_mode": LaunchConfiguration('uav_mode'),
                           "with_camera": "true",
                           "camera_name": "camera0",
+                          "camera_update_rate": LaunchConfiguration('camera_update_rate'),
                           "x": '0.0',
                           "y": '0.0',
                           "z": '2.27',
@@ -62,6 +68,7 @@ def generate_launch_description():
                           "uav_mode": LaunchConfiguration('uav_mode'),
                           "with_camera": "true",
                           "camera_name": "camera0",
+                          "camera_update_rate": LaunchConfiguration('camera_update_rate'),
                           "x": '0.0',
                           "y": '0.0',
                           "z": '3.27',
@@ -79,6 +86,7 @@ def generate_launch_description():
                           "uav_mode": LaunchConfiguration('uav_mode'),
                           "with_camera": "true",
                           "camera_name": "camera0",
+                          "camera_update_rate": LaunchConfiguration('camera_update_rate'),
                           "x": '0.0',
                           "y": '0.0',
                           "z": '4.27',
@@ -121,6 +129,7 @@ def generate_launch_description():
         world_arg,
         uav_mode_arg,
         camera_mode_arg,
+        camera_update_rate_arg,
         bridge,
         dji0,
         dji1,
