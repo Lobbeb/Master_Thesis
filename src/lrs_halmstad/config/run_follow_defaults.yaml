@@ -112,7 +112,7 @@ camera_tracker:
     visual_target_estimate_timeout_s: 0.75   # Let camera_tracker use fresh TRACKED/PREDICTED/DEGRADED visual target estimates as a reacquisition fallback before dropping to stale hold.
 
     # Debug output.
-    publish_debug_topics: false          # Publish /<uav>/camera/{target,debug}/* geometry and image-centering topics.
+    publish_debug_topics: true          # Publish /<uav>/camera/{target,debug}/* geometry and image-centering topics.
 
 
 ############################################################################################
@@ -395,7 +395,7 @@ visual_actuation_bridge:
     # Input selection and command mirroring.
     input_mode: "auto"         # Input source: auto (prefers planned_target, falls back to follow_point), control, follow_point, or planned_target.
     publish_pose_cmd_mirror: false  # Also publish the issued command on /<uav>/pose_cmd for logging/debug.
-    use_current_altitude: false   # Use the planned target Z; true would ignore planned Z and break 3D follow distance geometry.
+    use_current_altitude: true   # Use the planned target Z; true would ignore planned Z and break 3D follow distance geometry.
 
     # Control scaling.
     forward_scale: 1.0        # Scale applied to controller forward speed before sending to the UAV.

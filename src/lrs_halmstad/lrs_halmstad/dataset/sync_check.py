@@ -70,8 +70,9 @@ def parse_args() -> argparse.Namespace:
         description=(
             f"Check a dataset under {datasets_root} for missing or orphaned files "
             "across images, labels, labels_aabb, metadata, and overlay outputs. "
-            "When overlay/<split> exists, the kept set is the intersection of "
-            "images/<split> and overlay/<split>."
+            "Missing files are checked against images/<split>. "
+            "When overlay_obb/<split> exists, files without a matching overlay_obb "
+            "can be pruned as orphans."
         )
     )
     parser.add_argument(
@@ -92,10 +93,22 @@ def parse_args() -> argparse.Namespace:
         "--prune-orphans",
         action="store_true",
         help=(
-            "Delete orphaned files from every category based on the kept set. "
-            "If overlay/<split> exists, the kept set is images∩overlay; otherwise it is images."
+            "Delete orphaned files from every category. "
+            "Labels/metadata/overlays without matching images are deleted. "
+            "If overlay_obb/<split> exists, images and matching files without overlay_obb "
+            "are also deleted."
+        )
+    )
+
+    parser.add_argument(
+        "--prune-incomplete",
+        action="store_true",
+        help=(
+            "Delete images and matching files for stems that are missing required "
+            "categories such as labels, labels_aabb, or metadata."
         ),
     )
+    
     parser.add_argument(
         "--show",
         type=int,
@@ -143,6 +156,73 @@ def discover_categories(dataset_dir: Path) -> list[str]:
             categories.append(category)
     return categories
 
+def prune_incomplete(report: DatasetReport) -> int:
+    """
+    Delete image stems that are missing required partner files.
+
+    Example:
+      images/train/foo.jpg exists
+      labels/train/foo.txt missing
+
+    Then delete:
+      images/train/foo.jpg
+      labels_aabb/train/foo.txt, if it exists
+      metadata/train/foo.json, if it exists
+      overlays, if they exist
+    """
+    removed = 0
+
+    for split, split_reports in report.per_split.items():
+        incomplete_stems: set[str] = set()
+
+        # Anything missing from a non-image category means the image stem is incomplete.
+        for category, category_report in split_reports.items():
+            if category == "images":
+                continue
+
+            incomplete_stems.update(category_report.missing_from_category)
+
+        if not incomplete_stems:
+            continue
+
+        for category, category_report in split_reports.items():
+            category_dir = report.dataset / category / split
+
+            if not category_dir.is_dir():
+                continue
+
+            files, _ = collect_files(category_dir, CATEGORY_EXTS[category])
+
+            for stem in sorted(incomplete_stems):
+                for path in files.get(stem, []):
+                    if path.exists():
+                        path.unlink()
+                        removed += 1
+
+            # Clear deleted paths from the report view.
+            category_report.orphan_paths = [
+                path for path in category_report.orphan_paths if path.exists()
+            ]
+
+        # Also delete the actual image files for incomplete stems.
+        image_dir = report.dataset / "images" / split
+        image_files, _ = collect_files(image_dir, CATEGORY_EXTS["images"])
+
+        for stem in sorted(incomplete_stems):
+            for path in image_files.get(stem, []):
+                if path.exists():
+                    path.unlink()
+                    removed += 1
+
+        # Clear missing reports, because those stems were removed.
+        for category_report in split_reports.values():
+            category_report.missing_from_category = [
+                stem
+                for stem in category_report.missing_from_category
+                if stem not in incomplete_stems
+            ]
+
+    return removed
 
 def collect_files(base_dir: Path, extensions: set[str]) -> tuple[dict[str, list[Path]], dict[str, list[Path]]]:
     files_by_stem: dict[str, list[Path]] = defaultdict(list)
@@ -253,22 +333,62 @@ def scan_dataset(dataset_dir: Path) -> DatasetReport:
             split_reports[category] = CategoryReport(duplicate_groups=duplicates)
 
         image_stems = set(collected["images"][0].keys())
-        overlay_exists = "overlay" in categories and (dataset_dir / "overlay" / split).is_dir()
-        if overlay_exists:
-            overlay_stems = set(collected["overlay"][0].keys())
-            kept_stems = image_stems & overlay_stems
-            report.reference_by_split[split] = "images∩overlay"
+
+        overlay_obb_exists = (
+            "overlay_obb" in categories
+            and (dataset_dir / "overlay_obb" / split).is_dir()
+        )
+
+        if overlay_obb_exists:
+            overlay_obb_stems = set(collected["overlay_obb"][0].keys())
+            kept_stems = image_stems & overlay_obb_stems
+            report.reference_by_split[split] = "images∩overlay_obb"
         else:
+            overlay_obb_stems = set()
             kept_stems = image_stems
             report.reference_by_split[split] = "images"
 
         for category in categories:
             files, duplicates = collected[category]
             category_stems = set(files.keys())
-            split_reports[category].missing_from_category = sorted(kept_stems - category_stems)
+
+            # Missing files should be checked against all images, not only kept_stems.
+            # Otherwise images missing overlay_obb are removed from the reference and
+            # their missing labels are hidden.
+            if category == "images":
+                split_reports[category].missing_from_category = []
+            else:
+                split_reports[category].missing_from_category = sorted(image_stems - category_stems)
+
+            # Orphans are files that do not have a matching image.
             split_reports[category].orphan_paths = [
-                path for stem in sorted(category_stems - kept_stems) for path in files[stem]
+                path for stem in sorted(category_stems - image_stems) for path in files[stem]
             ]
+
+        # Extra pruning behavior:
+        # If overlay_obb exists, images without overlay_obb should be treated as prune-orphans.
+        if overlay_obb_exists:
+            image_files, _ = collected["images"]
+            missing_overlay_obb_stems = image_stems - overlay_obb_stems
+
+            split_reports["images"].orphan_paths.extend(
+                path
+                for stem in sorted(missing_overlay_obb_stems)
+                for path in image_files[stem]
+            )
+
+            # Also prune matching files in other categories for images missing overlay_obb.
+            for category in categories:
+                if category == "images":
+                    continue
+
+                files, _ = collected[category]
+
+                split_reports[category].orphan_paths.extend(
+                    path
+                    for stem in sorted(missing_overlay_obb_stems)
+                    for path in files.get(stem, [])
+                )
 
         report.per_split[split] = split_reports
 
@@ -316,6 +436,14 @@ def main() -> int:
             if removed:
                 print(f"Removed {removed} orphaned file(s) from {dataset_dir}.")
                 print("")
+                report = scan_dataset(dataset_dir)
+
+        if args.prune_incomplete:
+            removed = prune_incomplete(report)
+            if removed:
+                print(f"Removed {removed} incomplete stem file(s) from {dataset_dir}.")
+                print("")
+                report = scan_dataset(dataset_dir)
 
         print_report(report, args.show)
         if report.has_remaining_issues():

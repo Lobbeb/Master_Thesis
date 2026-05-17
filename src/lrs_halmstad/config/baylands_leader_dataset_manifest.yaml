@@ -20,6 +20,9 @@ scenarios:
   - name: parkinglot_west
     waypoint: parkinglot_west_0
     nav2_goals: parkinglot_west
+  - name: art
+    waypoint: art_0
+    nav2_goals: art
   - name: road_to_spawn
     waypoint: road_to_spawn_0
     nav2_goals: road_to_spawn

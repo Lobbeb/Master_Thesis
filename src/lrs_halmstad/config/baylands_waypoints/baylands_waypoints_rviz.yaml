@@ -480,6 +480,102 @@ waypoints:
     - 0.052430560446801
     group: parkinglot_west
   waypoint40:
+    name: art_0
+    pose:
+    - 84.98445101752255
+    - 145.63697973109865
+    - 0.0
+    orientation:
+    - 0.8137816825465185
+    - 0.0
+    - 0.0
+    - 0.5811706919242895
+    group: art
+  waypoint41:
+    name: art_1
+    pose:
+    - 79.3159041200096
+    - 157.18151260976703
+    - 0.0
+    orientation:
+    - 0.20409175696096454
+    - 0.0
+    - 0.0
+    - -0.978951763234832
+    group: art
+  waypoint42:
+    name: art_2
+    pose:
+    - 70.27035044538135
+    - 151.32327969823245
+    - 0.0
+    orientation:
+    - 0.6555703174525846
+    - 0.0
+    - 0.0
+    - -0.7551341330353948
+    group: art
+  waypoint43:
+    name: art_3
+    pose:
+    - 71.17692011088212
+    - 143.8874121592052
+    - 0.0
+    orientation:
+    - 0.23447356806676858
+    - 0.0
+    - 0.0
+    - -0.9721224953050096
+    group: art
+  waypoint44:
+    name: art_4
+    pose:
+    - 51.86684871461309
+    - 134.37692504499316
+    - 0.0
+    orientation:
+    - 0.29019232878119144
+    - 0.0
+    - 0.0
+    - -0.9569683444694234
+    group: art
+  waypoint45:
+    name: art_5
+    pose:
+    - 34.62655308146899
+    - 124.35576614787298
+    - 0.0
+    orientation:
+    - 0.23281848515039197
+    - 0.0
+    - 0.0
+    - -0.9725202069737557
+    group: art
+  waypoint46:
+    name: art_6
+    pose:
+    - 42.100201738640855
+    - 128.80258028328916
+    - 0.0
+    orientation:
+    - 0.9628056362974925
+    - 0.0
+    - 0.0
+    - 0.2701949420581009
+    group: art
+  waypoint47:
+    name: art_7
+    pose:
+    - 75.4772158156898
+    - 145.136278664251
+    - 0.0
+    orientation:
+    - 0.9914757573942815
+    - 0.0
+    - 0.0
+    - 0.13029129863285502
+    group: art
+  waypoint48:
     name: road_to_spawn_0
     pose:
     - 9.428172873535662
@@ -491,7 +587,7 @@ waypoints:
     - 0.0
     - -0.14018853162703757
     group: road_to_spawn
-  waypoint41:
+  waypoint49:
     name: road_to_spawn_1
     pose:
     - 13.532981654638203
@@ -503,7 +599,7 @@ waypoints:
     - 0.0
     - -0.5271348784779941
     group: road_to_spawn
-  waypoint42:
+  waypoint50:
     name: road_to_spawn_2
     pose:
     - 18.84999844884136
@@ -515,7 +611,7 @@ waypoints:
     - 0.0
     - -0.7057940942743869
     group: road_to_spawn
-  waypoint43:
+  waypoint51:
     name: road_to_spawn_3
     pose:
     - 17.808634936110696
@@ -527,7 +623,7 @@ waypoints:
     - 0.0
     - -0.6664192948892084
     group: road_to_spawn
-  waypoint44:
+  waypoint52:
     name: road_to_spawn_4
     pose:
     - 22.095118593359594
@@ -539,7 +635,7 @@ waypoints:
     - 0.0
     - -0.7438490486165874
     group: road_to_spawn
-  waypoint45:
+  waypoint53:
     name: road_to_spawn_5
     pose:
     - 19.58414836429272
@@ -551,7 +647,7 @@ waypoints:
     - 0.0
     - -0.7086281515084352
     group: road_to_spawn
-  waypoint46:
+  waypoint54:
     name: road_to_spawn_6
     pose:
     - 14.487131205296475
@@ -563,7 +659,7 @@ waypoints:
     - 0.0
     - -0.7766567254526044
     group: road_to_spawn
-  waypoint47:
+  waypoint55:
     name: road_to_spawn_7
     pose:
     - 16.530532256755123
@@ -575,7 +671,7 @@ waypoints:
     - 0.0
     - -0.7708684401122978
     group: road_to_spawn
-  waypoint48:
+  waypoint56:
     name: road_to_spawn_8
     pose:
     - 9.14636043686826
@@ -587,7 +683,7 @@ waypoints:
     - 0.0
     - -0.9999992601069404
     group: road_to_spawn
-  waypoint49:
+  waypoint57:
     name: road_to_spawn_9
     pose:
     - 8.355824674768337
@@ -599,7 +695,7 @@ waypoints:
     - 0.0
     - 0.7884196581147916
     group: road_to_spawn
-  waypoint50:
+  waypoint58:
     name: road_to_spawn_10
     pose:
     - 4.362795445194915
@@ -611,7 +707,7 @@ waypoints:
     - 0.0
     - -0.9988844598954537
     group: road_to_spawn
-  waypoint51:
+  waypoint59:
     name: spawn_0
     pose:
     - -34.82005668567761
@@ -623,7 +719,7 @@ waypoints:
     - 0.0
     - -0.9997035944124262
     group: spawn
-  waypoint52:
+  waypoint60:
     name: spawn_1
     pose:
     - -50.512042631399346
@@ -635,7 +731,7 @@ waypoints:
     - 0.0
     - -0.9999926866364066
     group: spawn
-  waypoint53:
+  waypoint61:
     name: spawn_2
     pose:
     - -81.45712444299538
@@ -647,7 +743,7 @@ waypoints:
     - 0.0
     - -0.797549126261138
     group: spawn
-  waypoint54:
+  waypoint62:
     name: spawn_3
     pose:
     - -81.28979917615347
@@ -659,7 +755,7 @@ waypoints:
     - 0.0
     - -0.28313507197819476
     group: spawn
-  waypoint55:
+  waypoint63:
     name: spawn_4
     pose:
     - -66.30992270969116
@@ -671,7 +767,7 @@ waypoints:
     - 0.0
     - 0.0011883324041021492
     group: spawn
-  waypoint56:
+  waypoint64:
     name: spawn_5
     pose:
     - -40.43089821129553
@@ -683,7 +779,7 @@ waypoints:
     - 0.0
     - 0.20944240392702076
     group: spawn
-  waypoint57:
+  waypoint65:
     name: spawn_6
     pose:
     - -30.99815017562288
@@ -695,7 +791,7 @@ waypoints:
     - 0.0
     - 0.01676884745030104
     group: spawn
-  waypoint58:
+  waypoint66:
     name: spawn_7
     pose:
     - -28.590951449671284
@@ -707,7 +803,7 @@ waypoints:
     - 0.0
     - 0.1660202830769796
     group: spawn
-  waypoint59:
+  waypoint67:
     name: spawn_8
     pose:
     - -23.774757520604425
@@ -719,7 +815,7 @@ waypoints:
     - 0.0
     - -0.6042239787246734
     group: spawn
-  waypoint60:
+  waypoint68:
     name: road_to_east_0
     pose:
     - -20.664766452853563
@@ -731,7 +827,7 @@ waypoints:
     - 0.0
     - 0.036534630309345416
     group: road_to_east
-  waypoint61:
+  waypoint69:
     name: road_to_east_1
     pose:
     - -14.409648466811039
@@ -743,7 +839,7 @@ waypoints:
     - 0.0
     - -0.09039725492811881
     group: road_to_east
-  waypoint62:
+  waypoint70:
     name: road_to_east_2
     pose:
     - 1.1487261156175907
@@ -755,7 +851,7 @@ waypoints:
     - 0.0
     - 0.003515359335387126
     group: road_to_east
-  waypoint63:
+  waypoint71:
     name: road_to_east_3
     pose:
     - 10.351148370256112
@@ -767,7 +863,7 @@ waypoints:
     - 0.0
     - -0.2808655011251625
     group: road_to_east
-  waypoint64:
+  waypoint72:
     name: road_to_east_4
     pose:
     - 14.738099826385904
@@ -779,7 +875,7 @@ waypoints:
     - 0.0
     - -0.49256863336354023
     group: road_to_east
-  waypoint65:
+  waypoint73:
     name: road_to_east_5
     pose:
     - 17.298173025556903
@@ -791,7 +887,7 @@ waypoints:
     - 0.0
     - -0.7063055075158567
     group: road_to_east
-  waypoint66:
+  waypoint74:
     name: road_to_east_6
     pose:
     - 18.85910594218279
@@ -803,7 +899,7 @@ waypoints:
     - 0.0
     - -0.7138586436498882
     group: road_to_east
-  waypoint67:
+  waypoint75:
     name: road_to_east_7
     pose:
     - 17.141700536485292
@@ -815,7 +911,7 @@ waypoints:
     - 0.0
     - -0.6777487091306795
     group: road_to_east
-  waypoint68:
+  waypoint76:
     name: road_to_east_8
     pose:
     - 18.42035381949718
@@ -827,7 +923,7 @@ waypoints:
     - 0.0
     - -0.6826870602438594
     group: road_to_east
-  waypoint69:
+  waypoint77:
     name: road_to_east_9
     pose:
     - 12.306966122707314
@@ -839,7 +935,7 @@ waypoints:
     - 0.0
     - -0.49568089457245806
     group: road_to_east
-  waypoint70:
+  waypoint78:
     name: road_to_east_10
     pose:
     - 18.219428199458672
@@ -851,7 +947,7 @@ waypoints:
     - 0.0
     - -0.698656685600597
     group: road_to_east
-  waypoint71:
+  waypoint79:
     name: road_to_east_11
     pose:
     - 11.450725180037256
@@ -863,7 +959,7 @@ waypoints:
     - 0.0
     - -0.9994104056681711
     group: road_to_east
-  waypoint72:
+  waypoint80:
     name: parkinglot_east_0
     pose:
     - 5.780418606410491
@@ -875,7 +971,7 @@ waypoints:
     - 0.0
     - 0.9999926194108476
     group: parkinglot_east
-  waypoint73:
+  waypoint81:
     name: parkinglot_east_1
     pose:
     - -12.068900323492986
@@ -887,7 +983,7 @@ waypoints:
     - 0.0
     - 0.9999661971338896
     group: parkinglot_east
-  waypoint74:
+  waypoint82:
     name: parkinglot_east_2
     pose:
     - -12.00210837544538
@@ -899,7 +995,7 @@ waypoints:
     - 0.0
     - 0.999997615341229
     group: parkinglot_east
-  waypoint75:
+  waypoint83:
     name: parkinglot_east_3
     pose:
     - -67.35584635053164
@@ -911,7 +1007,7 @@ waypoints:
     - 0.0
     - -0.6962502500573499
     group: parkinglot_east
-  waypoint76:
+  waypoint84:
     name: parkinglot_east_4
     pose:
     - -67.36256639830252
@@ -923,7 +1019,7 @@ waypoints:
     - 0.0
     - -0.7005980721418714
     group: parkinglot_east
-  waypoint77:
+  waypoint85:
     name: parkinglot_east_5
     pose:
     - -67.62804505515899
@@ -935,7 +1031,7 @@ waypoints:
     - 0.0
     - -0.7167619228466694
     group: parkinglot_east
-  waypoint78:
+  waypoint86:
     name: parkinglot_east_6
     pose:
     - -66.1857804178504
@@ -947,7 +1043,7 @@ waypoints:
     - 0.0
     - 0.009242504538552607
     group: parkinglot_east
-  waypoint79:
+  waypoint87:
     name: parkinglot_east_7
     pose:
     - -66.1857804178504
@@ -959,7 +1055,7 @@ waypoints:
     - 0.0
     - 0.009242504538552607
     group: parkinglot_east
-  waypoint80:
+  waypoint88:
     name: parkinglot_east
     pose:
     - -43.62540693361591
@@ -971,7 +1067,7 @@ waypoints:
     - 0.0
     - 0.042702010069539297
     group: parkinglot_east
-  waypoint81:
+  waypoint89:
     name: parkinglot_east_8
     pose:
     - -37.16559441004349
@@ -983,7 +1079,7 @@ waypoints:
     - 0.0
     - 0.03027808563413998
     group: parkinglot_east
-  waypoint82:
+  waypoint90:
     name: parkinglot_east_9
     pose:
     - 7.7277267747785245
@@ -995,7 +1091,7 @@ waypoints:
     - 0.0
     - 0.017926131264992654
     group: parkinglot_east
-  waypoint83:
+  waypoint91:
     name: road_to_strip_0
     pose:
     - 6.413105961603299
@@ -1007,7 +1103,7 @@ waypoints:
     - 0.0
     - 0.08604027010379979
     group: road_to_strip
-  waypoint84:
+  waypoint92:
     name: road_to_strip_1
     pose:
     - 12.95340623973713
@@ -1019,7 +1115,7 @@ waypoints:
     - 0.0
     - -0.0938973342086231
     group: road_to_strip
-  waypoint85:
+  waypoint93:
     name: road_to_strip_2
     pose:
     - 19.325023743221482
@@ -1031,7 +1127,7 @@ waypoints:
     - 0.0
     - -0.7231950803513629
     group: road_to_strip
-  waypoint86:
+  waypoint94:
     name: road_to_strip_3
     pose:
     - 19.939823472226493
@@ -1043,7 +1139,7 @@ waypoints:
     - 0.0
     - -0.7032860895091186
     group: road_to_strip
-  waypoint87:
+  waypoint95:
     name: road_to_strip_4
     pose:
     - 20.197289283059042
@@ -1055,7 +1151,7 @@ waypoints:
     - 0.0
     - -0.6815017469421704
     group: road_to_strip
-  waypoint88:
+  waypoint96:
     name: road_to_strip_5
     pose:
     - 21.091251876597752
@@ -1067,7 +1163,7 @@ waypoints:
     - 0.0
     - -0.6997989538487055
     group: road_to_strip
-  waypoint89:
+  waypoint97:
     name: road_to_strip_6
     pose:
     - 22.452363804961212
@@ -1079,7 +1175,7 @@ waypoints:
     - 0.0
     - -0.6309320848452636
     group: road_to_strip
-  waypoint90:
+  waypoint98:
     name: road_to_strip_7
     pose:
     - 26.390738302050796
@@ -1091,7 +1187,7 @@ waypoints:
     - 0.0
     - -0.537894849772817
     group: road_to_strip
-  waypoint91:
+  waypoint99:
     name: road_to_strip_8
     pose:
     - 30.85001890274344
@@ -1103,7 +1199,7 @@ waypoints:
     - 0.0
     - -0.5043673099318232
     group: road_to_strip
-  waypoint92:
+  waypoint100:
     name: road_to_strip_9
     pose:
     - 39.39396060319916
@@ -1115,7 +1211,7 @@ waypoints:
     - 0.0
     - -0.528520512603236
     group: road_to_strip
-  waypoint93:
+  waypoint101:
     name: strip_0
     pose:
     - 53.040291361783815
@@ -1127,7 +1223,7 @@ waypoints:
     - 0.0
     - -0.38798773807705284
     group: strip
-  waypoint94:
+  waypoint102:
     name: strip_1
     pose:
     - 86.56390128205739
@@ -1139,7 +1235,7 @@ waypoints:
     - 0.0
     - -0.22119526924342342
     group: strip
-  waypoint95:
+  waypoint103:
     name: strip_2
     pose:
     - 112.91271393040911
@@ -1151,7 +1247,7 @@ waypoints:
     - 0.0
     - -0.06013932644998195
     group: strip
-  waypoint96:
+  waypoint104:
     name: strip_3
     pose:
     - 139.96881828831047
@@ -1163,7 +1259,7 @@ waypoints:
     - 0.0
     - 0.018719453409384478
     group: strip
-  waypoint97:
+  waypoint105:
     name: strip_4
     pose:
     - 176.24736796931572
@@ -1175,7 +1271,7 @@ waypoints:
     - 0.0
     - -0.06880019373714623
     group: strip
-  waypoint98:
+  waypoint106:
     name: strip_5
     pose:
     - 213.141326204223
@@ -1187,7 +1283,7 @@ waypoints:
     - 0.0
     - -0.039696944427146254
     group: strip
-  waypoint99:
+  waypoint107:
     name: strip_6
     pose:
     - 218.3512145012023
@@ -1199,7 +1295,7 @@ waypoints:
     - 0.0
     - -0.07875759835376069
     group: strip
-  waypoint100:
+  waypoint108:
     name: strip_7
     pose:
     - 254.52493154611312
@@ -1211,7 +1307,7 @@ waypoints:
     - 0.0
     - -0.25584458892963996
     group: strip
-  waypoint101:
+  waypoint109:
     name: strip_8
     pose:
     - 271.20210699841806
@@ -1223,7 +1319,7 @@ waypoints:
     - 0.0
     - -0.230722379608727
     group: strip
-  waypoint102:
+  waypoint110:
     name: strip_9
     pose:
     - 286.03710561864534
@@ -1235,7 +1331,7 @@ waypoints:
     - 0.0
     - -0.14660707800400707
     group: strip
-  waypoint103:
+  waypoint111:
     name: strip_10
     pose:
     - 310.3933747310024
@@ -1247,7 +1343,7 @@ waypoints:
     - 0.0
     - -0.23096376991704998
     group: strip
-  waypoint104:
+  waypoint112:
     name: strip_11
     pose:
     - 326.00936794376986
@@ -1259,7 +1355,7 @@ waypoints:
     - 0.0
     - -0.26886311034693444
     group: strip
-  waypoint105:
+  waypoint113:
     name: strip_12
     pose:
     - 345.6449106430986
@@ -1271,7 +1367,7 @@ waypoints:
     - 0.0
     - -0.2584952808029538
     group: strip
-  waypoint106:
+  waypoint114:
     name: strip_13
     pose:
     - 363.32228443571273
@@ -1283,7 +1379,7 @@ waypoints:
     - 0.0
     - -0.29455343663938865
     group: strip
-  waypoint107:
+  waypoint115:
     name: strip_14
     pose:
     - 376.91834963699336
@@ -1295,7 +1391,7 @@ waypoints:
     - 0.0
     - -0.29720848160348023
     group: strip
-  waypoint108:
+  waypoint116:
     name: strip_15
     pose:
     - 393.06450885301416
@@ -1307,7 +1403,7 @@ waypoints:
     - 0.0
     - -0.2450323151927037
     group: strip
-  waypoint109:
+  waypoint117:
     name: strip_16
     pose:
     - 421.57801073473433

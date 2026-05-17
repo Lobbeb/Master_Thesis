@@ -214,7 +214,7 @@ class LeaderDatasetCollector:
             or "datasets/baylands_leader_routes",
             capture=CaptureConfig(
                 uav_name=str(capture.get("uav_name", "dji0")).strip() or "dji0",
-                hz=float(capture.get("hz", 0.5)),
+                hz=float(capture.get("hz", 0.25)),
                 save_overlay=_coerce_bool(capture.get("save_overlay", False)),
                 target_pose_topic=str(capture.get("target_pose_topic", "/a201_0000/ground_truth/odom")).strip()
                 or "/a201_0000/ground_truth/odom",
