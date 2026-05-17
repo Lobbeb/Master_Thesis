@@ -56,6 +56,7 @@ opt/omnetpp-*/
 /models/obb/yolo*
 /models/detection
 /models/detection
+/models/results
 /models/obb/mymodels/warehouse*.pt
 /datasets/*
 /merge
