@@ -23,6 +23,12 @@ routes:
   strip:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 0.5
+  playground:
+    pc2ls_min_height: -0.55
+    pc2ls_max_height: 5.0
+  art:
+    pc2ls_min_height: -0.5
+    pc2ls_max_height: 0.0
 waypoints:
   rotundan_0:
     pc2ls_min_height: -0.1
@@ -327,3 +333,27 @@ waypoints:
   strip_16:
     pc2ls_min_height: -0.6
     pc2ls_max_height: 0.5
+  art_0:
+    pc2ls_min_height: -0.35
+    pc2ls_max_height: 0.0
+  art_1:
+    pc2ls_min_height: -0.35
+    pc2ls_max_height: 0.0
+  art_2:
+    pc2ls_min_height: -0.35
+    pc2ls_max_height: 0.0
+  art_3:
+    pc2ls_min_height: -0.5
+    pc2ls_max_height: 0.0
+  art_4:
+    pc2ls_min_height: -0.55
+    pc2ls_max_height: 0.0
+  art_5:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.0
+  art_6:
+    pc2ls_min_height: -0.6
+    pc2ls_max_height: 0.0
+  art_7:
+    pc2ls_min_height: -0.35
+    pc2ls_max_height: 0.0

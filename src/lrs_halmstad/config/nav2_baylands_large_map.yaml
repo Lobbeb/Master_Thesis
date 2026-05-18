@@ -48,14 +48,14 @@ controller_server:
       batch_size: 500
       ax_max: 3.5
       ax_min: -3.5
-      ay_max: 3.0
+      ay_max: 2.0
       az_max: 2.0
-      vx_std: 0.9
-      vy_std: 0.25
-      wz_std: 0.6
-      vx_max: 2.0
-      vx_min: -0.6
-      vy_max: 1.5
+      vx_std: 1.5
+      vy_std: 0.5
+      wz_std: 0.8
+      vx_max: 3.0
+      vx_min: -1.5
+      vy_max: 2.0
       wz_max: 2.5
       iteration_count: 1
       prune_distance: 1.7
@@ -276,10 +276,10 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 2.0]
+    max_velocity: [1.5, 0.0, 3.0]
     min_velocity: [-1.0, 0.0, -1.5]
-    max_accel: [2.5, 0.0, 3.2]
-    max_decel: [-2.5, 0.0, -3.2]
+    max_accel: [2.0, 0.0, 3.5]
+    max_decel: [-2.0, 0.0, -3.5]
     odom_topic: "platform/odom/filtered"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

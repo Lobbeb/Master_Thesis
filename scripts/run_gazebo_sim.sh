@@ -397,21 +397,6 @@ if [ "$WORLD" = "baylands" ]; then
   printf '%s\n' "$!" > "$CONTROLLER_RECOVERY_PID_FILE"
 fi
 
-# Gazebo + Ogre can crash on some WSL GPU driver stacks.
-# Default to software rendering only on WSL unless explicitly disabled.
-if [ "$ENABLE_WSL_SOFTWARE_RENDERING" = "auto" ]; then
-  if [ -n "${WSL_INTEROP:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
-    if [ -z "${LIBGL_ALWAYS_SOFTWARE:-}" ]; then
-      export LIBGL_ALWAYS_SOFTWARE=1
-      echo "[run_gazebo_sim] WSL detected: using LIBGL_ALWAYS_SOFTWARE=1 for stability"
-    fi
-  fi
-elif [ "$ENABLE_WSL_SOFTWARE_RENDERING" = "true" ]; then
-  if [ -z "${LIBGL_ALWAYS_SOFTWARE:-}" ]; then
-    export LIBGL_ALWAYS_SOFTWARE=1
-    echo "[run_gazebo_sim] Forced software rendering: LIBGL_ALWAYS_SOFTWARE=1"
-  fi
-fi
 
 ros2 launch lrs_halmstad managed_clearpath_sim.launch.py \
   world:="$WORLD" \

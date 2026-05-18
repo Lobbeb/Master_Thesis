@@ -10,6 +10,7 @@ CONFIG_ROOT="$WS_ROOT/src/lrs_halmstad/config"
 RVIZ_CONFIG_DIR="$CONFIG_ROOT/rviz_configs"
 BASE_RVIZ_CONFIG="$RVIZ_CONFIG_DIR/waypoints_testing.rviz"
 RVIZ_CONFIG_OVERRIDE=""
+RVIZ_SOFTWARE_RENDERING="${RVIZ_SOFTWARE_RENDERING:-auto}"
 RVIZ_QT_PLATFORM="${RVIZ_QT_PLATFORM:-auto}"
 
 source "$SCRIPT_DIR/lidar_mode_common.sh"
@@ -31,6 +32,9 @@ for arg in "${LIDAR_REMAINING_ARGS[@]}"; do
       ;;
     config:=*)
       RVIZ_CONFIG_OVERRIDE="${arg#config:=}"
+      ;;
+    rviz_software_rendering:=*|software_rendering:=*)
+      RVIZ_SOFTWARE_RENDERING="${arg#*:=}"
       ;;
     rviz_qt_platform:=*|qt_platform:=*)
       RVIZ_QT_PLATFORM="${arg#*:=}"
@@ -130,6 +134,15 @@ if [ -n "${WSL_INTEROP:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; th
     echo "[run_nav2_rviz] Warning: no reachable WSL GUI display found. WSLg may need a reset with 'wsl --shutdown'." >&2
   fi
 
+  if [ "$RVIZ_SOFTWARE_RENDERING" = "auto" ] || [ "$RVIZ_SOFTWARE_RENDERING" = "true" ]; then
+    if [ -z "${LIBGL_ALWAYS_SOFTWARE:-}" ]; then
+      export LIBGL_ALWAYS_SOFTWARE=1
+      echo "[run_nav2_rviz] WSL detected: using LIBGL_ALWAYS_SOFTWARE=1 for RViz map rendering"
+    fi
+  fi
+elif [ "$RVIZ_SOFTWARE_RENDERING" = "true" ]; then
+  export LIBGL_ALWAYS_SOFTWARE=1
+  echo "[run_nav2_rviz] Forced software rendering: LIBGL_ALWAYS_SOFTWARE=1"
 fi
 
 cd "$CONFIG_ROOT"

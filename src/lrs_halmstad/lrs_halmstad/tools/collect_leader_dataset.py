@@ -481,7 +481,7 @@ class LeaderDatasetCollector:
                 f"save_overlay:={'true' if capture.save_overlay else 'false'}",
                 f"target_pose_topic:={capture.target_pose_topic}",
                 "save_metadata:=true",
-                "save_negative_examples:=false",
+                "save_negative_examples:=true",
             ],
             label="start capture_dataset",
         )

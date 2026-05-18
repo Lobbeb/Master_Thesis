@@ -7,7 +7,7 @@ from datetime import datetime
 parser = argparse.ArgumentParser(description="Example script with arguments")
 parser.add_argument("--dataset", required=True, help="Input name of dataset")
 parser.add_argument("--dataset-path", required=False, help="If specified, overrides the default dataset path")
-parser.add_argument("--model", required=True, default="baylands-leader-v6.pt", help="Input model file")
+parser.add_argument("--model", required=True, default="baylands-leader-v4.2-best.pt", help="Input model file")
 
 args = parser.parse_args()
 

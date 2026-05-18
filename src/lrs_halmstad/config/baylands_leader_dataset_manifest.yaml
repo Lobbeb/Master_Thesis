@@ -3,8 +3,8 @@ output_dir: datasets/baylands_leader_routes
 
 capture:
   uav_name: dji0
-  hz: 1.0
-  save_overlay: false
+  hz: 0.25
+  save_overlay: true
   target_pose_topic: /a201_0000/ground_truth/odom
 
 startup:
@@ -20,9 +20,6 @@ scenarios:
   - name: parkinglot_west
     waypoint: parkinglot_west_0
     nav2_goals: parkinglot_west
-  - name: art
-    waypoint: art_0
-    nav2_goals: art
   - name: road_to_spawn
     waypoint: road_to_spawn_0
     nav2_goals: road_to_spawn
@@ -41,3 +38,9 @@ scenarios:
   - name: strip
     waypoint: strip_0
     nav2_goals: strip
+  - name: playground
+    waypoint: playground_0
+    nav2_goals: playground1
+  - name: art
+    waypoint: art_0
+    nav2_goals: art
